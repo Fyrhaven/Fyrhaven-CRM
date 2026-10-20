@@ -22,4 +22,4 @@ Thumbs.db
 .vscode/
 *.swp
 
-# Note: the published artifacts under build/ ARE committed on purpose.
+# Note: installable ZIPs are GitHub release assets, not committed.
