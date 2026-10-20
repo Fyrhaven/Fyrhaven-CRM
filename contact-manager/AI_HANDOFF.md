@@ -78,8 +78,8 @@ todo list.
 2. add `CHANGELOG.md` entry for that version (newest on top)
 3. `npm test` - all tests green
 4. `npm run package` - rebuild the ZIP
-5. copy `manifest.json`, `dist/index.js` and `contact-manager.zip` into `build/contact-manager/`
-6. commit source **and** artifacts together, tag the release
+5. commit the source, then run `npm run release` on `main`
+6. the script packages, tags and uploads the ZIP to GitHub Releases
 
 ## Project Structure
 ```
@@ -120,7 +120,7 @@ contact-manager/
 1. **Run tests**: `cd contact-manager && npm test` (builds first, then runs vitest suite)
 2. **Build package**: `npm run package` (creates contact-manager.zip)
 3. **Update version**: bump `manifest.json` version and add CHANGELOG entry
-4. **Commit**: source + artifacts into `build/contact-manager/`
+4. **Commit**: source only (the ZIP is a GitHub release asset)
 5. **GitHub**: run `npm run release` on `main`. It tags
    `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
    the ZIP attached; the roadmap and todos live in GitHub issues/milestones.
