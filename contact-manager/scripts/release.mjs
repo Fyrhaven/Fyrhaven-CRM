@@ -10,7 +10,20 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const REPO_ROOT = path.resolve(ROOT, '..');
 const BUILD_DIR = path.join(REPO_ROOT, 'build', 'contact-manager');
 const manifest = JSON.parse(await readFile(path.join(ROOT, 'manifest.json'), 'utf8'));
+const changelog = await readFile(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
 const tag = `contact-manager-v${manifest.version}`;
+
+/** The CHANGELOG section for this version, without the heading itself. */
+function releaseNotes() {
+  const marker = `## [${manifest.version}]`;
+  const start = changelog.indexOf(marker);
+  if (start === -1) return '';
+  const headingEnd = changelog.indexOf('\n', start);
+  if (headingEnd === -1) return '';
+  const rest = changelog.slice(headingEnd + 1);
+  const end = rest.search(/^## \[/m);
+  return rest.slice(0, end === -1 ? undefined : end).trim();
+}
 
 function run(command, args, cwd = ROOT) {
   const result = spawnSync(command, args, { stdio: 'inherit', cwd });
@@ -48,12 +61,15 @@ if (capture('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`]).status =
 
 run('git', ['tag', '-a', tag, '-m', `Contact Manager ${manifest.version}`], REPO_ROOT);
 run('git', ['push', 'origin', tag], REPO_ROOT);
-run('gh', [
+const notes = releaseNotes();
+const releaseArgs = [
   'release', 'create', tag,
   path.join(ROOT, 'contact-manager.zip'),
   '--title', `Contact Manager ${manifest.version}`,
-  '--generate-notes',
   '--verify-tag',
-], REPO_ROOT);
+];
+if (notes) releaseArgs.push('--notes', notes);
+else releaseArgs.push('--generate-notes');
+run('gh', releaseArgs, REPO_ROOT);
 
 console.log(`\nReleased ${tag} with contact-manager.zip.`);
