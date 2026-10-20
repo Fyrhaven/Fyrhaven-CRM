@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Local logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Test / coverage output
+coverage/
+.nyc_output/
+.vitest/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Note: the published artifacts under build/ ARE committed on purpose.

@@ -1,0 +1,128 @@
+// @vitest-environment jsdom
+// The review dialog and the contact-detail section, with a fake api.
+import { afterEach, describe, expect, it } from 'vitest';
+import * as React from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fakeApi } from '../test-utils/fake-api.mjs';
+import { SlotPropsContext } from '../test-utils/ui-kit.mjs';
+import { makeReviewDialog } from '../src/lib/review-dialog.js';
+import { makeDuplicateSection } from '../src/lib/detail-section.js';
+import { findDuplicateGroups } from '../src/lib/duplicates.js';
+import { makeCard } from './fixtures.mjs';
+
+const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
+afterEach(cleanup);
+
+// Same name and email; d1 also has a note, d2 a phone. Field scores tie, so
+// the lowest id wins: d1 is kept and gains d2's phone number.
+const group = () => findDuplicateGroups([
+  makeCard({ id: 'd1', name: 'Bob Smith', emails: ['bob@x.de'], notes: { n: { note: 'Friend' } } }),
+  makeCard({ id: 'd2', name: 'Bob Smith', emails: ['bob@x.de'], phones: ['+4917612345678'] }),
+], {})[0];
+
+function dialogApi(handlers = {}) {
+  return fakeApi({ translations: manifest.locales, handlers: { 'ui.confirm': async () => true, ...handlers } });
+}
+
+describe('review dialog', () => {
+  it('hands Cancel and Merge to the host footer, no buttons in the body', async () => {
+    const api = dialogApi();
+    const Dialog = makeReviewDialog(React, api);
+    const sent = [];
+    await act(async () => {
+      render(React.createElement(SlotPropsContext.Provider, { value: { setDialogButtons: (buttons) => sent.push(buttons) } },
+        React.createElement(Dialog, { groups: [group()], onResult: () => {} })));
+    });
+    expect(sent.at(-1).map((b) => ({ id: b.id, label: b.label, variant: b.variant }))).toEqual([
+      { id: 'cancel', label: 'Cancel', variant: 'secondary' },
+      { id: 'merge', label: 'Merge', variant: 'primary' },
+    ]);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('Bob Smith · bob@x.de')).toBeTruthy();
+  });
+
+  it('merges after the confirm: patch the kept contact, then delete the duplicate', async () => {
+    const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
+    const Dialog = makeReviewDialog(React, api);
+    let result;
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [group()], onResult: (value) => { result = value; } }));
+    });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge' })); });
+    expect(api.calls().map((c) => c.method)).toEqual(['ui.confirm', 'contacts.update', 'contacts.remove']);
+    expect(api.calls('ui.confirm')[0].args[0]).toMatchObject({ danger: true, confirmLabel: 'Merge' });
+    expect(api.calls('contacts.update')[0].args[0]).toBe('d1');
+    // entries are copied verbatim; only the comparison key is normalised
+    expect(Object.values(api.calls('contacts.update')[0].args[1].phones).map((p) => p.number))
+      .toEqual(['+4917612345678']);
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('d2');
+    await waitFor(() => expect(result).toEqual({ merged: 1, removed: 1, failed: 0 }));
+  });
+
+  it('keeps whoever the selector says', async () => {
+    const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [group()], onResult: () => {} }));
+    });
+    await act(async () => { fireEvent.change(screen.getByLabelText('Keep'), { target: { value: 'd2' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge' })); });
+    expect(api.calls('contacts.update')[0].args[0]).toBe('d2');
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('d1');
+  });
+
+  it('disables Merge for an unchecked group; Cancel closes with null', async () => {
+    const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
+    const Dialog = makeReviewDialog(React, api);
+    let result = 'unset';
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [group()], onResult: (value) => { result = value; } }));
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: /Include this group/ })); });
+    expect(screen.getByRole('button', { name: 'Merge' }).disabled).toBe(true);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel' })); });
+    expect(result).toBeNull();
+  });
+
+  it('says so when there is nothing to review', async () => {
+    const api = dialogApi();
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [], onResult: () => {} }));
+    });
+    expect(screen.getByText('No duplicates in this selection.')).toBeTruthy();
+  });
+});
+
+describe('contact detail section', () => {
+  const contact = makeCard({ id: 'x1', name: 'Jane Roe', emails: ['jane@x.io'] });
+
+  it('finds duplicates of the open contact and opens the dialog for them', async () => {
+    const twin = makeCard({ id: 'x2', name: 'Roe, Jane', emails: ['jane@x.io'] });
+    const api = fakeApi({
+      translations: manifest.locales,
+      handlers: { 'contacts.search': async () => [contact, twin], 'ui.openDialog': async () => null },
+    });
+    const Section = makeDuplicateSection(React, api);
+    await act(async () => { render(React.createElement(Section, { contact })); });
+    await waitFor(() => screen.getByText('1 possible duplicates'));
+    expect(screen.getByText(/Same email address: jane@x\.io/)).toBeTruthy();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Review duplicates' })); });
+    const groups = api.calls('ui.openDialog')[0].args[0].extraProps.groups;
+    expect(groups[0].members.map((m) => m.id)).toEqual(['x1', 'x2']);
+  });
+
+  it('shows the quiet line when there is nothing', async () => {
+    const api = fakeApi({
+      translations: manifest.locales,
+      handlers: { 'contacts.search': async () => [] },
+    });
+    const Section = makeDuplicateSection(React, api);
+    await act(async () => { render(React.createElement(Section, { contact })); });
+    await waitFor(() => screen.getByText('No possible duplicates found.'));
+  });
+});
