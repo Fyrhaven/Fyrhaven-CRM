@@ -7,6 +7,22 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.2.0] — 2026-10-20
+
+### Added
+
+- **Field-by-field conflict resolution.** When the kept contact and a duplicate
+  disagree on a single-value field (name, organisation, title, personal info
+  or media), the merge window now shows a *Resolve differences* picker for
+  each field. Keep the current value or take the duplicate's value before
+  merging.
+- **Orange `~` changed values** in the complete-details preview, with a muted
+  `was …` line showing the value being replaced.
+- The summary line now counts `kept · new · changed · not merged`, and the
+  legend explains the changed indicator.
+- `planMerge(group, keepId, choices)` records replacements in `changed`;
+  `mergeGroups(..., choiceBySignature)` writes the selected values.
+
 ## [1.1.0] — 2026-10-20
 
 ### Added
@@ -60,5 +76,6 @@ First public release.
   e-mail address, phone number and name.
 - **German translation** — every string is available in `en` and `de`.
 
+[1.2.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.2.0
 [1.1.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.1.0
 [1.0.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.0.0
