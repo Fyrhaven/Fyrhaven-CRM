@@ -10,7 +10,7 @@ import { DialogButtons, Field, Select, Checkbox, Badge, Card, Row, Stack, Text, 
 import { contactName } from './contacts.js';
 import { mergeGroups, planMerge } from './duplicates.js';
 import { memberLabel, mergeLabel, reasonLine, strengthKey } from './labels.js';
-import { previewFields, previewCounts, memberDetails } from './preview.js';
+import { previewFields, previewCounts, conflictFields, memberDetails } from './preview.js';
 
 export function makeReviewDialog(React, api) {
   const { createElement: h, useState } = React;
@@ -22,6 +22,7 @@ export function makeReviewDialog(React, api) {
     const [included, setIncluded] = useState(() => new Set(groups.map((g) => g.signature)));
     const [keepBy, setKeepBy] = useState(() =>
       Object.fromEntries(groups.map((g) => [g.signature, planMerge(g).primary?.id ?? ''])));
+    const [choicesBy, setChoicesBy] = useState({});
     const [busy, setBusy] = useState(false);
 
     const close = (value) => props.onResult?.(value);
@@ -46,7 +47,7 @@ export function makeReviewDialog(React, api) {
       if (!ok) return;
       setBusy(true);
       try {
-        const result = await mergeGroups(api, chosen, keepBy);
+        const result = await mergeGroups(api, chosen, keepBy, choicesBy);
         close({ merged: result.merged, removed: result.removed, failed: result.failed.length });
       } catch (err) {
         api.toast.error(t('scan.failed', { reason: String(err?.message ?? err) }));
@@ -93,22 +94,55 @@ export function makeReviewDialog(React, api) {
       h(Stack, { gap: 1 },
         h(Text, { key: 'note', tone: 'muted', style: { fontSize: '12px' } }, t('dialog.previewNote')),
         legendLine('success', '+', t('dialog.legendNew')),
+        legendLine('warning', '~', t('dialog.legendChanged')),
         legendLine('warning', '≠', t('dialog.legendConflict')),
         legendLine('neutral', '✓', t('dialog.legendKept'))));
 
     const renderFieldPreview = (fieldPreview, donorById) => {
-      const { field, labelKey, kept, added, conflicts } = fieldPreview;
-      const sources = [...new Set([...added, ...conflicts].map((entry) => donorById[entry.fromId] || entry.fromId))];
+      const { field, labelKey, kept, added, changed, conflicts, previous = [] } = fieldPreview;
+      const sources = [...new Set([...added, ...changed, ...conflicts]
+        .map((entry) => donorById[entry.fromId] || entry.fromId))];
 
       return h(Stack, { key: field, gap: 1 },
         h(Row, { gap: 2, wrap: true },
           h(Text, { style: { fontWeight: '600', minWidth: '120px', whiteSpace: 'nowrap' } }, t(labelKey)),
           ...kept.map((value, i) => h(Badge, { key: `k${i}`, tone: 'neutral' }, value)),
+          ...changed.map((entry, i) => h(Badge, { key: `h${i}`, tone: 'warning' }, `~ ${entry.value}`)),
           ...added.map((entry, i) => h(Badge, { key: `a${i}`, tone: 'success' }, `+ ${entry.value}`)),
           ...conflicts.map((entry, i) => h(Badge, { key: `c${i}`, tone: 'warning' }, `≠ ${entry.value}`))),
+        previous.length > 0
+          ? h(Text, { tone: 'muted', style: { fontSize: '11px' } },
+            t('dialog.wasValue', { value: previous.join(', ') }))
+          : null,
         sources.length > 0
           ? h(Text, { tone: 'muted', style: { fontSize: '11px' } }, t('dialog.addedFrom', { name: sources.join(', ') }))
           : null);
+    };
+
+    const renderResolver = (conflicts, donorById, signature) => {
+      if (!conflicts.length) return null;
+      return h(Section, { title: t('dialog.resolveTitle') },
+        h(Text, { tone: 'muted', style: { fontSize: '12px' } }, t('dialog.resolveHint')),
+        ...conflicts.map(({ field, labelKey, kept, options }) => h(Field, { key: field, label: t(labelKey) },
+          h(Select, {
+            value: choicesBy[signature]?.[field] || 'keep',
+            options: [
+              { value: 'keep', label: t('dialog.keepValue', { value: kept.join(', ') }) },
+              ...options.map((option) => ({
+                value: option.fromId,
+                label: t('dialog.useValue', {
+                  value: option.value,
+                  name: donorById[option.fromId] || option.fromId,
+                }),
+              })),
+            ],
+            onChange: (value) => setChoicesBy((previous) => {
+              const groupChoices = { ...(previous[signature] ?? {}) };
+              if (value === 'keep') delete groupChoices[field];
+              else groupChoices[field] = value;
+              return { ...previous, [signature]: groupChoices };
+            }),
+          }))));
     };
 
     return h(Stack, { gap: 4 },
@@ -117,11 +151,14 @@ export function makeReviewDialog(React, api) {
       ...groups.map((group) => {
         const signature = group.signature;
         const keepId = keepBy[signature] || planMerge(group).primary?.id || '';
-        const plan = planMerge(group, keepId);
+        const choices = choicesBy[signature] ?? {};
+        const basePlan = planMerge(group, keepId);
+        const plan = planMerge(group, keepId, choices);
         const nameById = Object.fromEntries(group.members.map((m) => [m.id, contactName(m) || m.id]));
         const keptName = contactName(plan.primary) || plan.primary?.id || '';
         const detailFields = plan.primary ? previewFields(plan) : [];
         const detailCounts = previewCounts(detailFields);
+        const fieldConflicts = basePlan.primary ? conflictFields(basePlan) : [];
 
         return h(Card, { key: signature },
           h(Stack, { gap: 2 },
@@ -139,11 +176,18 @@ export function makeReviewDialog(React, api) {
               h(Select, {
                 value: keepId,
                 options: group.members.map((m) => ({ value: m.id, label: memberLabel(m) })),
-                onChange: (value) => setKeepBy((previous) => ({ ...previous, [signature]: value })),
+                onChange: (value) => {
+                  setKeepBy((previous) => ({ ...previous, [signature]: value }));
+                  // Field choices refer to the previous kept contact's values.
+                  setChoicesBy((previous) => ({ ...previous, [signature]: {} }));
+                },
               })),
             // Member roster — full details so duplicates that share a name can be told apart.
             h(Section, { title: t('dialog.membersTitle') },
               ...group.members.map((member) => renderMember(member, keepId))),
+            // Field-by-field conflict resolution: keep the current value or
+            // take one from a duplicate before the preview is built.
+            renderResolver(fieldConflicts, nameById, signature),
             // Complete details of the contact to keep: what stays, what the
             // merge adds, and which duplicate values will not be merged.
             plan && plan.primary ? h(Section, { title: t('dialog.previewTitle', { name: keptName }) },

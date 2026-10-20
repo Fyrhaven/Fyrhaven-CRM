@@ -250,8 +250,11 @@ export function pickPrimary(members) {
 }
 
 /**
- * What a merge does for one group: `{ primary, others, patch }`.
+ * What a merge does for one group: `{ primary, others, patch, added, changed }`.
  * `keepId` overrides the automatic choice (the review dialog's selector).
+ * `choices` resolves field conflicts: `{ [field]: donorId }` replaces the kept
+ * contact's value for a single-value field (`name`, `organizations`, `titles`,
+ * `personalInfo`, `media`) with that donor's value.
  * `patch` is a partial JSContact card for api.contacts.update: an omitted
  * key keeps its value, `undefined` would clear one — so the patch only holds
  * keys that actually change, and map fields are complete unions (the host
@@ -260,14 +263,17 @@ export function pickPrimary(members) {
  * cryptoKeys or any client-only field.
  * `added` lists everything the merge brings in — `[{ field, value, fromId }]`,
  * in the order it would appear — so the UI can show a preview.
+ * `changed` lists the conflicting fields the user chose to replace —
+ * `[{ field, value, fromId }]`.
  */
-export function planMerge(group, keepId) {
+export function planMerge(group, keepId, choices = {}) {
   const members = (group?.members ?? []).filter(isMergeable);
   const primary = (keepId && members.find((m) => m.id === keepId)) || pickPrimary(members) || null;
   const others = members.filter((m) => m !== primary && m.id !== primary?.id);
   const patch = {};
   const added = [];
-  if (!primary) return { primary: null, others: [], patch, added };
+  const changed = [];
+  if (!primary) return { primary: null, others: [], patch, added, changed };
 
   for (const [field, normalize] of UNION_FIELDS) {
     const out = { ...(primary[field] ?? {}) };
@@ -311,7 +317,23 @@ export function planMerge(group, keepId) {
     }
   }
 
-  return { primary, others, patch, added };
+  // Explicit field choices: replace the kept contact's value with a donor's.
+  // The whole field is replaced (the host replaces maps wholesale), which is
+  // exactly what the review dialog's value picker promises.
+  for (const field of FILL_FIELDS) {
+    const donorId = choices?.[field];
+    if (!donorId || donorId === primary.id) continue;
+    const donor = others.find((m) => m.id === donorId && populated(m[field]));
+    if (!donor) continue;
+    patch[field] = donor[field];
+    changed.push({ field, value: donor[field], fromId: donor.id });
+    // A field can no longer be both "added" (filled) and "changed".
+    for (let i = added.length - 1; i >= 0; i -= 1) {
+      if (added[i].field === field) added.splice(i, 1);
+    }
+  }
+
+  return { primary, others, patch, added, changed };
 }
 
 // ── Merging for real ───────────────────────────────────────────
@@ -321,15 +343,17 @@ export function planMerge(group, keepId) {
  * group is skipped, so no contact is deleted without its details being kept —
  * then delete the others one by one, collecting ids that failed.
  * `keepBySignature` maps group signatures to the chosen member id.
+ * `choiceBySignature` maps group signatures to `{ [field]: donorId }`
+ * conflict resolutions from the dialog.
  * Returns `{ merged, removed, failed: [id, …] }`.
  */
-export async function mergeGroups(api, groups, keepBySignature = {}) {
+export async function mergeGroups(api, groups, keepBySignature = {}, choiceBySignature = {}) {
   let merged = 0;
   let removed = 0;
   const failed = [];
   for (const group of groups) {
     if (!group || !Array.isArray(group.members) || group.members.length < 2) continue;
-    const plan = planMerge(group, keepBySignature[group.signature]);
+    const plan = planMerge(group, keepBySignature[group.signature], choiceBySignature[group.signature]);
     if (!plan.primary || !plan.others.length) continue;
     if (Object.keys(plan.patch).length) {
       try {

@@ -1,11 +1,11 @@
 # AI Handoff - Contact Manager Plugin
 
 ## Current State
-- **Version**: 1.1.0 (manifest.json)
-- **Last changes**: Complete contact details with colour-coded merge indicators in the merge window
+- **Version**: 1.2.0 (manifest.json)
+- **Last changes**: Field-by-field merge conflict resolution (v1.2.0)
 - **Files modified**:
-  - `src/lib/preview.js` - `previewFields` now returns kept values, added values with source, and not-merged conflicts; added `previewCounts`
-  - `src/lib/review-dialog.js` - complete-details section for the selected Keep contact, legend, per-group summary, green `+` / orange `≠` badges
+  - `src/lib/preview.js` - `previewFields` returns kept, previous, added, changed and not-merged values; added `conflictFields` and `previewCounts`
+  - `src/lib/review-dialog.js` - complete-details section for the selected Keep contact, legend, per-group summary, Resolve differences picker, green `+` / orange `~` / orange `≠` badges
   - `manifest.json` - new `dialog.*` strings in `en` and `de`, version bumped
 
 ## Implementation Summary
@@ -19,9 +19,10 @@ selected in the *Keep* selector. The details redraw when the selection changes.
 | `Kept` (green) / `Deleted` (red) badges | Which group member is kept and which ones are removed |
 | Plain badge | Value already on the kept contact and unchanged |
 | `+ value` (green, tone `success`) | **New information** merged in from another contact |
+| `~ value` (orange, tone `warning`) | **Changed** — the user chose this donor value to replace the kept contact value; `was …` shows the old value |
 | `≠ value` (orange, tone `warning`) | Another contact has a different value in a single-value field; the kept contact's value stays, so this value is **not merged** |
 | `from {names}` line | Source contact(s) of the added/not-merged values |
-| Summary line | `{kept} kept · {added} new · {conflicts} not merged` |
+| Summary line | `{kept} kept · {added} new · {changed} changed · {conflicts} not merged` |
 
 An *How to read this* legend above the groups explains every indicator.
 
@@ -29,24 +30,26 @@ An *How to read this* legend above the groups explains every indicator.
 
 **`src/lib/preview.js`**:
 - `previewFields(plan)` - the complete per-field picture:
-  `{ field, labelKey, kept: [text], added: [{ value, fromId }], conflicts: [{ value, fromId }] }`
-- `previewCounts(fields)` - totals for the summary line
+  `{ field, labelKey, kept, previous, added, changed, conflicts }` with `{ value, fromId }` entries
+- `conflictFields(plan)` - the conflicting single-value fields and donor options for the Resolve pickers
+- `previewCounts(fields)` - totals for the summary line (`kept`, `added`, `changed`, `conflicts`)
 - `memberDetails` / `formatAddress` / `formatAnniversary` - unchanged display helpers
 
 **`src/lib/review-dialog.js`**:
-- Renders the legend, the member roster, the Keep selector, and the complete
-  details of the selected kept contact
+- Renders the legend, the member roster, the Keep selector, the Resolve differences pickers, and the complete details of the selected kept contact
+- `planMerge(group, keepId, choices)` and `mergeGroups(api, groups, keepBy, choicesBy)` carry the choices
 - Merge logic is unchanged: update the kept contact first, then remove others
 
 ### String Keys (manifest.json, en & de)
 - `dialog.previewTitle`, `dialog.previewNote`, `dialog.previewSummary`
-- `dialog.legendTitle`, `dialog.legendNew`, `dialog.legendConflict`, `dialog.legendKept`
+- `dialog.legendTitle`, `dialog.legendNew`, `dialog.legendChanged`, `dialog.legendConflict`, `dialog.legendKept`
+- `dialog.resolveTitle`, `dialog.resolveHint`, `dialog.keepValue`, `dialog.useValue`, `dialog.wasValue`
 - `dialog.addedFrom`, `dialog.noChanges`, `dialog.field.*`
 
 ### Testing
-- `test/preview.test.mjs` - complete details, added values, conflicts, counts (5 tests)
+- `test/preview.test.mjs` - complete details, added/changed values, conflicts, counts (7 tests)
 - `test/ui-dialog.test.mjs` - green/orange indicators, Keep redraw, legend, merge flow
-- Full suite: 66 tests in 7 files
+- Full suite: 72 tests in 7 files
 
 ## Roadmap (GitHub)
 
@@ -75,8 +78,8 @@ todo list.
 2. add `CHANGELOG.md` entry for that version (newest on top)
 3. `npm test` - all tests green
 4. `npm run package` - rebuild the ZIP
-5. copy `manifest.json`, `dist/index.js` and `contact-manager.zip` into `build/contact-manager/`
-6. commit source **and** artifacts together, tag the release
+5. commit the source, then run `npm run release` on `main`
+6. the script packages, tags and uploads the ZIP to GitHub Releases
 
 ## Project Structure
 ```
@@ -101,7 +104,7 @@ contact-manager/
 │   ├── contacts.test.mjs  # readers, name/email/phone extraction
 │   ├── duplicates.test.mjs # normalisation, keys, grouping
 │   ├── merge.test.mjs     # merge planning and the merge run
-│   ├── preview.test.mjs   # complete details, added values, conflicts
+│   ├── preview.test.mjs   # complete details, added/changed values, conflicts
 │   ├── ui-page.test.mjs   # the manager page
 │   ├── ui-dialog.test.mjs # the review dialog and detail section
 │   └── bundle.test.mjs    # the built bundle + locale completeness
@@ -117,7 +120,7 @@ contact-manager/
 1. **Run tests**: `cd contact-manager && npm test` (builds first, then runs vitest suite)
 2. **Build package**: `npm run package` (creates contact-manager.zip)
 3. **Update version**: bump `manifest.json` version and add CHANGELOG entry
-4. **Commit**: source + artifacts into `build/contact-manager/`
+4. **Commit**: source only (the ZIP is a GitHub release asset)
 5. **GitHub**: run `npm run release` on `main`. It tags
    `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
    the ZIP attached; the roadmap and todos live in GitHub issues/milestones.

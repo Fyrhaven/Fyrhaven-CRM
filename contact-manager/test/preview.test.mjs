@@ -2,7 +2,7 @@
 // the contact that will be kept, what the merge adds, and what it leaves out.
 import { describe, expect, it } from 'vitest';
 import { planMerge } from '../src/lib/duplicates.js';
-import { previewCounts, previewFields } from '../src/lib/preview.js';
+import { conflictFields, previewCounts, previewFields } from '../src/lib/preview.js';
 import { makeCard } from './fixtures.mjs';
 
 const groupOf = (...members) => ({ members });
@@ -59,7 +59,31 @@ describe('previewFields', () => {
     const twin = makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'], phones: ['+4917612345678'] });
     const fields = previewFields(planMerge(groupOf(kept, twin), 'a'));
 
-    expect(previewCounts(fields)).toEqual({ kept: 3, added: 1, conflicts: 1 });
+    expect(previewCounts(fields)).toEqual({ kept: 3, added: 1, changed: 0, conflicts: 1 });
+  });
+
+  it('offers each conflicting value as a choice for the kept contact', () => {
+    const kept = makeCard({ id: 'a', name: 'Bob Smith', emails: ['bob@x.de'], organizations: { o: { name: 'Acme' } } });
+    const twin = makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'], organizations: { o: { name: 'Globex' } } });
+    const fields = conflictFields(planMerge(groupOf(kept, twin), 'a'));
+
+    expect(fields.map((entry) => entry.field)).toEqual(['name', 'organizations']);
+    expect(fields[0].kept).toEqual(['Bob Smith']);
+    expect(fields[0].options).toEqual([{ value: 'Robert Smith', fromId: 'b' }]);
+  });
+
+  it('shows a chosen donor value as changed and keeps the replaced value for context', () => {
+    const kept = makeCard({ id: 'a', name: 'Bob Smith', emails: ['bob@x.de'] });
+    const twin = makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'], phones: ['+4917612345678'] });
+    const plan = planMerge(groupOf(kept, twin), 'a', { name: 'b' });
+    const fields = previewFields(plan);
+    const name = field(fields, 'name');
+
+    expect(name.kept).toEqual([]);
+    expect(name.previous).toEqual(['Bob Smith']);
+    expect(name.changed).toEqual([{ value: 'Robert Smith', fromId: 'b' }]);
+    expect(name.conflicts).toEqual([]);
+    expect(previewCounts(fields)).toEqual({ kept: 1, added: 1, changed: 1, conflicts: 0 });
   });
 
   it('shows the details of whichever contact is selected to keep', () => {

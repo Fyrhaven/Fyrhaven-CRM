@@ -1,14 +1,13 @@
-// One-command release: tests, packages, refreshes the published artifacts and
-// creates the GitHub release for the version in manifest.json. Run from
-// contact-manager/ with `npm run release` and a clean, pushed working tree.
-import { cp, readFile } from 'node:fs/promises';
+// One-command release: tests, packages and creates the GitHub release for the
+// version in manifest.json. The ZIP is a release asset, not a committed file.
+// Run from contact-manager/ with `npm run release` on clean, pushed `main`.
+import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const REPO_ROOT = path.resolve(ROOT, '..');
-const BUILD_DIR = path.join(REPO_ROOT, 'build', 'contact-manager');
 const manifest = JSON.parse(await readFile(path.join(ROOT, 'manifest.json'), 'utf8'));
 const changelog = await readFile(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
 const tag = `contact-manager-v${manifest.version}`;
@@ -37,14 +36,9 @@ function capture(command, args, cwd = REPO_ROOT) {
 run('npm', ['test']);
 run('npm', ['run', 'package']);
 
-// Keep the published artifacts in lockstep with the source.
-await cp(path.join(ROOT, 'manifest.json'), path.join(BUILD_DIR, 'manifest.json'));
-await cp(path.join(ROOT, 'dist', 'index.js'), path.join(BUILD_DIR, 'index.js'));
-await cp(path.join(ROOT, 'contact-manager.zip'), path.join(BUILD_DIR, 'contact-manager.zip'));
-
-const dirty = capture('git', ['status', '--porcelain', '--', 'build/contact-manager']);
+const dirty = capture('git', ['status', '--porcelain']);
 if (dirty.stdout.trim()) {
-  console.error(`\nArtifacts changed. Commit build/contact-manager before releasing:\n${dirty.stdout}`);
+  console.error(`\nWorking tree is not clean. Commit the source before releasing:\n${dirty.stdout}`);
   process.exit(1);
 }
 

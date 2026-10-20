@@ -91,16 +91,53 @@ function valuesOf(card, field) {
   return Object.values(card[field] ?? {}).map(DISPLAY[field]).filter(Boolean);
 }
 
+/** Donor values a kept contact's single-value field would lose. */
+function fieldConflicts(primary, others, field, kept) {
+  if (!kept.length || !FILL_FIELDS.has(field)) return [];
+  const conflicts = [];
+  const seen = new Set(kept.map((value) => normalizeName(value)));
+  for (const other of others) {
+    for (const value of valuesOf(other, field)) {
+      const key = normalizeName(value);
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      conflicts.push({ value, fromId: other.id });
+    }
+  }
+  return conflicts;
+}
+
+/**
+ * The conflicting single-value fields of a plan — the options the review
+ * dialog's value picker offers.
+ * `[{ field, labelKey, kept: [text], options: [{ value, fromId }] }]`.
+ */
+export function conflictFields(plan) {
+  const primary = plan?.primary;
+  const others = plan?.others ?? [];
+  const out = [];
+  for (const [field, labelKey] of PREVIEW_FIELDS) {
+    if (!FILL_FIELDS.has(field)) continue;
+    const kept = valuesOf(primary, field);
+    const options = fieldConflicts(primary, others, field, kept);
+    if (options.length) out.push({ field, labelKey, kept, options });
+  }
+  return out;
+}
+
 /**
  * The complete picture of the contact that will be kept, field by field, from
  * a planMerge plan:
- * `[{ field, labelKey, kept: [text], added: [{ value, fromId }],
- *     conflicts: [{ value, fromId }] }]`
+ * `[{ field, labelKey, kept: [text], previous?: [text],
+ *     added: [{ value, fromId }], conflicts: [{ value, fromId }],
+ *     changed: [{ value, fromId }] }]`
  *
  * - `kept`      values the kept contact already has and keeps unchanged
  * - `added`     values the merge brings in from the other contacts
  * - `conflicts` values only the other contacts have in a single-value field
  *               the kept contact already fills; they are NOT merged
+ * - `changed`   donor values the user chose to replace the kept contact's
+ *               value with; `previous` holds the values being replaced
  *
  * Only fields with something to show are returned. The caller resolves
  * `labelKey` through i18n and `fromId` through the group's members.
@@ -113,44 +150,46 @@ export function previewFields(plan) {
     if (!addedByField.has(entry.field)) addedByField.set(entry.field, []);
     addedByField.get(entry.field).push(entry);
   }
+  const changedByField = new Map();
+  for (const entry of plan?.changed ?? []) {
+    if (!changedByField.has(entry.field)) changedByField.set(entry.field, []);
+    changedByField.get(entry.field).push(entry);
+  }
 
   const out = [];
   for (const [field, labelKey] of PREVIEW_FIELDS) {
     const kept = valuesOf(primary, field);
+    const changed = (changedByField.get(field) ?? [])
+      .flatMap((entry) => valuesOf({ [field]: entry.value }, field)
+        .map((value) => ({ value, fromId: entry.fromId })))
+      .filter((entry) => entry.value);
+
+    if (changed.length) {
+      out.push({ field, labelKey, kept: [], previous: kept, added: [], conflicts: [], changed });
+      continue;
+    }
+
     const added = (addedByField.get(field) ?? [])
       .map((entry) => ({ value: DISPLAY[field](entry.value), fromId: entry.fromId }))
       .filter((entry) => entry.value);
-
-    // A donor cannot replace a single-value field the kept contact already
-    // fills. Surface those values instead of leaving the user guessing.
-    const conflicts = [];
-    if (kept.length > 0 && FILL_FIELDS.has(field)) {
-      const seen = new Set(kept.map((value) => normalizeName(value)));
-      for (const other of others) {
-        for (const value of valuesOf(other, field)) {
-          const key = normalizeName(value);
-          if (key && seen.has(key)) continue;
-          if (key) seen.add(key);
-          conflicts.push({ value, fromId: other.id });
-        }
-      }
-    }
+    const conflicts = fieldConflicts(primary, others, field, kept);
 
     if (!kept.length && !added.length && !conflicts.length) continue;
-    out.push({ field, labelKey, kept, added, conflicts });
+    out.push({ field, labelKey, kept, added, conflicts, changed: [] });
   }
   return out;
 }
 
-/** Totals for the dialog summary: `{ kept, added, conflicts }`. */
+/** Totals for the dialog summary: `{ kept, added, changed, conflicts }`. */
 export function previewCounts(fields) {
   return (Array.isArray(fields) ? fields : []).reduce(
     (counts, field) => ({
       kept: counts.kept + field.kept.length,
       added: counts.added + field.added.length,
+      changed: counts.changed + field.changed.length,
       conflicts: counts.conflicts + field.conflicts.length,
     }),
-    { kept: 0, added: 0, conflicts: 0 },
+    { kept: 0, added: 0, changed: 0, conflicts: 0 },
   );
 }
 

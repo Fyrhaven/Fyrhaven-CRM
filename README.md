@@ -1,8 +1,9 @@
 # Bulwark Mail plugins
 
 Plugins for [Bulwark Mail](https://github.com/zyntrax/bulwark) — the webmail
-built on Stalwart. Each plugin is published here with its **source**, its
-**build script** and the **installable artifact** produced from that source.
+built on Stalwart. Each plugin is published here with its **source** and its
+**build script**; installable ZIPs are attached to
+[GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases).
 
 ---
 
@@ -10,8 +11,7 @@ built on Stalwart. Each plugin is published here with its **source**, its
 
 | Plugin | Version | What it does | Install |
 |---|---|---|---|
-| [**Contact Manager**](contact-manager/) | 1.1.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details, English and German. | [`contact-manager.zip`](build/contact-manager/contact-manager.zip) |
-| [**Remove contact duplicates**](build/remove-contact-duplicates/) | 0.0.1 | Minimal prototype: a contact-list action that lists the contacts of the account. Superseded by *Contact Manager*. | [`remove-contact-duplicates.zip`](build/remove-contact-duplicates/remove-contact-duplicates.zip) |
+| [**Contact Manager**](contact-manager/) | 1.2.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details, English and German. | [Latest release](https://github.com/zyntrax/bulwark-plugins/releases/latest) |
 
 ---
 
@@ -21,36 +21,28 @@ built on Stalwart. Each plugin is published here with its **source**, its
 bulwark-plugins/
 ├── README.md               # this file
 ├── .gitignore
-├── contact-manager/        # source of the Contact Manager plugin
-│   ├── manifest.json
-│   ├── package.json
-│   ├── vitest.config.mjs
-│   ├── CHANGELOG.md
-│   ├── README.md           # full documentation of the plugin
-│   ├── src/                # plugin source
-│   ├── test/               # vitest suite
-│   ├── test-utils/         # fake host API and UI-kit stand-in
-│   └── scripts/            # packaging script
-└── build/                  # the published artifacts, one folder per plugin
-    ├── contact-manager/
-    │   ├── manifest.json
-    │   ├── index.js        # the CommonJS bundle
-    │   └── contact-manager.zip
-    └── remove-contact-duplicates/
-        ├── manifest.json
-        ├── index.js
-        └── remove-contact-duplicates.zip
+└── contact-manager/        # source of the Contact Manager plugin
+    ├── manifest.json
+    ├── package.json
+    ├── vitest.config.mjs
+    ├── CHANGELOG.md
+    ├── README.md           # full documentation of the plugin
+    ├── src/                # plugin source
+    ├── test/               # vitest suite
+    ├── test-utils/         # fake host API and UI-kit stand-in
+    └── scripts/            # packaging and release scripts
 ```
 
-**Source and artifacts live side by side on purpose.** The ZIP a user
-downloads is built from the source in the same commit, so the two can never
-drift apart.
+**Installable ZIPs live on GitHub Releases.** `npm run release` builds the ZIP
+from the tagged source and attaches it to the release, so the download and the
+tag can never drift apart.
 
 ---
 
 ## Installing a plugin
 
-1. Download the `.zip` from the `build/` folder of the plugin you want.
+1. Download the plugin's `contact-manager.zip` from
+   [GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases).
 2. In Bulwark Mail, go to **Admin → Plugins** (or **Settings → Plugins** if
    the administrator allows user uploads) and upload the ZIP.
 3. Confirm the permissions the plugin asks for.
@@ -79,15 +71,12 @@ assistant must follow when changing the code.
 
 ### Publishing a new version
 
-1. Bump `version` in the plugin's `manifest.json` (semver).
+1. Bump `version` in the plugin's `manifest.json` (and `package.json`).
 2. Add a `CHANGELOG.md` entry for that version — newest on top.
 3. `npm test` — all tests green.
-4. `npm run package` — rebuild the ZIP.
-5. Copy the plugin's `manifest.json`, `dist/index.js` and `<plugin>.zip` into
-   `build/<plugin>/`.
-6. Commit the source **and** the artifacts together, then push.
-
-The two build directories always match the source in the same commit.
+4. Commit the source, then run `npm run release` from `main`.
+5. The release script rebuilds the ZIP, tags `contact-manager-vX.Y.Z`, pushes
+   the tag and attaches the ZIP to the GitHub release.
 
 ### Roadmap, issues and releases
 
@@ -95,8 +84,8 @@ The two build directories always match the source in the same commit.
   map the planned Contact Manager releases; every feature is a GitHub issue
   labelled `roadmap`, grouped by area and milestone.
 - **Releases** — `cd contact-manager && npm run release` tests, packages,
-  refreshes `build/contact-manager/`, tags `contact-manager-vX.Y.Z` and uploads
-  the ZIP to GitHub Releases (see [`scripts/release.mjs`](contact-manager/scripts/release.mjs)).
+  tags `contact-manager-vX.Y.Z` and uploads the ZIP to GitHub Releases (see
+  [`scripts/release.mjs`](contact-manager/scripts/release.mjs)).
 
 ---
 
