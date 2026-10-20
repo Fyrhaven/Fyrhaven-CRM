@@ -25,8 +25,10 @@ Design rules that hold everywhere in this codebase:
    first; if that update fails, the whole group is skipped.
 2. **One decision point.** Every entry point (page, command palette, contact
    list toolbar, contact details) funnels into the same review dialog.
-3. **Show the plan, not just a result.** The dialog previews every field that
-   will be kept and every field that will be added, and who it comes from.
+3. **Show the plan, not just a result.** The dialog shows the complete details
+   of the contact selected to keep, marks every value the merge adds in green
+   with `+`, and marks values that differ on the duplicates in orange with
+   `≠` (they are not merged).
 4. **Pure logic is separable.** Detection, merge planning and display shaping
    are plain functions over plain data, so they are unit-testable without a
    browser, a DOM or the plugin host.
@@ -69,12 +71,13 @@ contact-manager/
 │       ├── manager-page.js # the Contact Manager page (app-page slot)
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
-│       └── preview.js      # display shaping for the dialog (kept/added preview)
+│       └── preview.js      # display shaping for the dialog (kept/added/conflicts)
 ├── test/
 │   ├── fixtures.mjs        # card builders
 │   ├── contacts.test.mjs   # readers, name/email/phone extraction
 │   ├── duplicates.test.mjs # normalisation, keys, grouping
 │   ├── merge.test.mjs      # merge planning and the merge run
+│   ├── preview.test.mjs    # complete details, added values, conflicts, counts
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   └── bundle.test.mjs     # the built bundle + locale completeness
@@ -286,8 +289,13 @@ selector; `planMerge(group, keepId)` honours that override.
 * **Never touched:** `uid`, `created`, `updated`, `addressBookIds`,
   encryption keys, and any client-only field.
 * `added` is the list of everything the merge brings in,
-  `[{ field, value, fromId }]`, in the order it would appear. The dialog
-  renders it as the “after the merge” preview.
+  `[{ field, value, fromId }]`, in the order it would appear.
+* `previewFields(plan)` turns a plan into the complete details of the contact
+  to keep, per field: `kept` (already there, stays), `added` (green `+`,
+  merged in, with its source contact) and `conflicts` (orange `≠`, a value
+  another contact has in a single-value field such as the name; the kept
+  contact's own value stays, so that value is not merged). The review dialog
+  renders this for whichever member the *Keep* selector points at.
 
 ### 6.3 Running the merge
 
@@ -328,7 +336,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **58 tests in 6 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **66 tests in 7 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -342,7 +350,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/duplicates.test.mjs` | Normalisation, key building, union-find grouping, strength, reasons, sorting, hidden groups |
 | `test/merge.test.mjs` | `pickPrimary`, `planMerge` (unions, fills, keywords, patch shape), `mergeGroups` (update before remove, failure handling) |
 | `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection |
-| `test/ui-dialog.test.mjs` | The review dialog (footer buttons, keep-selector, confirm, cancel) and the contact detail section |
+| `test/preview.test.mjs` | The complete details of the kept contact, added values with their source, not-merged conflicts, and the summary counts |
+| `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
 `test/bundle.test.mjs` evaluates `dist/index.js` with a `require` that only
@@ -416,7 +425,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 58 tests, plus any new test you added.
+1. `npm test` passes — all 66 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
@@ -533,7 +542,24 @@ downloads must match the code in the repository.
 4. `npm run package` — rebuild the ZIP.
 5. Copy `manifest.json`, `dist/index.js` and `contact-manager.zip` into
    `build/contact-manager/`.
-6. Commit the source **and** the artifacts together, and tag the release.
+6. Commit the source **and** the artifacts together.
+7. Run `npm run release`. It tests, packages, refreshes
+   `build/contact-manager/`, checks the artifacts are committed, tags
+   `contact-manager-vX.Y.Z` on `main`, pushes the tag and creates the GitHub
+   release with the ZIP attached.
+8. Close the shipped roadmap issues.
+
+### 11.2.1 Roadmap and todos
+
+There is **no local todo file**. The roadmap lives in GitHub:
+
+* [Milestones](https://github.com/zyntrax/bulwark-plugins/milestones) — one per
+  planned release.
+* [Issues labelled `roadmap`](https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap)
+  — the individual features and tasks.
+* The pinned roadmap issue — the top-level vision linking every milestone.
+
+New ideas become a new issue with the `roadmap` label and a milestone.
 
 ### 11.3 Changelog policy
 

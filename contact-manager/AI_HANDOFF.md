@@ -1,58 +1,67 @@
 # AI Handoff - Contact Manager Plugin
 
 ## Current State
-- **Version**: 1.0.0 (manifest.json)
-- **Last changes**: Merge duplicate window visual indicators enhancement
+- **Version**: 1.1.0 (manifest.json)
+- **Last changes**: Complete contact details with colour-coded merge indicators in the merge window
 - **Files modified**:
-  - `src/lib/preview.js` - Added formatPreview, previewSummary, previewTitle functions
-  - `src/lib/review-dialog.js` - Enhanced ReviewDialog with green+/orange visual indicators, KeepSelector, DetailSectionHint
+  - `src/lib/preview.js` - `previewFields` now returns kept values, added values with source, and not-merged conflicts; added `previewCounts`
+  - `src/lib/review-dialog.js` - complete-details section for the selected Keep contact, legend, per-group summary, green `+` / orange `≠` badges
+  - `manifest.json` - new `dialog.*` strings in `en` and `de`, version bumped
 
 ## Implementation Summary
 
 ### Merge Duplicate Window Visual Indicators
-The review/merge dialog now displays clear visual indicators for what happens during a merge:
+The review/merge dialog shows the **complete details** of whichever contact is
+selected in the *Keep* selector. The details redraw when the selection changes.
 
 | Indicator | Meaning |
 |-----------|---------|
-| `+ value` (green) | **New information** being merged in from other contacts |
-| Orange/▲ | Existing values being modified/changed |
-| Normal display | Values kept from primary contact (as-is) |
-| ⨉ | Values being removed/cleared |
+| `Kept` (green) / `Deleted` (red) badges | Which group member is kept and which ones are removed |
+| Plain badge | Value already on the kept contact and unchanged |
+| `+ value` (green, tone `success`) | **New information** merged in from another contact |
+| `≠ value` (orange, tone `warning`) | Another contact has a different value in a single-value field; the kept contact's value stays, so this value is **not merged** |
+| `from {names}` line | Source contact(s) of the added/not-merged values |
+| Summary line | `{kept} kept · {added} new · {conflicts} not merged` |
 
-### Key Functions Added
+An *How to read this* legend above the groups explains every indicator.
+
+### Key Functions
 
 **`src/lib/preview.js`**:
-- `formatPreview(added)` - Formats merge preview fields with type indicators
-- `previewSummary(added)` - Generates summary string (kept/added/changed/removed counts)
-- `previewTitle(added)` - Generates title based on number of added fields
+- `previewFields(plan)` - the complete per-field picture:
+  `{ field, labelKey, kept: [text], added: [{ value, fromId }], conflicts: [{ value, fromId }] }`
+- `previewCounts(fields)` - totals for the summary line
+- `memberDetails` / `formatAddress` / `formatAnniversary` - unchanged display helpers
 
 **`src/lib/review-dialog.js`**:
-- `ReviewDialog` - Main dialog component with preview header/summary, members list, field entries with visual indicators, and footer buttons
-- `KeepSelector` - Radio button group to override the automatically chosen primary contact
-- `DetailSectionHint` - "Review duplicates" button in contact detail sections
+- Renders the legend, the member roster, the Keep selector, and the complete
+  details of the selected kept contact
+- Merge logic is unchanged: update the kept contact first, then remove others
 
-### string Keys (already in manifest.json locales en & de)
-- `dialog.previewTitle`, `dialog.previewNote`, `dialog.addedFrom`
-- `detail.found`, `dialog.review`, `group.*`, `settings.*`
+### String Keys (manifest.json, en & de)
+- `dialog.previewTitle`, `dialog.previewNote`, `dialog.previewSummary`
+- `dialog.legendTitle`, `dialog.legendNew`, `dialog.legendConflict`, `dialog.legendKept`
+- `dialog.addedFrom`, `dialog.noChanges`, `dialog.field.*`
 
 ### Testing
-- Existing tests should pass (backward-compatible changes)
-- No breaking changes to merge logic or data model
-- String keys resolved from manifest.json
+- `test/preview.test.mjs` - complete details, added values, conflicts, counts (5 tests)
+- `test/ui-dialog.test.mjs` - green/orange indicators, Keep redraw, legend, merge flow
+- Full suite: 66 tests in 7 files
 
-## Future Feature Suggestions (from user)
+## Roadmap (GitHub)
 
-### Long-term Roadmap
-1. **Inbox & Communication Intelligence** - Contacts interacting with inbox, timeline history, forgotten contacts, auto-enrichment from email signatures
-2. **Organization & Smart Segmentation** - Dynamic folders, company grouping, VIP management
-3. **Data Hygiene & Enrichment** - Health scoring, auto-normalization, avatar fetching, smart import/export
-4. **Privacy, Security & Compliance** - External domain marking, sensitive info redaction, stale contact pruning
-5. **Bulwark UI Integration Hooks** - Hover cards, composer integration, sidebar widgets
-6. **Advanced Data Hygiene & Health Engine** - Contact health scoreboard, one-click normalization rules
-7. **Power-User Workflow & UX Integrations** - Universal hover cards, composer quick-insert, private notes
-8. **Smart Segmentation** - Dynamic/saved smart lists, custom tagging & color coding
-9. **Security, Privacy & Native Sync** - Granular privacy controls, CardDAV/vCard 4.0 compatibility
+The roadmap lives on GitHub, not in this file:
 
+- **Milestones** — https://github.com/zyntrax/bulwark-plugins/milestones
+  track the planned releases (`v1.2.0` … `v2.0.0`).
+- **Feature issues** — https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap
+  are the individual todos, grouped by area and milestone.
+- **Pinned roadmap issue** — the top-level vision with links to every planned
+  feature.
+
+When a feature ships, close its issue in the release commit/PR. New ideas go
+into a new issue with the `roadmap` label and a milestone — never into a local
+todo list.
 ## Versioning Policy
 - Follows semantic versioning: MAJOR.MINOR.PATCH
 - `manifest.json` version is the single source of truth
@@ -92,6 +101,7 @@ contact-manager/
 │   ├── contacts.test.mjs  # readers, name/email/phone extraction
 │   ├── duplicates.test.mjs # normalisation, keys, grouping
 │   ├── merge.test.mjs     # merge planning and the merge run
+│   ├── preview.test.mjs   # complete details, added values, conflicts
 │   ├── ui-page.test.mjs   # the manager page
 │   ├── ui-dialog.test.mjs # the review dialog and detail section
 │   └── bundle.test.mjs    # the built bundle + locale completeness
@@ -108,7 +118,9 @@ contact-manager/
 2. **Build package**: `npm run package` (creates contact-manager.zip)
 3. **Update version**: bump `manifest.json` version and add CHANGELOG entry
 4. **Commit**: source + artifacts into `build/contact-manager/`
-5. **Github**: create release, update roadmap, add Todo if available
+5. **GitHub**: run `npm run release` on `main`. It tags
+   `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
+   the ZIP attached; the roadmap and todos live in GitHub issues/milestones.
 
 ## GitHub Integration
 - Repository: bulwark-plugins (zyntrax/bulwark-plugins)

@@ -10,7 +10,7 @@ built on Stalwart. Each plugin is published here with its **source**, its
 
 | Plugin | Version | What it does | Install |
 |---|---|---|---|
-| [**Contact Manager**](contact-manager/) | 1.0.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details, English and German. | [`contact-manager.zip`](build/contact-manager/contact-manager.zip) |
+| [**Contact Manager**](contact-manager/) | 1.1.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details, English and German. | [`contact-manager.zip`](build/contact-manager/contact-manager.zip) |
 | [**Remove contact duplicates**](build/remove-contact-duplicates/) | 0.0.1 | Minimal prototype: a contact-list action that lists the contacts of the account. Superseded by *Contact Manager*. | [`remove-contact-duplicates.zip`](build/remove-contact-duplicates/remove-contact-duplicates.zip) |
 
 ---
@@ -88,6 +88,15 @@ assistant must follow when changing the code.
 6. Commit the source **and** the artifacts together, then push.
 
 The two build directories always match the source in the same commit.
+
+### Roadmap, issues and releases
+
+- **Roadmap** — the [milestones](https://github.com/zyntrax/bulwark-plugins/milestones)
+  map the planned Contact Manager releases; every feature is a GitHub issue
+  labelled `roadmap`, grouped by area and milestone.
+- **Releases** — `cd contact-manager && npm run release` tests, packages,
+  refreshes `build/contact-manager/`, tags `contact-manager-vX.Y.Z` and uploads
+  the ZIP to GitHub Releases (see [`scripts/release.mjs`](contact-manager/scripts/release.mjs)).
 
 ---
 
