@@ -4,6 +4,7 @@
 // the unit tests in test/preview.test.mjs drive them directly.
 
 import { bookIds, contactName, emailEntries, phoneEntries } from './contacts.js';
+import { normalizeName } from './duplicates.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const trunc = (value, max = 120) => (value.length > max ? `${value.slice(0, max - 1)}…` : value);
@@ -76,32 +77,83 @@ export const PREVIEW_FIELDS = [
   ['media', 'dialog.field.media'],
 ];
 
-function keptValues(primary, field) {
-  if (!primary) return [];
-  if (field === 'name') return primary.name ? [DISPLAY.name(primary.name)].filter(Boolean) : [];
-  if (field === 'keywords') return Object.keys(primary.keywords ?? {});
-  return Object.values(primary[field] ?? {}).map(DISPLAY[field]).filter(Boolean);
+/**
+ * Fields the kept contact receives only when it has none of its own. A donor
+ * value in one of these conflicts with the kept contact's own value instead of
+ * being merged, so the dialog can say so explicitly.
+ */
+const FILL_FIELDS = new Set(['name', 'organizations', 'titles', 'personalInfo', 'media']);
+
+function valuesOf(card, field) {
+  if (!card) return [];
+  if (field === 'name') return card.name ? [DISPLAY.name(card.name)].filter(Boolean) : [];
+  if (field === 'keywords') return Object.keys(card.keywords ?? {});
+  return Object.values(card[field] ?? {}).map(DISPLAY[field]).filter(Boolean);
 }
 
 /**
- * The merged contact, field by field, from a planMerge plan:
- * `[{ field, labelKey, kept: [text], added: [{ value, fromId }] }]` —
- * only fields that have something. The caller resolves `labelKey` through
- * i18n and `fromId` through the group's members.
+ * The complete picture of the contact that will be kept, field by field, from
+ * a planMerge plan:
+ * `[{ field, labelKey, kept: [text], added: [{ value, fromId }],
+ *     conflicts: [{ value, fromId }] }]`
+ *
+ * - `kept`      values the kept contact already has and keeps unchanged
+ * - `added`     values the merge brings in from the other contacts
+ * - `conflicts` values only the other contacts have in a single-value field
+ *               the kept contact already fills; they are NOT merged
+ *
+ * Only fields with something to show are returned. The caller resolves
+ * `labelKey` through i18n and `fromId` through the group's members.
  */
 export function previewFields(plan) {
+  const primary = plan?.primary;
+  const others = plan?.others ?? [];
+  const addedByField = new Map();
+  for (const entry of plan?.added ?? []) {
+    if (!addedByField.has(entry.field)) addedByField.set(entry.field, []);
+    addedByField.get(entry.field).push(entry);
+  }
+
   const out = [];
   for (const [field, labelKey] of PREVIEW_FIELDS) {
-    const kept = keptValues(plan?.primary, field);
-    const added = (plan?.added ?? [])
-      .filter((entry) => entry.field === field)
+    const kept = valuesOf(primary, field);
+    const added = (addedByField.get(field) ?? [])
       .map((entry) => ({ value: DISPLAY[field](entry.value), fromId: entry.fromId }))
       .filter((entry) => entry.value);
-    if (!kept.length && !added.length) continue;
-    out.push({ field, labelKey, kept, added });
+
+    // A donor cannot replace a single-value field the kept contact already
+    // fills. Surface those values instead of leaving the user guessing.
+    const conflicts = [];
+    if (kept.length > 0 && FILL_FIELDS.has(field)) {
+      const seen = new Set(kept.map((value) => normalizeName(value)));
+      for (const other of others) {
+        for (const value of valuesOf(other, field)) {
+          const key = normalizeName(value);
+          if (key && seen.has(key)) continue;
+          if (key) seen.add(key);
+          conflicts.push({ value, fromId: other.id });
+        }
+      }
+    }
+
+    if (!kept.length && !added.length && !conflicts.length) continue;
+    out.push({ field, labelKey, kept, added, conflicts });
   }
   return out;
 }
+
+/** Totals for the dialog summary: `{ kept, added, conflicts }`. */
+export function previewCounts(fields) {
+  return (Array.isArray(fields) ? fields : []).reduce(
+    (counts, field) => ({
+      kept: counts.kept + field.kept.length,
+      added: counts.added + field.added.length,
+      conflicts: counts.conflicts + field.conflicts.length,
+    }),
+    { kept: 0, added: 0, conflicts: 0 },
+  );
+}
+
 
 /**
  * Everything the dialog shows about one member of a group:

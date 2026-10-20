@@ -74,6 +74,56 @@ describe('review dialog', () => {
     expect(api.calls('contacts.remove')[0].args[0]).toBe('d1');
   });
 
+  it('shows the complete details of the contact to keep and marks merged values green', async () => {
+    const api = dialogApi();
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [group()], onResult: () => {} }));
+    });
+
+    expect(screen.getByText('Complete details of Bob Smith')).toBeTruthy();
+    expect(screen.getByText('How to read this')).toBeTruthy();
+    expect(screen.getByText('New — merged in from another contact')).toBeTruthy();
+    expect(screen.getByText('Different — the kept contact\'s value stays, this one is not merged')).toBeTruthy();
+    // Details the roster never showed are part of the complete picture.
+    expect(screen.getByText('Friend')).toBeTruthy();
+    expect(screen.getByText('Deleted')).toBeTruthy();
+    const added = screen.getByText('+ +4917612345678');
+    expect(added.getAttribute('data-tone')).toBe('success');
+    expect(screen.getByText('from Bob Smith')).toBeTruthy();
+  });
+
+  it('redraws the complete details for the contact picked as Keep', async () => {
+    const api = dialogApi();
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [group()], onResult: () => {} }));
+    });
+    await act(async () => { fireEvent.change(screen.getByLabelText('Keep'), { target: { value: 'd2' } }); });
+
+    expect(screen.getByText('Complete details of Bob Smith')).toBeTruthy();
+    const phoneBadges = screen.getAllByText('+4917612345678');
+    expect(phoneBadges.some((node) => node.getAttribute('data-tone') === 'neutral')).toBe(true);
+    const added = screen.getByText('+ Friend');
+    expect(added.getAttribute('data-tone')).toBe('success');
+  });
+
+  it('marks a differing value on another contact orange and says it is not merged', async () => {
+    const api = dialogApi();
+    const Dialog = makeReviewDialog(React, api);
+    const conflicting = findDuplicateGroups([
+      makeCard({ id: 'n1', name: 'Bob Smith', emails: ['bob@x.de'] }),
+      makeCard({ id: 'n2', name: 'Robert Smith', emails: ['bob@x.de'] }),
+    ], {})[0];
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [conflicting], onResult: () => {} }));
+    });
+
+    const different = screen.getByText('≠ Robert Smith');
+    expect(different.getAttribute('data-tone')).toBe('warning');
+    expect(screen.getByText('2 kept · 0 new · 1 not merged')).toBeTruthy();
+  });
+
   it('disables Merge for an unchecked group; Cancel closes with null', async () => {
     const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
     const Dialog = makeReviewDialog(React, api);

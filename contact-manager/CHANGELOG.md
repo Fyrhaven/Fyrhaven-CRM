@@ -7,6 +7,24 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.1.0] — 2026-10-20
+
+### Added
+
+- **Complete details in the merge window.** The review dialog now shows every
+  detail of whichever contact is selected as *Keep* — name, e-mail, phone,
+  address, organisation, title, nickname, online services, links, notes,
+  anniversaries, keywords, personal info and media — not only the fields that
+  change.
+- **Green `+` values** mark every value the merge brings in from another
+  contact, and the field names the source contact beneath it.
+- **Orange `≠` values** mark details that another contact has but that will
+  **not** be merged, because the kept contact already has its own value in a
+  single-value field (for example a different name or organisation).
+- **Legend and summary** — *How to read this* explains the colours and
+  symbols, and each group shows a `kept · new · not merged` count.
+- The details redraw immediately when a different contact is chosen as *Keep*.
+
 ## [1.0.0] — 2026-10-20
 
 First public release.
@@ -42,4 +60,5 @@ First public release.
   e-mail address, phone number and name.
 - **German translation** — every string is available in `en` and `de`.
 
+[1.1.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.1.0
 [1.0.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.0.0
