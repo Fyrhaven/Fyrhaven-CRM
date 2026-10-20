@@ -1,0 +1,108 @@
+// @vitest-environment jsdom
+// The manager page, driven with a fake api: scan, hide/restore, review.
+import { afterEach, describe, expect, it } from 'vitest';
+import * as React from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fakeApi } from '../test-utils/fake-api.mjs';
+import { makeManagerPage } from '../src/lib/manager-page.js';
+import { makeCard } from './fixtures.mjs';
+
+const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
+afterEach(cleanup);
+
+const CARDS = [
+  makeCard({ id: 'c1', name: 'Ada Lovelace', emails: ['Ada@Example.org'] }),
+  makeCard({ id: 'c2', name: 'A. Lovelace', emails: ['ada@example.org'], addressBookIds: { b1: true } }),
+  makeCard({ id: 'c3', name: 'John Doe', emails: ['john@home.org'] }),
+  makeCard({ id: 'c4', name: 'Doe, John', emails: ['john@work.org'] }),
+];
+
+function pageApi(handlers = {}) {
+  return fakeApi({
+    translations: manifest.locales,
+    handlers: {
+      'contacts.list': async () => CARDS,
+      'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
+      ...handlers,
+    },
+  });
+}
+
+async function renderPage(api) {
+  const Page = makeManagerPage(React, api);
+  await act(async () => { render(React.createElement(Page)); });
+  await waitFor(() => screen.getByText(/duplicate groups/));
+}
+
+describe('manager page', () => {
+  it('auto-scans on open and shows statistics, groups and the kept contact', async () => {
+    const api = pageApi();
+    await renderPage(api);
+    expect(api.calls('contacts.list')).toHaveLength(1);
+    expect(screen.getByText(/4 contacts · 1 address books · 2 duplicate groups \(1 certain, 1 possible\)/)).toBeTruthy();
+    expect(screen.getByText('Certain match')).toBeTruthy();
+    expect(screen.getByText('Possible match')).toBeTruthy();
+    expect(screen.getByText('Same email address: ada@example.org')).toBeTruthy();
+    // the first group's default keep: most fields, then lowest id → c1
+    expect(screen.getAllByText('Keep')).toHaveLength(2); // one kept contact per group
+    expect(screen.getAllByText(/Ada Lovelace · Ada@Example\.org/).length).toBeGreaterThan(0);
+    // last scan persisted
+    expect((await api.storage.get('lastScan')).contacts).toBe(4);
+  });
+
+  it('hides a group and restores it again', async () => {
+    const api = pageApi();
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Hide' })[0]); });
+    expect((await api.storage.get('dismissedGroups'))).toContain('g:c1,c2');
+    expect(screen.queryByText(/Augusta|A\. Lovelace/)).toBeNull();
+    expect(api.calls('toast.info').at(-1).args[0]).toBe('Group hidden.');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Show hidden groups' })); });
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Restore' })[0]); });
+    expect(await api.storage.get('dismissedGroups')).toEqual([]);
+    expect(screen.getByText(/duplicate groups/)).toBeTruthy();
+  });
+
+  it('opens the review dialog for one group and rescans after a merge', async () => {
+    const api = pageApi({ 'ui.openDialog': async () => ({ merged: 1, removed: 1, failed: 0 }) });
+    await renderPage(api);
+    const before = api.calls('contacts.list').length;
+
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: /Review/ })[0]); });
+    const call = api.calls('ui.openDialog')[0];
+    expect(call.args[0]).toMatchObject({ slot: 'plugin-dialog', title: 'Merge duplicate contacts' });
+    expect(call.args[0].extraProps.groups).toHaveLength(1);
+    expect(call.args[0].extraProps.groups[0].signature).toBe('g:c1,c2');
+    await waitFor(() => expect(api.calls('toast.success').at(-1).args[0])
+      .toBe('Merged 1 groups, removed 1 contacts.'));
+    await waitFor(() => expect(api.calls('contacts.list').length).toBeGreaterThan(before));
+  });
+
+  it('merges the selected groups through the same dialog', async () => {
+    const api = pageApi({ 'ui.openDialog': async () => ({ merged: 2, removed: 3, failed: 0 }) });
+    await renderPage(api);
+
+    for (const box of screen.getAllByRole('checkbox')) {
+      await act(async () => { fireEvent.click(box); });
+    }
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge 2 groups' })); });
+    const groups = api.calls('ui.openDialog')[0].args[0].extraProps.groups;
+    expect(groups.map((g) => g.signature).sort()).toEqual(['g:c1,c2', 'g:c3,c4']);
+  });
+
+  it('shows the error and retries when loading fails', async () => {
+    let fail = true;
+    const api = pageApi({ 'contacts.list': async () => { if (fail) throw new Error('offline'); return CARDS; } });
+    const Page = makeManagerPage(React, api);
+    await act(async () => { render(React.createElement(Page)); });
+    await waitFor(() => screen.getByText(/Could not load your contacts: offline/));
+
+    fail = false;
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry' })); });
+    await waitFor(() => screen.getByText(/duplicate groups/));
+  });
+});
