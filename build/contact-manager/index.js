@@ -285,17 +285,18 @@ function pickPrimary(members) {
     return String(a.id).localeCompare(String(b.id));
   })[0];
 }
-function planMerge(group, keepId) {
+function planMerge(group, keepId, choices = {}) {
   const members = (group?.members ?? []).filter(isMergeable);
   const primary = keepId && members.find((m) => m.id === keepId) || pickPrimary(members) || null;
   const others = members.filter((m) => m !== primary && m.id !== primary?.id);
   const patch = {};
   const added = [];
-  if (!primary) return { primary: null, others: [], patch, added };
+  const changed = [];
+  if (!primary) return { primary: null, others: [], patch, added, changed };
   for (const [field, normalize] of UNION_FIELDS) {
     const out = { ...primary[field] ?? {} };
     const seen = new Set(Object.values(out).map(normalize).filter(Boolean));
-    let changed = false;
+    let changed2 = false;
     for (const other of others) {
       for (const [key, entry] of Object.entries(other[field] ?? {})) {
         const norm = normalize(entry);
@@ -303,12 +304,12 @@ function planMerge(group, keepId) {
         let newKey = String(key);
         for (let n = 2; newKey in out; n += 1) newKey = `${key}-${n}`;
         out[newKey] = entry;
-        changed = true;
+        changed2 = true;
         added.push({ field, value: entry, fromId: other.id });
         if (norm) seen.add(norm);
       }
     }
-    if (changed) patch[field] = out;
+    if (changed2) patch[field] = out;
   }
   const keywords = { ...primary.keywords ?? {} };
   let keywordsChanged = false;
@@ -330,15 +331,26 @@ function planMerge(group, keepId) {
       added.push({ field, value: donor[field], fromId: donor.id });
     }
   }
-  return { primary, others, patch, added };
+  for (const field of FILL_FIELDS) {
+    const donorId = choices?.[field];
+    if (!donorId || donorId === primary.id) continue;
+    const donor = others.find((m) => m.id === donorId && populated(m[field]));
+    if (!donor) continue;
+    patch[field] = donor[field];
+    changed.push({ field, value: donor[field], fromId: donor.id });
+    for (let i = added.length - 1; i >= 0; i -= 1) {
+      if (added[i].field === field) added.splice(i, 1);
+    }
+  }
+  return { primary, others, patch, added, changed };
 }
-async function mergeGroups(api2, groups, keepBySignature = {}) {
+async function mergeGroups(api2, groups, keepBySignature = {}, choiceBySignature = {}) {
   let merged = 0;
   let removed = 0;
   const failed = [];
   for (const group of groups) {
     if (!group || !Array.isArray(group.members) || group.members.length < 2) continue;
-    const plan = planMerge(group, keepBySignature[group.signature]);
+    const plan = planMerge(group, keepBySignature[group.signature], choiceBySignature[group.signature]);
     if (!plan.primary || !plan.others.length) continue;
     if (Object.keys(plan.patch).length) {
       try {
@@ -715,6 +727,32 @@ function valuesOf(card, field) {
   if (field === "keywords") return Object.keys(card.keywords ?? {});
   return Object.values(card[field] ?? {}).map(DISPLAY[field]).filter(Boolean);
 }
+function fieldConflicts(primary, others, field, kept) {
+  if (!kept.length || !FILL_FIELDS2.has(field)) return [];
+  const conflicts = [];
+  const seen = new Set(kept.map((value) => normalizeName(value)));
+  for (const other of others) {
+    for (const value of valuesOf(other, field)) {
+      const key = normalizeName(value);
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      conflicts.push({ value, fromId: other.id });
+    }
+  }
+  return conflicts;
+}
+function conflictFields(plan) {
+  const primary = plan?.primary;
+  const others = plan?.others ?? [];
+  const out = [];
+  for (const [field, labelKey] of PREVIEW_FIELDS) {
+    if (!FILL_FIELDS2.has(field)) continue;
+    const kept = valuesOf(primary, field);
+    const options = fieldConflicts(primary, others, field, kept);
+    if (options.length) out.push({ field, labelKey, kept, options });
+  }
+  return out;
+}
 function previewFields(plan) {
   const primary = plan?.primary;
   const others = plan?.others ?? [];
@@ -723,24 +761,23 @@ function previewFields(plan) {
     if (!addedByField.has(entry.field)) addedByField.set(entry.field, []);
     addedByField.get(entry.field).push(entry);
   }
+  const changedByField = /* @__PURE__ */ new Map();
+  for (const entry of plan?.changed ?? []) {
+    if (!changedByField.has(entry.field)) changedByField.set(entry.field, []);
+    changedByField.get(entry.field).push(entry);
+  }
   const out = [];
   for (const [field, labelKey] of PREVIEW_FIELDS) {
     const kept = valuesOf(primary, field);
-    const added = (addedByField.get(field) ?? []).map((entry) => ({ value: DISPLAY[field](entry.value), fromId: entry.fromId })).filter((entry) => entry.value);
-    const conflicts = [];
-    if (kept.length > 0 && FILL_FIELDS2.has(field)) {
-      const seen = new Set(kept.map((value) => normalizeName(value)));
-      for (const other of others) {
-        for (const value of valuesOf(other, field)) {
-          const key = normalizeName(value);
-          if (key && seen.has(key)) continue;
-          if (key) seen.add(key);
-          conflicts.push({ value, fromId: other.id });
-        }
-      }
+    const changed = (changedByField.get(field) ?? []).flatMap((entry) => valuesOf({ [field]: entry.value }, field).map((value) => ({ value, fromId: entry.fromId }))).filter((entry) => entry.value);
+    if (changed.length) {
+      out.push({ field, labelKey, kept: [], previous: kept, added: [], conflicts: [], changed });
+      continue;
     }
+    const added = (addedByField.get(field) ?? []).map((entry) => ({ value: DISPLAY[field](entry.value), fromId: entry.fromId })).filter((entry) => entry.value);
+    const conflicts = fieldConflicts(primary, others, field, kept);
     if (!kept.length && !added.length && !conflicts.length) continue;
-    out.push({ field, labelKey, kept, added, conflicts });
+    out.push({ field, labelKey, kept, added, conflicts, changed: [] });
   }
   return out;
 }
@@ -749,9 +786,10 @@ function previewCounts(fields) {
     (counts, field) => ({
       kept: counts.kept + field.kept.length,
       added: counts.added + field.added.length,
+      changed: counts.changed + field.changed.length,
       conflicts: counts.conflicts + field.conflicts.length
     }),
-    { kept: 0, added: 0, conflicts: 0 }
+    { kept: 0, added: 0, changed: 0, conflicts: 0 }
   );
 }
 function memberDetails(card, booksById) {
@@ -782,6 +820,7 @@ function makeReviewDialog(React2, api2) {
     const groups = (Array.isArray(props.groups) ? props.groups : []).filter((group) => Array.isArray(group.members) && group.members.length > 1);
     const [included, setIncluded] = useState(() => new Set(groups.map((g) => g.signature)));
     const [keepBy, setKeepBy] = useState(() => Object.fromEntries(groups.map((g) => [g.signature, planMerge(g).primary?.id ?? ""])));
+    const [choicesBy, setChoicesBy] = useState({});
     const [busy, setBusy] = useState(false);
     const close = (value) => props.onResult?.(value);
     const chosen = groups.filter((group) => included.has(group.signature));
@@ -803,7 +842,7 @@ function makeReviewDialog(React2, api2) {
       if (!ok) return;
       setBusy(true);
       try {
-        const result = await mergeGroups(api2, chosen, keepBy);
+        const result = await mergeGroups(api2, chosen, keepBy, choicesBy);
         close({ merged: result.merged, removed: result.removed, failed: result.failed.length });
       } catch (err) {
         api2.toast.error(t("scan.failed", { reason: String(err?.message ?? err) }));
@@ -863,13 +902,14 @@ function makeReviewDialog(React2, api2) {
         { gap: 1 },
         h(import_ui2.Text, { key: "note", tone: "muted", style: { fontSize: "12px" } }, t("dialog.previewNote")),
         legendLine("success", "+", t("dialog.legendNew")),
+        legendLine("warning", "~", t("dialog.legendChanged")),
         legendLine("warning", "≠", t("dialog.legendConflict")),
         legendLine("neutral", "✓", t("dialog.legendKept"))
       )
     );
     const renderFieldPreview = (fieldPreview, donorById) => {
-      const { field, labelKey, kept, added, conflicts } = fieldPreview;
-      const sources = [...new Set([...added, ...conflicts].map((entry) => donorById[entry.fromId] || entry.fromId))];
+      const { field, labelKey, kept, added, changed, conflicts, previous = [] } = fieldPreview;
+      const sources = [...new Set([...added, ...changed, ...conflicts].map((entry) => donorById[entry.fromId] || entry.fromId))];
       return h(
         import_ui2.Stack,
         { key: field, gap: 1 },
@@ -878,10 +918,47 @@ function makeReviewDialog(React2, api2) {
           { gap: 2, wrap: true },
           h(import_ui2.Text, { style: { fontWeight: "600", minWidth: "120px", whiteSpace: "nowrap" } }, t(labelKey)),
           ...kept.map((value, i) => h(import_ui2.Badge, { key: `k${i}`, tone: "neutral" }, value)),
+          ...changed.map((entry, i) => h(import_ui2.Badge, { key: `h${i}`, tone: "warning" }, `~ ${entry.value}`)),
           ...added.map((entry, i) => h(import_ui2.Badge, { key: `a${i}`, tone: "success" }, `+ ${entry.value}`)),
           ...conflicts.map((entry, i) => h(import_ui2.Badge, { key: `c${i}`, tone: "warning" }, `≠ ${entry.value}`))
         ),
+        previous.length > 0 ? h(
+          import_ui2.Text,
+          { tone: "muted", style: { fontSize: "11px" } },
+          t("dialog.wasValue", { value: previous.join(", ") })
+        ) : null,
         sources.length > 0 ? h(import_ui2.Text, { tone: "muted", style: { fontSize: "11px" } }, t("dialog.addedFrom", { name: sources.join(", ") })) : null
+      );
+    };
+    const renderResolver = (conflicts, donorById, signature) => {
+      if (!conflicts.length) return null;
+      return h(
+        import_ui2.Section,
+        { title: t("dialog.resolveTitle") },
+        h(import_ui2.Text, { tone: "muted", style: { fontSize: "12px" } }, t("dialog.resolveHint")),
+        ...conflicts.map(({ field, labelKey, kept, options }) => h(
+          import_ui2.Field,
+          { key: field, label: t(labelKey) },
+          h(import_ui2.Select, {
+            value: choicesBy[signature]?.[field] || "keep",
+            options: [
+              { value: "keep", label: t("dialog.keepValue", { value: kept.join(", ") }) },
+              ...options.map((option) => ({
+                value: option.fromId,
+                label: t("dialog.useValue", {
+                  value: option.value,
+                  name: donorById[option.fromId] || option.fromId
+                })
+              }))
+            ],
+            onChange: (value) => setChoicesBy((previous) => {
+              const groupChoices = { ...previous[signature] ?? {} };
+              if (value === "keep") delete groupChoices[field];
+              else groupChoices[field] = value;
+              return { ...previous, [signature]: groupChoices };
+            })
+          })
+        ))
       );
     };
     return h(
@@ -892,11 +969,14 @@ function makeReviewDialog(React2, api2) {
       ...groups.map((group) => {
         const signature = group.signature;
         const keepId = keepBy[signature] || planMerge(group).primary?.id || "";
-        const plan = planMerge(group, keepId);
+        const choices = choicesBy[signature] ?? {};
+        const basePlan = planMerge(group, keepId);
+        const plan = planMerge(group, keepId, choices);
         const nameById = Object.fromEntries(group.members.map((m) => [m.id, contactName(m) || m.id]));
         const keptName = contactName(plan.primary) || plan.primary?.id || "";
         const detailFields = plan.primary ? previewFields(plan) : [];
         const detailCounts = previewCounts(detailFields);
+        const fieldConflicts2 = basePlan.primary ? conflictFields(basePlan) : [];
         return h(
           import_ui2.Card,
           { key: signature },
@@ -922,7 +1002,10 @@ function makeReviewDialog(React2, api2) {
               h(import_ui2.Select, {
                 value: keepId,
                 options: group.members.map((m) => ({ value: m.id, label: memberLabel(m) })),
-                onChange: (value) => setKeepBy((previous) => ({ ...previous, [signature]: value }))
+                onChange: (value) => {
+                  setKeepBy((previous) => ({ ...previous, [signature]: value }));
+                  setChoicesBy((previous) => ({ ...previous, [signature]: {} }));
+                }
               })
             ),
             // Member roster — full details so duplicates that share a name can be told apart.
@@ -931,6 +1014,9 @@ function makeReviewDialog(React2, api2) {
               { title: t("dialog.membersTitle") },
               ...group.members.map((member) => renderMember(member, keepId))
             ),
+            // Field-by-field conflict resolution: keep the current value or
+            // take one from a duplicate before the preview is built.
+            renderResolver(fieldConflicts2, nameById, signature),
             // Complete details of the contact to keep: what stays, what the
             // merge adds, and which duplicate values will not be merged.
             plan && plan.primary ? h(

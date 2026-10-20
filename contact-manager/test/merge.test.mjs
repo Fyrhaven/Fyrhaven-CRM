@@ -77,6 +77,28 @@ describe('planMerge', () => {
     expect(Object.values(plan.patch.emails).map((e) => e.address)).toContain('r@x.de');
   });
 
+  it('replaces a conflicting single value when the user picks a donor', () => {
+    const primary = makeCard({ id: 'a', name: 'Bob Smith', emails: ['bob@x.de'], organizations: { o: { name: 'Acme' } } });
+    const duplicate = makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'], organizations: { o: { name: 'Globex' } } });
+    const plan = planMerge(groupOf([primary, duplicate]), 'a', { name: 'b', organizations: 'b' });
+
+    expect(plan.patch.name).toEqual({ full: 'Robert Smith' });
+    expect(plan.patch.organizations).toEqual({ o: { name: 'Globex' } });
+    expect(plan.changed).toEqual([
+      { field: 'name', value: { full: 'Robert Smith' }, fromId: 'b' },
+      { field: 'organizations', value: { o: { name: 'Globex' } }, fromId: 'b' },
+    ]);
+  });
+
+  it('ignores unknown or empty field choices and keeps the default', () => {
+    const primary = makeCard({ id: 'a', name: 'Mine', emails: ['a@x.de'] });
+    const duplicate = makeCard({ id: 'b', name: 'Theirs', emails: ['a@x.de'] });
+    const plan = planMerge(groupOf([primary, duplicate]), 'a', { name: 'missing', organizations: 'keep' });
+
+    expect(plan.patch.name).toBeUndefined();
+    expect(plan.changed).toEqual([]);
+  });
+
   it('adds new keywords but keeps the kept contact’s own', () => {
     const primary = { id: 'a', addressBookIds: { b1: true }, emails: { e: { address: 'a@x.de' } }, keywords: { work: true } };
     const duplicate = { id: 'b', addressBookIds: { b1: true }, emails: { e: { address: 'a@x.de' } }, keywords: { family: true } };
@@ -133,6 +155,19 @@ describe('mergeGroups', () => {
     await mergeGroups(api, [group], { [group.signature]: 'b' });
     expect(api.calls('contacts.update')[0].args[0]).toBe('b');
     expect(api.calls('contacts.remove')[0].args[0]).toBe('a');
+  });
+
+  it('writes the field choices selected in the dialog', async () => {
+    const cards = [
+      makeCard({ id: 'a', name: 'Bob Smith', emails: ['bob@x.de'] }),
+      makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'] }),
+    ];
+    const group = groupOf(cards);
+    const api = fakeApi({ handlers: { 'contacts.update': async () => {}, 'contacts.remove': async () => {} } });
+    await mergeGroups(api, [group], { [group.signature]: 'a' }, { [group.signature]: { name: 'b' } });
+
+    expect(api.calls('contacts.update')[0].args[1].name).toEqual({ full: 'Robert Smith' });
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('b');
   });
 });
 

@@ -121,7 +121,32 @@ describe('review dialog', () => {
 
     const different = screen.getByText('≠ Robert Smith');
     expect(different.getAttribute('data-tone')).toBe('warning');
-    expect(screen.getByText('2 kept · 0 new · 1 not merged')).toBeTruthy();
+    expect(screen.getByText('2 kept · 0 new · 0 changed · 1 not merged')).toBeTruthy();
+    expect(screen.getByText('Resolve differences')).toBeTruthy();
+  });
+
+  it('resolves a conflicting field with a value from another contact', async () => {
+    const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
+    const Dialog = makeReviewDialog(React, api);
+    const conflicting = findDuplicateGroups([
+      makeCard({ id: 'n1', name: 'Bob Smith', emails: ['bob@x.de'] }),
+      makeCard({ id: 'n2', name: 'Robert Smith', emails: ['bob@x.de'] }),
+    ], {})[0];
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [conflicting], onResult: () => {} }));
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'n2' } });
+    });
+
+    expect(screen.getByText('~ Robert Smith').getAttribute('data-tone')).toBe('warning');
+    expect(screen.getByText('was Bob Smith')).toBeTruthy();
+    expect(screen.getByText('1 kept · 0 new · 1 changed · 0 not merged')).toBeTruthy();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge' })); });
+    expect(api.calls('contacts.update')[0].args[1].name).toEqual({ full: 'Robert Smith' });
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('n2');
   });
 
   it('disables Merge for an unchecked group; Cancel closes with null', async () => {
