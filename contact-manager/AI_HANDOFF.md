@@ -48,19 +48,20 @@ An *How to read this* legend above the groups explains every indicator.
 - `test/ui-dialog.test.mjs` - green/orange indicators, Keep redraw, legend, merge flow
 - Full suite: 66 tests in 7 files
 
-## Future Feature Suggestions (from user)
+## Roadmap (GitHub)
 
-### Long-term Roadmap
-1. **Inbox & Communication Intelligence** - Contacts interacting with inbox, timeline history, forgotten contacts, auto-enrichment from email signatures
-2. **Organization & Smart Segmentation** - Dynamic folders, company grouping, VIP management
-3. **Data Hygiene & Enrichment** - Health scoring, auto-normalization, avatar fetching, smart import/export
-4. **Privacy, Security & Compliance** - External domain marking, sensitive info redaction, stale contact pruning
-5. **Bulwark UI Integration Hooks** - Hover cards, composer integration, sidebar widgets
-6. **Advanced Data Hygiene & Health Engine** - Contact health scoreboard, one-click normalization rules
-7. **Power-User Workflow & UX Integrations** - Universal hover cards, composer quick-insert, private notes
-8. **Smart Segmentation** - Dynamic/saved smart lists, custom tagging & color coding
-9. **Security, Privacy & Native Sync** - Granular privacy controls, CardDAV/vCard 4.0 compatibility
+The roadmap lives on GitHub, not in this file:
 
+- **Milestones** — https://github.com/zyntrax/bulwark-plugins/milestones
+  track the planned releases (`v1.2.0` … `v2.0.0`).
+- **Feature issues** — https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap
+  are the individual todos, grouped by area and milestone.
+- **Pinned roadmap issue** — the top-level vision with links to every planned
+  feature.
+
+When a feature ships, close its issue in the release commit/PR. New ideas go
+into a new issue with the `roadmap` label and a milestone — never into a local
+todo list.
 ## Versioning Policy
 - Follows semantic versioning: MAJOR.MINOR.PATCH
 - `manifest.json` version is the single source of truth
@@ -117,7 +118,9 @@ contact-manager/
 2. **Build package**: `npm run package` (creates contact-manager.zip)
 3. **Update version**: bump `manifest.json` version and add CHANGELOG entry
 4. **Commit**: source + artifacts into `build/contact-manager/`
-5. **Github**: create release, update roadmap, add Todo if available
+5. **GitHub**: run `npm run release` on `main`. It tags
+   `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
+   the ZIP attached; the roadmap and todos live in GitHub issues/milestones.
 
 ## GitHub Integration
 - Repository: bulwark-plugins (zyntrax/bulwark-plugins)
