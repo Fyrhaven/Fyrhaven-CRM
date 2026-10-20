@@ -384,7 +384,9 @@ text in the source; always use `t('key')`.
 
 ## 8. Installing in Bulwark
 
-Build the ZIP (`npm run package`), then upload `contact-manager.zip`:
+Download `contact-manager.zip` from
+[GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases), then
+upload it:
 
 * **Admin**: Admin dashboard → Plugins (can be enabled for everyone), or
 * **User**: Settings → Plugins, if the administrator allows uploads.
@@ -445,9 +447,8 @@ A change is complete when:
    `manifest.json` and `index.js`.
 5. The `version` in `manifest.json` is bumped and `CHANGELOG.md` has an
    entry for it (see below).
-6. The built artifacts under `build/` in the published repository are
-   regenerated from the same source, so the ZIP users download matches the
-   code in the repository.
+6. The release script rebuilds the ZIP from the tagged source and attaches it
+   to the GitHub release, so the download matches the code in the repository.
 
 ### 9.4 Making a change — the loop
 
@@ -457,13 +458,8 @@ npm test                 # 1. build + run the suite
 npm run package          # 2. rebuild the installable ZIP
 ```
 
-Then copy the artifacts into the published repository and push:
-
-```bash
-cp dist/index.js        ../bulwark-plugins-repo/build/contact-manager/index.js
-cp manifest.json        ../bulwark-plugins-repo/build/contact-manager/manifest.json
-cp contact-manager.zip  ../bulwark-plugins-repo/build/contact-manager/contact-manager.zip
-```
+Then commit the source and push. Releases are cut from `main` with
+`npm run release`; there is no committed `build/` directory.
 
 ### 9.5 Test-writing conventions
 
@@ -539,11 +535,11 @@ Safety
 | Path | Contents |
 |---|---|
 | `contact-manager/` | The full source tree — `src/`, `test/`, `test-utils/`, `scripts/`, `manifest.json`, `package.json`, `vitest.config.mjs`, `README.md`, `CHANGELOG.md` |
-| `build/contact-manager/` | The published artifacts — `manifest.json`, `index.js` (the CommonJS bundle) and `contact-manager.zip` (the installable plugin) |
 
-Both live in **`zyntrax/bulwark-plugins`** on GitHub. The `build/` artifacts
-are always regenerated from the source in the same commit — the ZIP a user
-downloads must match the code in the repository.
+The source lives in **`zyntrax/bulwark-plugins`** on GitHub. Installable ZIPs
+are published as assets on
+[GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases); no
+build artifacts are committed.
 
 ### 11.2 Release checklist
 
@@ -552,15 +548,11 @@ downloads must match the code in the repository.
    `## [x.y.z] — YYYY-MM-DD` heading, split into `### Added`,
    `### Changed`, `### Fixed`, `### Removed` (drop the empty ones).
 3. `npm test` — all tests green.
-4. `npm run package` — rebuild the ZIP.
-5. Copy `manifest.json`, `dist/index.js` and `contact-manager.zip` into
-   `build/contact-manager/`.
-6. Commit the source **and** the artifacts together.
-7. Run `npm run release`. It tests, packages, refreshes
-   `build/contact-manager/`, checks the artifacts are committed, tags
-   `contact-manager-vX.Y.Z` on `main`, pushes the tag and creates the GitHub
-   release with the ZIP attached.
-8. Close the shipped roadmap issues.
+4. Commit the source.
+5. Run `npm run release` from `main`. It tests, packages, tags
+   `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
+   the ZIP attached.
+6. Close the shipped roadmap issues.
 
 ### 11.2.1 Roadmap and todos
 
