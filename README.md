@@ -89,6 +89,15 @@ assistant must follow when changing the code.
 
 The two build directories always match the source in the same commit.
 
+### Roadmap, issues and releases
+
+- **Roadmap** — the [milestones](https://github.com/zyntrax/bulwark-plugins/milestones)
+  map the planned Contact Manager releases; every feature is a GitHub issue
+  labelled `roadmap`, grouped by area and milestone.
+- **Releases** — `cd contact-manager && npm run release` tests, packages,
+  refreshes `build/contact-manager/`, tags `contact-manager-vX.Y.Z` and uploads
+  the ZIP to GitHub Releases (see [`scripts/release.mjs`](contact-manager/scripts/release.mjs)).
+
 ---
 
 ## License

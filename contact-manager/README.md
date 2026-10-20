@@ -542,7 +542,24 @@ downloads must match the code in the repository.
 4. `npm run package` — rebuild the ZIP.
 5. Copy `manifest.json`, `dist/index.js` and `contact-manager.zip` into
    `build/contact-manager/`.
-6. Commit the source **and** the artifacts together, and tag the release.
+6. Commit the source **and** the artifacts together.
+7. Run `npm run release`. It tests, packages, refreshes
+   `build/contact-manager/`, checks the artifacts are committed, tags
+   `contact-manager-vX.Y.Z` on `main`, pushes the tag and creates the GitHub
+   release with the ZIP attached.
+8. Close the shipped roadmap issues.
+
+### 11.2.1 Roadmap and todos
+
+There is **no local todo file**. The roadmap lives in GitHub:
+
+* [Milestones](https://github.com/zyntrax/bulwark-plugins/milestones) — one per
+  planned release.
+* [Issues labelled `roadmap`](https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap)
+  — the individual features and tasks.
+* The pinned roadmap issue — the top-level vision linking every milestone.
+
+New ideas become a new issue with the `roadmap` label and a milestone.
 
 ### 11.3 Changelog policy
 
