@@ -26,9 +26,9 @@ Design rules that hold everywhere in this codebase:
 2. **One decision point.** Every entry point (page, command palette, contact
    list toolbar, contact details) funnels into the same review dialog.
 3. **Show the plan, not just a result.** The dialog shows the complete details
-   of the contact selected to keep, marks every value the merge adds in green
-   with `+`, and marks values that differ on the duplicates in orange with
-   `≠` (they are not merged).
+   of the contact selected to keep: green `+` for values the merge adds,
+   orange `~` for values the user chooses to replace, and orange `≠` for
+   differing values that stay unmerged.
 4. **Pure logic is separable.** Detection, merge planning and display shaping
    are plain functions over plain data, so they are unit-testable without a
    browser, a DOM or the plugin host.
@@ -71,13 +71,13 @@ contact-manager/
 │       ├── manager-page.js # the Contact Manager page (app-page slot)
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
-│       └── preview.js      # display shaping for the dialog (kept/added/conflicts)
+│       └── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
 ├── test/
 │   ├── fixtures.mjs        # card builders
 │   ├── contacts.test.mjs   # readers, name/email/phone extraction
 │   ├── duplicates.test.mjs # normalisation, keys, grouping
-│   ├── merge.test.mjs      # merge planning and the merge run
-│   ├── preview.test.mjs    # complete details, added values, conflicts, counts
+│   ├── merge.test.mjs      # merge planning, conflict choices and the merge run
+│   ├── preview.test.mjs    # complete details, added/changed values, conflicts, counts
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   └── bundle.test.mjs     # the built bundle + locale completeness
@@ -266,11 +266,12 @@ enough. It returns `null` when there is no duplicate.
 3. ties go to the **lowest id** (string compare).
 
 The review dialog lets the user override this per group with a *Keep*
-selector; `planMerge(group, keepId)` honours that override.
+selector; `planMerge(group, keepId, choices)` honours that override.
 
 ### 6.2 Building the patch
 
-`planMerge(group, keepId)` returns `{ primary, others, patch, added }`:
+`planMerge(group, keepId, choices)` returns
+`{ primary, others, patch, added, changed }`:
 
 * `patch` is a **partial JSContact card** for `api.contacts.update`. The host
   treats an omitted key as “keep” and `undefined` as “clear”, so the patch
@@ -286,20 +287,31 @@ selector; `planMerge(group, keepId)` honours that override.
 * Filled once when the kept contact has nothing: `name`, `organizations`,
   `titles`, `personalInfo`, `media` — copied from the first donor that has
   them.
+* `choices` resolves conflicts in those single-value fields:
+  `{ [field]: donorId }` replaces the kept contact's field with that donor's
+  whole field. The replacement is recorded in `changed` as
+  `[{ field, value, fromId }]`, never in `added`.
 * **Never touched:** `uid`, `created`, `updated`, `addressBookIds`,
   encryption keys, and any client-only field.
 * `added` is the list of everything the merge brings in,
   `[{ field, value, fromId }]`, in the order it would appear.
+* `conflictFields(plan)` lists the conflicting single-value fields with their
+  current value and every donor option, so the dialog can render the
+  *Resolve differences* pickers.
 * `previewFields(plan)` turns a plan into the complete details of the contact
   to keep, per field: `kept` (already there, stays), `added` (green `+`,
-  merged in, with its source contact) and `conflicts` (orange `≠`, a value
-  another contact has in a single-value field such as the name; the kept
-  contact's own value stays, so that value is not merged). The review dialog
-  renders this for whichever member the *Keep* selector points at.
+  merged in, with its source contact), `changed` (orange `~`, chosen donor
+  values that replace the kept contact's value, with `previous` for context)
+  and `conflicts` (orange `≠`, a value another contact has in a single-value
+  field such as the name; the kept contact's own value stays, so that value
+  is not merged). The review dialog renders this for whichever member the
+  *Keep* selector points at.
 
 ### 6.3 Running the merge
 
-`mergeGroups(api, groups, keepBySignature)` runs the groups **in order**:
+`mergeGroups(api, groups, keepBySignature, choiceBySignature)` runs the groups
+**in order**. `choiceBySignature` carries the per-field value choices from the
+dialog; both maps are keyed by group signature.
 
 1. `api.contacts.update(plan.primary.id, plan.patch)` — when the patch is not
    empty. If the update throws, the group is skipped and its duplicates are
@@ -336,7 +348,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **66 tests in 7 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **72 tests in 7 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -350,7 +362,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/duplicates.test.mjs` | Normalisation, key building, union-find grouping, strength, reasons, sorting, hidden groups |
 | `test/merge.test.mjs` | `pickPrimary`, `planMerge` (unions, fills, keywords, patch shape), `mergeGroups` (update before remove, failure handling) |
 | `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection |
-| `test/preview.test.mjs` | The complete details of the kept contact, added values with their source, not-merged conflicts, and the summary counts |
+| `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
@@ -425,7 +437,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 66 tests, plus any new test you added.
+1. `npm test` passes — all 72 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
@@ -507,8 +519,9 @@ Detection
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
-  planMerge(group, keepId) -> { primary, others, patch, added }
+  planMerge(group, keepId, choices) -> { primary, others, patch, added, changed }
   patch contains only changed keys; map fields are complete unions
+  choices replace a single-value field and land in changed
   mergeGroups() updates the kept contact BEFORE removing the others
 
 Safety
