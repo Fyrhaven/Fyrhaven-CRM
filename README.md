@@ -10,7 +10,7 @@ built on Stalwart. Each plugin is published here with its **source**, its
 
 | Plugin | Version | What it does | Install |
 |---|---|---|---|
-| [**Contact Manager**](contact-manager/) | 1.0.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details, English and German. | [`contact-manager.zip`](build/contact-manager/contact-manager.zip) |
+| [**Contact Manager**](contact-manager/) | 1.1.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details, English and German. | [`contact-manager.zip`](build/contact-manager/contact-manager.zip) |
 | [**Remove contact duplicates**](build/remove-contact-duplicates/) | 0.0.1 | Minimal prototype: a contact-list action that lists the contacts of the account. Superseded by *Contact Manager*. | [`remove-contact-duplicates.zip`](build/remove-contact-duplicates/remove-contact-duplicates.zip) |
 
 ---

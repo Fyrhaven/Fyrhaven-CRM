@@ -708,21 +708,51 @@ var PREVIEW_FIELDS = [
   ["personalInfo", "dialog.field.personal"],
   ["media", "dialog.field.media"]
 ];
-function keptValues(primary, field) {
-  if (!primary) return [];
-  if (field === "name") return primary.name ? [DISPLAY.name(primary.name)].filter(Boolean) : [];
-  if (field === "keywords") return Object.keys(primary.keywords ?? {});
-  return Object.values(primary[field] ?? {}).map(DISPLAY[field]).filter(Boolean);
+var FILL_FIELDS2 = /* @__PURE__ */ new Set(["name", "organizations", "titles", "personalInfo", "media"]);
+function valuesOf(card, field) {
+  if (!card) return [];
+  if (field === "name") return card.name ? [DISPLAY.name(card.name)].filter(Boolean) : [];
+  if (field === "keywords") return Object.keys(card.keywords ?? {});
+  return Object.values(card[field] ?? {}).map(DISPLAY[field]).filter(Boolean);
 }
 function previewFields(plan) {
+  const primary = plan?.primary;
+  const others = plan?.others ?? [];
+  const addedByField = /* @__PURE__ */ new Map();
+  for (const entry of plan?.added ?? []) {
+    if (!addedByField.has(entry.field)) addedByField.set(entry.field, []);
+    addedByField.get(entry.field).push(entry);
+  }
   const out = [];
   for (const [field, labelKey] of PREVIEW_FIELDS) {
-    const kept = keptValues(plan?.primary, field);
-    const added = (plan?.added ?? []).filter((entry) => entry.field === field).map((entry) => ({ value: DISPLAY[field](entry.value), fromId: entry.fromId })).filter((entry) => entry.value);
-    if (!kept.length && !added.length) continue;
-    out.push({ field, labelKey, kept, added });
+    const kept = valuesOf(primary, field);
+    const added = (addedByField.get(field) ?? []).map((entry) => ({ value: DISPLAY[field](entry.value), fromId: entry.fromId })).filter((entry) => entry.value);
+    const conflicts = [];
+    if (kept.length > 0 && FILL_FIELDS2.has(field)) {
+      const seen = new Set(kept.map((value) => normalizeName(value)));
+      for (const other of others) {
+        for (const value of valuesOf(other, field)) {
+          const key = normalizeName(value);
+          if (key && seen.has(key)) continue;
+          if (key) seen.add(key);
+          conflicts.push({ value, fromId: other.id });
+        }
+      }
+    }
+    if (!kept.length && !added.length && !conflicts.length) continue;
+    out.push({ field, labelKey, kept, added, conflicts });
   }
   return out;
+}
+function previewCounts(fields) {
+  return (Array.isArray(fields) ? fields : []).reduce(
+    (counts, field) => ({
+      kept: counts.kept + field.kept.length,
+      added: counts.added + field.added.length,
+      conflicts: counts.conflicts + field.conflicts.length
+    }),
+    { kept: 0, added: 0, conflicts: 0 }
+  );
 }
 function memberDetails(card, booksById) {
   const orgs = Object.values(card?.organizations ?? {}).map((o) => text3(o?.name)).filter(Boolean);
@@ -797,13 +827,14 @@ function makeReviewDialog(React2, api2) {
       return h(
         import_ui2.Row,
         { key: member.id, gap: 2, wrap: true },
+        h(import_ui2.Text, {
+          tone: isKeep ? void 0 : "muted",
+          style: { fontWeight: isKeep ? "bold" : "normal", whiteSpace: "nowrap" }
+        }, contactName(member) || member.id),
         h(
-          import_ui2.Text,
-          {
-            tone: isKeep ? void 0 : "muted",
-            style: { fontWeight: isKeep ? "bold" : "normal", whiteSpace: "nowrap" }
-          },
-          `${isKeep ? "✓ " : ""}${contactName(member) || member.id}`
+          import_ui2.Badge,
+          { tone: isKeep ? "success" : "danger" },
+          t(isKeep ? "dialog.keepBadge" : "dialog.deleteBadge")
         ),
         details.emails.length > 0 ? h(
           import_ui2.Stack,
@@ -818,45 +849,54 @@ function makeReviewDialog(React2, api2) {
         details.meta ? h(import_ui2.Text, { tone: "muted", style: { fontSize: "11px" } }, details.meta) : null
       );
     };
+    const legendLine = (tone, symbol, text4) => h(
+      import_ui2.Row,
+      { key: text4, gap: 2, wrap: true },
+      h(import_ui2.Badge, { tone }, symbol),
+      h(import_ui2.Text, { tone: "muted", style: { fontSize: "12px" } }, text4)
+    );
+    const renderLegend = () => h(
+      import_ui2.InfoBar,
+      { tone: "info", title: t("dialog.legendTitle") },
+      h(
+        import_ui2.Stack,
+        { gap: 1 },
+        h(import_ui2.Text, { key: "note", tone: "muted", style: { fontSize: "12px" } }, t("dialog.previewNote")),
+        legendLine("success", "+", t("dialog.legendNew")),
+        legendLine("warning", "≠", t("dialog.legendConflict")),
+        legendLine("neutral", "✓", t("dialog.legendKept"))
+      )
+    );
     const renderFieldPreview = (fieldPreview, donorById) => {
-      const { field, labelKey, kept, added } = fieldPreview;
-      const label = t(labelKey);
+      const { field, labelKey, kept, added, conflicts } = fieldPreview;
+      const sources = [...new Set([...added, ...conflicts].map((entry) => donorById[entry.fromId] || entry.fromId))];
       return h(
-        import_ui2.Row,
-        { key: field, gap: 2, wrap: true },
-        h(import_ui2.Text, { style: { fontWeight: "600", minWidth: "120px", whiteSpace: "nowrap" } }, label),
-        h(import_ui2.Text, { tone: "muted", style: { fontSize: "11px" } }, `kept:`),
-        kept.length > 0 ? h(
-          import_ui2.Stack,
-          { gap: 0 },
-          ...kept.map((value, i) => h(import_ui2.Chip, { key: `k${i}`, label: value }))
-        ) : h(import_ui2.Text, { tone: "muted", style: { fontSize: "11px" } }, "—"),
-        added.length > 0 ? h(
-          import_ui2.Stack,
-          { gap: 0 },
-          ...added.map((entry, i) => h(import_ui2.Chip, {
-            key: `a${i}`,
-            label: `+ ${entry.value}`,
-            tone: "success"
-          }))
-        ) : null,
-        added.length > 0 ? h(
-          import_ui2.Text,
-          { tone: "muted", style: { fontSize: "10px" } },
-          `from ${added.map((e) => donorById[e.fromId] || e.fromId).join(", ")}`
-        ) : null
+        import_ui2.Stack,
+        { key: field, gap: 1 },
+        h(
+          import_ui2.Row,
+          { gap: 2, wrap: true },
+          h(import_ui2.Text, { style: { fontWeight: "600", minWidth: "120px", whiteSpace: "nowrap" } }, t(labelKey)),
+          ...kept.map((value, i) => h(import_ui2.Badge, { key: `k${i}`, tone: "neutral" }, value)),
+          ...added.map((entry, i) => h(import_ui2.Badge, { key: `a${i}`, tone: "success" }, `+ ${entry.value}`)),
+          ...conflicts.map((entry, i) => h(import_ui2.Badge, { key: `c${i}`, tone: "warning" }, `≠ ${entry.value}`))
+        ),
+        sources.length > 0 ? h(import_ui2.Text, { tone: "muted", style: { fontSize: "11px" } }, t("dialog.addedFrom", { name: sources.join(", ") })) : null
       );
     };
     return h(
       import_ui2.Stack,
       { gap: 4 },
       h(import_ui2.Text, { tone: "muted" }, t("dialog.intro")),
+      renderLegend(),
       ...groups.map((group) => {
         const signature = group.signature;
         const keepId = keepBy[signature] || planMerge(group).primary?.id || "";
         const plan = planMerge(group, keepId);
         const nameById = Object.fromEntries(group.members.map((m) => [m.id, contactName(m) || m.id]));
         const keptName = contactName(plan.primary) || plan.primary?.id || "";
+        const detailFields = plan.primary ? previewFields(plan) : [];
+        const detailCounts = previewCounts(detailFields);
         return h(
           import_ui2.Card,
           { key: signature },
@@ -891,12 +931,13 @@ function makeReviewDialog(React2, api2) {
               { title: t("dialog.membersTitle") },
               ...group.members.map((member) => renderMember(member, keepId))
             ),
-            // Comprehensive merge preview: every field that exists or will be added.
-            plan && plan.added.length > 0 ? h(
+            // Complete details of the contact to keep: what stays, what the
+            // merge adds, and which duplicate values will not be merged.
+            plan && plan.primary ? h(
               import_ui2.Section,
               { title: t("dialog.previewTitle", { name: keptName }) },
-              ...previewFields(plan).map((fieldPreview) => renderFieldPreview(fieldPreview, nameById)),
-              h(import_ui2.InfoBar, { tone: "info", title: t("dialog.previewNote") })
+              detailFields.length ? h(import_ui2.Text, { tone: "muted", style: { fontSize: "12px" } }, t("dialog.previewSummary", detailCounts)) : h(import_ui2.Text, { tone: "muted" }, t("dialog.noChanges")),
+              ...detailFields.map((fieldPreview) => renderFieldPreview(fieldPreview, nameById))
             ) : null
           )
         );
