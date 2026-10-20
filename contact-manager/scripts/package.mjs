@@ -7,9 +7,13 @@ import JSZip from 'jszip';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 
+// Fixed timestamp so the ZIP is byte-for-byte reproducible: the release script
+// compares the freshly built artifact with the committed one.
+const BUILD_DATE = new Date('1980-01-01T00:00:00Z');
+
 const zip = new JSZip();
-zip.file('manifest.json', await readFile(path.join(ROOT, 'manifest.json')));
-zip.file('index.js', await readFile(path.join(ROOT, 'dist', 'index.js')));
+zip.file('manifest.json', await readFile(path.join(ROOT, 'manifest.json')), { date: BUILD_DATE });
+zip.file('index.js', await readFile(path.join(ROOT, 'dist', 'index.js')), { date: BUILD_DATE });
 
 const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 const out = path.join(ROOT, 'contact-manager.zip');
