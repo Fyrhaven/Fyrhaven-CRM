@@ -7,10 +7,9 @@
 ## Current State
 - **Version**: 1.4.0 (`manifest.json` is the single source of truth; `package.json` matches)
 - **Last changes**: Save-time duplicate warning (v1.4.0), on top of merge undo (v1.3.0)
-- **Released**: `contact-manager-v1.2.0` is the newest GitHub release, but
-  `main` already carries v1.4.0 (PRs #45 and #48 are merged). The v1.3.0 and
-  v1.4.0 releases are still to be cut: run `npm run release` on `main` to tag
-  `contact-manager-v1.3.0` and `contact-manager-v1.4.0` and upload the ZIPs.
+- **Released**: `contact-manager-v1.4.0` is the newest GitHub release (v1.3.0 and
+  v1.2.0 before it). `main` and `contact-manager` are in step at v1.4.0
+  (PRs #45 and #48 merged).
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -120,6 +119,80 @@ The roadmap lives on GitHub, not in this file:
 When a feature ships, close its issue in the release commit/PR. New ideas go
 into a new issue with the `roadmap` label and a milestone — never into a local
 todo list.
+
+## Open Findings (2026-10-21)
+
+Two directions were explored and are **not yet implemented**. Both now have
+a GitHub issue (the roadmap issue #40 links them):
+
+1. **Nicknames / alias names** — issue **#49** (milestone v1.2.0).
+2. **Turning the plugin into a real contact manager** — issue **#51**
+   (milestone v1.3.0).
+
+### 1. Nicknames / alias names are supported by the host, but the merge drops them
+
+Researched against the Stalwart source (the server behind Bulwark):
+
+- Stalwart stores contacts as vCards and converts them to JSContact with the
+  `calcard` crate. Its `JSContactProperty` enum includes **`Nicknames`**,
+  `Name`, `SpeakToAs`, `Pronouns`, `PersonalInfo`, `Anniversaries`,
+  `Keywords`, `OnlineServices`, `Links`, `Media`, `Organizations`, `Titles`,
+  `Notes` and `Addresses` — so the whole JSContact field set the plugin already
+  renders is writable, not just readable.
+- `nickname` is a **first-class indexed field** in Stalwart's contact search
+  (`ContactSearchField::Nickname` in `crates/groupware/src/contact/index.rs`),
+  and the JMAP filter parser accepts `nickname` as a filter condition. So
+  nicknames are searchable, not decorative.
+
+The gap in this plugin is in `planMerge` (`src/lib/duplicates.js`):
+
+- `nicknames` is one of the `UNION_FIELDS`, so a nickname on a **dropped**
+  contact is already carried over to the kept contact. That part works.
+- But a *name* is a `FILL_FIELD`: it is only taken from a donor when the kept
+  contact has **no** name at all. When two contacts have genuinely different
+  names, the donor's name is **silently discarded** — there is no
+  `nameConflict` / `alternates` concept in the current code (both probe
+  properties are `undefined`).
+- So the user's scenario — "Bob" added first, later "Robert Smith" added for
+  the same person — merges on the shared email, and the losing name vanishes
+  with no offer to keep it.
+
+The feature: when the names differ, let the user keep the discarded name as a
+**nickname** (or as a second name) instead of dropping it, e.g. keep
+"Robert Smith" as the name and record "Bob" as a nickname. Implementation
+notes: `nicknames` is a map union, so the dialog would add the entry to the
+existing `nicknames` map with a collision-free key; the merge already reports
+`added`/`changed` entries per field, so a nickname suggestion fits that
+shape. Needs a new `nameConflict` on the plan plus a picker in the review
+dialog, and a `dialog.field.nickname`-style string key in `en` and `de`.
+
+### 2. The plugin is still mostly a duplicate finder, not a contact manager
+
+Agreed and visible in the roadmap: the shipped feature set is scan → review →
+merge → remove. Everything that makes it a *manager* (editing, searching,
+organising, profiles) is still in milestone **v1.3.0 "Contact workspace and
+daily UX"** and unstarted:
+
+- #9 full contact editor inside the plugin
+- #10 360-degree contact profile with interaction timeline
+- #11 custom fields and per-address-book field schemas
+- #12 contact groups and distribution-list management
+- #13 smart search and saved searches
+- #14 bulk actions
+- #15 avatar management and universal hover cards
+
+Two structural reasons the plugin cannot do much more today:
+
+- The host exposes **no contact form surface** — that is why the save-time
+  warning (v1.4.0) had to hook the observer hooks instead of validating in a
+  form. A real editor (#9) may need host support, or must be built entirely
+  inside the plugin.
+- The plugin only ever **reads** contacts via `api.contacts.list/search` and
+  writes via `update`/`remove`. There is no create-a-contact path in the UI.
+
+Suggested order for the next work: #9 (editor) → #13 (search) → #10 (profile),
+because the editor is the prerequisite for every other "manager" feature.
+
 ## Versioning Policy
 - Follows semantic versioning: MAJOR.MINOR.PATCH
 - `manifest.json` version is the single source of truth
@@ -185,6 +258,45 @@ contact-manager/
 5. **GitHub**: run `npm run release` on `main`. It tags
    `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
    the ZIP attached; the roadmap and todos live in GitHub issues/milestones.
+
+### Where to pick up next
+
+**Everything is merged, released and green.** `main` and `contact-manager` are
+both at v1.4.0, the working tree is clean, and the 100-test suite passes.
+
+The two open directions are written up in **Open Findings** above, and both
+have a GitHub issue:
+
+1. **Nickname/alias preservation on merge** — issue **#49**
+   (https://github.com/zyntrax/bulwark-plugins/issues/49, milestone v1.2.0).
+   The host fully supports nicknames (they are even indexed and searchable in
+   Stalwart), but the merge currently throws away a differing name instead of
+   offering it as a nickname. This is a self-contained change to `planMerge` +
+   the review dialog and is the best next single feature. The issue body has
+   the full implementation detail and acceptance criteria.
+2. **Turning the plugin into a real contact manager** — issue **#51**
+   (https://github.com/zyntrax/bulwark-plugins/issues/51, milestone v1.3.0).
+   The v1.3.0 milestone (issues #9–#15) is untouched; #51 is the umbrella that
+   also records the two structural blockers: the host exposes no contact form
+   surface, and the plugin has no create-a-contact path at all. Start with
+   #9 (the editor).
+
+**Suggested order: #49 first** — it is self-contained and unblocks nothing
+else, so it is a clean, low-risk win. Then #51 / #9.
+
+Before starting either, re-check the roadmap issue #40 and the open issues for
+the current state (the roadmap lives on GitHub, not in this file).
+
+Notes for the next session:
+- The `gh` CLI is **not installed** on this machine, so `npm run release`
+  (which shells out to `gh`) will fail. Releases were cut via the GitHub API
+  with the same tag naming and asset layout. Installing `gh` would restore
+  the documented workflow.
+- The repository is **private**; unauthenticated GitHub API/web calls return
+  404. A token is available via the git credential store
+  (`git credential fill` for `https://github.com/zyntrax/bulwark-plugins.git`).
+- The repo is `zyntrax/bulwark-plugins` — there is no `bulwark-addons`
+  repository.
 
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in
