@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan and duplicate hints in contact details.",
   "type": "ui-extension",
@@ -45,6 +45,14 @@
       "label": "settings.matchByName.label",
       "description": "settings.matchByName.description",
       "default": true
+    },
+    "undoMinutes": {
+      "type": "number",
+      "label": "settings.undoMinutes.label",
+      "description": "settings.undoMinutes.description",
+      "default": 15,
+      "min": 0,
+      "max": 1440
     }
   },
   "locales": {
@@ -60,6 +68,7 @@
       "action.restore": "Restore",
       "action.hide": "Hide",
       "action.scanCommand": "Find duplicate contacts",
+      "action.undoCommand": "Undo the last merge",
       "action.selectionCommand": "Find duplicates in selection",
       "scan.running": "Scanning your contacts…",
       "scan.idle": "Run a scan to look for duplicate contacts.",
@@ -122,8 +131,10 @@
       "dialog.useValue": "Use {value} (from {name})",
       "dialog.wasValue": "was {value}",
       "dialog.confirmTitle": "Merge {count} groups?",
-      "dialog.confirmBody": "Keeping {keep}, deleting {remove}. This cannot be undone.",
+      "dialog.confirmBody": "Keeping {keep}, deleting {remove}.",
+      "dialog.confirmUndoable": "You can undo this for {minutes} minutes on the Contact Manager page.",
       "toast.merged": "Merged {groups} groups, removed {removed} contacts.",
+      "toast.undoHint": "You can undo this for the next {minutes} minutes on the Contact Manager page.",
       "toast.partial": "Merged {groups} groups — {failed} contacts could not be removed.",
       "toast.clean": "No duplicates found.",
       "toast.selectFirst": "Select at least one group.",
@@ -145,7 +156,20 @@
       "settings.matchByPhone.label": "Match by phone number",
       "settings.matchByPhone.description": "Contacts that share a phone number are certain duplicates.",
       "settings.matchByName.label": "Match by name",
-      "settings.matchByName.description": "Contacts with the same name are possible duplicates. Review them before merging."
+      "settings.matchByName.description": "Contacts with the same name are possible duplicates. Review them before merging.",
+      "settings.undoMinutes.label": "Undo window",
+      "settings.undoMinutes.description": "How many minutes a merge can be undone. The removed contacts and their data are kept in local plugin storage for that long. 0 turns undo off.",
+      "undo.action": "Undo merge",
+      "undo.forget": "Forget",
+      "undo.bannerTitle": "The last merge removed {count} contacts.",
+      "undo.bannerHint": "Undo is available until {when} (window: {minutes} minutes).",
+      "undo.confirmTitle": "Undo the last merge?",
+      "undo.confirmBody": "Restores {count} removed contacts and returns the kept contact to its earlier values.",
+      "undo.done": "Restored {restored} contacts and reverted {reverted} kept contacts.",
+      "undo.partial": "Restored {restored} contacts and reverted {reverted}; {failed} steps failed. The rest stays undoable.",
+      "undo.failed": "Undo failed: {reason}",
+      "undo.none": "Nothing to undo.",
+      "undo.forgotten": "Undo records deleted."
     },
     "de": {
       "page.title": "Kontakt-Manager",
@@ -159,6 +183,7 @@
       "action.restore": "Wiederherstellen",
       "action.hide": "Ausblenden",
       "action.scanCommand": "Doppelte Kontakte finden",
+      "action.undoCommand": "Letztes Zusammenführen rückgängig",
       "action.selectionCommand": "Duplikate in Auswahl finden",
       "scan.running": "Kontakte werden durchsucht…",
       "scan.idle": "Starten Sie eine Suche nach doppelten Kontakten.",
@@ -221,8 +246,10 @@
       "dialog.useValue": "{value} verwenden (von {name})",
       "dialog.wasValue": "vorher {value}",
       "dialog.confirmTitle": "{count} Gruppen zusammenführen?",
-      "dialog.confirmBody": "{keep} behalten, {remove} löschen. Dies kann nicht rückgängig gemacht werden.",
+      "dialog.confirmBody": "{keep} behalten, {remove} löschen.",
+      "dialog.confirmUndoable": "Sie können das {minutes} Minuten lang auf der Kontakt-Manager-Seite rückgängig machen.",
       "toast.merged": "{groups} Gruppen zusammengeführt, {removed} Kontakte entfernt.",
+      "toast.undoHint": "Auf der Kontakt-Manager-Seite können Sie das {minutes} Minuten lang rückgängig machen.",
       "toast.partial": "{groups} Gruppen zusammengeführt – {failed} Kontakte konnten nicht entfernt werden.",
       "toast.clean": "Keine Duplikate gefunden.",
       "toast.selectFirst": "Wählen Sie mindestens eine Gruppe aus.",
@@ -244,7 +271,20 @@
       "settings.matchByPhone.label": "Über Telefonnummer abgleichen",
       "settings.matchByPhone.description": "Kontakte mit gleicher Telefonnummer sind sichere Duplikate.",
       "settings.matchByName.label": "Über Namen abgleichen",
-      "settings.matchByName.description": "Kontakte mit gleichem Namen sind mögliche Duplikate. Prüfen Sie sie vor dem Zusammenführen."
+      "settings.matchByName.description": "Kontakte mit gleichem Namen sind mögliche Duplikate. Prüfen Sie sie vor dem Zusammenführen.",
+      "settings.undoMinutes.label": "Zeitfenster für Rückgängig",
+      "settings.undoMinutes.description": "Wie viele Minuten sich ein Zusammenführen rückgängig machen lässt. Die entfernten Kontakte und ihre Daten bleiben so lange im lokalen Plugin-Speicher. 0 schaltet Rückgängig ab.",
+      "undo.action": "Zusammenführen rückgängig",
+      "undo.forget": "Verwerfen",
+      "undo.bannerTitle": "Das letzte Zusammenführen hat {count} Kontakte entfernt.",
+      "undo.bannerHint": "Rückgängig möglich bis {when} (Zeitfenster: {minutes} Minuten).",
+      "undo.confirmTitle": "Letztes Zusammenführen rückgängig machen?",
+      "undo.confirmBody": "Stellt {count} entfernte Kontakte wieder her und setzt den behaltenen Kontakt auf seine früheren Werte zurück.",
+      "undo.done": "{restored} Kontakte wiederhergestellt und {reverted} behaltene Kontakte zurückgesetzt.",
+      "undo.partial": "{restored} Kontakte wiederhergestellt und {reverted} zurückgesetzt; {failed} Schritte sind fehlgeschlagen. Der Rest bleibt rückgängig machbar.",
+      "undo.failed": "Rückgängig fehlgeschlagen: {reason}",
+      "undo.none": "Nichts rückgängig zu machen.",
+      "undo.forgotten": "Rückgängig-Datensätze gelöscht."
     }
   }
 }
