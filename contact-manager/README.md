@@ -32,8 +32,12 @@ Design rules that hold everywhere in this codebase:
 4. **Pure logic is separable.** Detection, merge planning and display shaping
    are plain functions over plain data, so they are unit-testable without a
    browser, a DOM or the plugin host.
-5. **Never cache contacts.** `api.storage` holds only settings-derived state
-   (hidden group signatures, the last scan summary).
+5. **Deletes are undoable.** Every merge leaves a short-lived, size-bounded
+   undo record (removed cards plus the kept contact's original values), so a
+   merge can be rolled back from the Contact Manager page.
+
+`api.storage` otherwise holds only settings-derived state (hidden group
+signatures, the last scan summary).
 
 ---
 
@@ -44,6 +48,8 @@ Design rules that hold everywhere in this codebase:
 | `app-page` slot | Navigation rail → *Contact Manager* | Statistics, duplicate groups, hide/restore, multi-select, *Review…* |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
+| Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
+| Undo banner | Top of the Contact Manager page | *Undo merge* / *Forget* for the newest merge record |
 | `contact-detail-section` slot | Inside an open contact | A *Duplicate check* block with a *Review duplicates* button |
 | `plugin-dialog` slot | Modal, opened by all of the above | The review/merge dialog — the only place that deletes |
 
@@ -71,7 +77,8 @@ contact-manager/
 │       ├── manager-page.js # the Contact Manager page (app-page slot)
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
-│       └── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
+│       ├── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
+│       └── undo.js        # merge undo records: retention, restore, purge
 ├── test/
 │   ├── fixtures.mjs        # card builders
 │   ├── contacts.test.mjs   # readers, name/email/phone extraction
@@ -80,6 +87,7 @@ contact-manager/
 │   ├── preview.test.mjs    # complete details, added/changed values, conflicts, counts
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
+│   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   └── bundle.test.mjs     # the built bundle + locale completeness
 ├── test-utils/
 │   ├── fake-api.mjs        # a recording fake of the plugin host API
@@ -90,8 +98,9 @@ contact-manager/
 
 > `src/lib/*.js` must stay free of `api` and DOM access wherever possible —
 > that is what keeps the unit tests fast and the code portable. Only
-> `duplicates.js` (merge run, storage), `manager-page.js`, `review-dialog.js`
-> and `detail-section.js` are allowed to touch the host.
+> `duplicates.js` (merge run, storage), `undo.js` (undo storage and restore),
+> `manager-page.js`, `review-dialog.js` and `detail-section.js` are allowed to
+> touch the host.
 
 
 ## 4. Architecture
@@ -325,7 +334,47 @@ It returns `{ merged, removed, failed }`; `failed` is a list of contact ids.
 `toastMergeResult` in `labels.js` turns that into the success toast or, if
 anything failed, the partial-failure warning.
 
-### 6.4 Hidden groups
+`mergeGroups` takes an optional fifth argument, a `journal` array. Each group
+that really removed a card appends `{ plan, removedCards }`, and the review
+dialog turns those into undo entries with `buildEntry`.
+
+### 6.4 Undo (`src/lib/undo.js`)
+
+A merge deletes data, so every run leaves one undo batch in `api.storage`
+under `undoBatches` (`UNDO_KEY`):
+
+```js
+{ at, expiresAt, entries: [{ keptId, before, absent, removed }] }
+```
+
+* `before` — the kept contact's original values for the fields the merge
+  patched, so the revert can restore them.
+* `absent` — patched fields the kept contact did not have; undo clears them
+  again (the host treats `undefined` in a patch as *clear*).
+* `removed` — the deleted cards, as scanned.
+
+Retention is explicit and bounded:
+
+| Rule | Value |
+|---|---|
+| Window | the `undoMinutes` setting (default 15, `0` = undo off, max 1440) |
+| Cards per store | `MAX_CARDS` = 100 removed cards |
+| Bytes per store | `MAX_BYTES` = 400 000 characters of JSON |
+| Eviction | the oldest batch goes first; a single bigger batch is not kept |
+| Purging | `readUndo` drops expired batches, `activate` purges once on load |
+
+`undoLastMerge` restores the newest batch: it re-creates each removed card
+with `api.contacts.create` (minus `id`, `created`, `updated`, which the host
+assigns itself) and only then reverts the kept contact — a card that could
+not be re-created keeps its duplicate's values intact. Failures stay in
+storage so the undo can be retried; the returned
+`{ restored, reverted, failed, total }` drives the toast.
+
+Surfaces: the Contact Manager page shows a banner for the newest record with
+*Undo merge* and *Forget*, and the command palette offers *Undo the last
+merge* while a record exists.
+
+### 6.5 Hidden groups
 
 Hidden groups are stored as signatures in `api.storage` under
 `dismissedGroups` (`DISMISSED_KEY`). A hidden group stays out of the scan
@@ -348,7 +397,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **72 tests in 7 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **90 tests in 8 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -430,8 +479,10 @@ folder.
 * **Do not add a permission silently.** Every new surface needs a permission
   in `manifest.json`, and `bundle.test.mjs` checks that the declared
   permissions cover the slots.
-* **Do not cache contacts in `api.storage`.** Only the hidden-group
-  signatures and the last scan summary belong there.
+* **Do not cache contacts in `api.storage`.** The only exception is the
+  bounded, expiring undo record written by `src/lib/undo.js`; everything else
+  there is settings-derived state (hidden-group signatures, last scan
+  summary).
 * **Keep the pure parts pure.** Detection, planning and preview shaping stay
   free of `api` and DOM access so they remain unit-testable.
 
@@ -439,7 +490,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 72 tests, plus any new test you added.
+1. `npm test` passes — all 90 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.

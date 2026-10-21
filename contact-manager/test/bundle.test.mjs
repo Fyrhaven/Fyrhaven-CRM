@@ -60,6 +60,50 @@ describe('built plugin', () => {
       .toEqual([{ id: 'scan-selection', label: 'Find duplicates in selection', icon: 'copy' }]);
   });
 
+  it('offers the undo action only while a merge can still be undone', async () => {
+    const pending = [{
+      at: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      entries: [{ keptId: 'a', before: {}, absent: [], removed: [{ id: 'b' }] }],
+    }];
+    const api = pluginApi();
+    await api.storage.set('undoBatches', pending);
+    const plugin = load(api);
+    await plugin.activate(api);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.calls('ui.setActions')[0].args[1].map((action) => action.id))
+      .toEqual(['scan', 'undo-merge']);
+
+    // with the undo window turned off the entry disappears and records are dropped
+    const offApi = pluginApi({ undoMinutes: 0 });
+    await offApi.storage.set('undoBatches', pending);
+    const offPlugin = load(offApi);
+    await offPlugin.activate(offApi);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(offApi.calls('ui.setActions')[0].args[1].map((action) => action.id)).toEqual(['scan']);
+  });
+
+  it('the undo action restores the last merge and toasts the outcome', async () => {
+    const api = pluginApi({}, {
+      'contacts.create': async () => {},
+      'contacts.update': async () => {},
+    });
+    await api.storage.set('undoBatches', [{
+      at: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      entries: [{ keptId: 'a', before: {}, absent: [], removed: [{ id: 'b', name: { full: 'B' } }] }],
+    }]);
+    const plugin = load(api);
+    await plugin.hooks.onAction({ surface: 'command-palette', actionId: 'undo-merge', context: {} });
+    expect(api.calls('contacts.create')).toHaveLength(1);
+    expect(api.calls('toast.success').at(-1).args[0])
+      .toBe('Restored 1 contacts and reverted 1 kept contacts.');
+
+    // nothing left afterwards
+    await plugin.hooks.onAction({ surface: 'command-palette', actionId: 'undo-merge', context: {} });
+    expect(api.calls('toast.info').at(-1).args[0]).toBe('Nothing to undo.');
+  });
+
   it('re-publishes on locale change and clears when disabled', async () => {
     const api = pluginApi();
     const plugin = load(api);

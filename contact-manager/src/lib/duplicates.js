@@ -346,8 +346,11 @@ export function planMerge(group, keepId, choices = {}) {
  * `choiceBySignature` maps group signatures to `{ [field]: donorId }`
  * conflict resolutions from the dialog.
  * Returns `{ merged, removed, failed: [id, …] }`.
+ * When passed a `journal` array, each group that really changed gets one
+ * entry describing the patch and the cards that were deleted, so the caller
+ * can offer an undo (see lib/undo.js).
  */
-export async function mergeGroups(api, groups, keepBySignature = {}, choiceBySignature = {}) {
+export async function mergeGroups(api, groups, keepBySignature = {}, choiceBySignature = {}, journal = null) {
   let merged = 0;
   let removed = 0;
   const failed = [];
@@ -364,14 +367,17 @@ export async function mergeGroups(api, groups, keepBySignature = {}, choiceBySig
       }
     }
     merged += 1;
+    const gone = [];
     for (const other of plan.others) {
       try {
         await api.contacts.remove(other.id);
         removed += 1;
+        gone.push(other);
       } catch {
         failed.push(other.id);
       }
     }
+    if (journal && gone.length) journal.push({ plan, removedCards: gone });
   }
   return { merged, removed, failed };
 }

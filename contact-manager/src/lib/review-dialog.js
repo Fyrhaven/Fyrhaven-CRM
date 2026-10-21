@@ -9,8 +9,9 @@
 import { DialogButtons, Field, Select, Checkbox, Badge, Card, Row, Stack, Text, Chip, Section, InfoBar } from '@plugin-host/ui';
 import { contactName } from './contacts.js';
 import { mergeGroups, planMerge } from './duplicates.js';
-import { memberLabel, mergeLabel, reasonLine, strengthKey } from './labels.js';
+import { memberLabel, mergeLabel, reasonLine, strengthKey, undoWindowMinutes } from './labels.js';
 import { previewFields, previewCounts, conflictFields, memberDetails } from './preview.js';
+import { buildEntry, saveUndo } from './undo.js';
 
 export function makeReviewDialog(React, api) {
   const { createElement: h, useState } = React;
@@ -38,17 +39,30 @@ export function makeReviewDialog(React, api) {
 
     const merge = async () => {
       if (!chosen.length || busy) return;
+      const minutes = undoWindowMinutes(api.plugin?.settings);
       const ok = await api.ui.confirm({
         title: mergeLabel(t, chosen.length),
-        message: t('dialog.confirmBody', { keep: chosen.length, remove: removeCount }),
+        message: [
+          t('dialog.confirmBody', { keep: chosen.length, remove: removeCount }),
+          minutes ? t('dialog.confirmUndoable', { minutes }) : '',
+        ].filter(Boolean).join(' '),
         confirmLabel: mergeLabel(t, chosen.length),
         danger: true,
       });
       if (!ok) return;
       setBusy(true);
       try {
-        const result = await mergeGroups(api, chosen, keepBy, choicesBy);
-        close({ merged: result.merged, removed: result.removed, failed: result.failed.length });
+        const journal = [];
+        const result = await mergeGroups(api, chosen, keepBy, choicesBy, journal);
+        // Remember what the merge changed before the dialog closes, so the
+        // page and the command palette can offer an undo for a while.
+        let undoable = 0;
+        try {
+          undoable = await saveUndo(api, journal.map((item) => buildEntry(item.plan, item.removedCards)));
+        } catch {
+          undoable = 0; // undo is a safety net, not a reason to fail the merge
+        }
+        close({ merged: result.merged, removed: result.removed, failed: result.failed.length, undoable });
       } catch (err) {
         api.toast.error(t('scan.failed', { reason: String(err?.message ?? err) }));
         setBusy(false);

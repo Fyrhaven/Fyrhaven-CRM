@@ -17,7 +17,8 @@ const api = require('@plugin-host');
 
 import { loadCards, matchOptions } from './lib/contacts.js';
 import { findDuplicateGroups, readDismissed } from './lib/duplicates.js';
-import { toastMergeResult } from './lib/labels.js';
+import { toastMergeResult, undoWindowMinutes } from './lib/labels.js';
+import { undoLastMerge, readUndo } from './lib/undo.js';
 import { makeManagerPage } from './lib/manager-page.js';
 import { makeReviewDialog } from './lib/review-dialog.js';
 import { makeDuplicateSection } from './lib/detail-section.js';
@@ -55,6 +56,24 @@ async function scanAndReview(pluginApi, scopeIds = null) {
   toastMergeResult(pluginApi, result);
 }
 
+/** Undo the newest merge record; report how much was restored. */
+async function undoMerge(pluginApi) {
+  let result;
+  try {
+    result = await undoLastMerge(pluginApi);
+  } catch (err) {
+    pluginApi.toast.error(pluginApi.i18n.t('undo.failed', { reason: String(err?.message ?? err) }));
+    return;
+  }
+  if (!result.total) {
+    pluginApi.toast.info(pluginApi.i18n.t('undo.none'));
+    return;
+  }
+  const vars = { restored: result.restored, reverted: result.reverted, failed: result.failed };
+  if (result.failed) pluginApi.toast.warning(pluginApi.i18n.t('undo.partial', vars));
+  else pluginApi.toast.success(pluginApi.i18n.t('undo.done', vars));
+}
+
 // ─── Slots ─────────────────────────────────────────────────────
 
 export const slots = {
@@ -90,6 +109,10 @@ export const hooks = {
         return;
       }
       await scanAndReview(api, new Set(ids));
+      return;
+    }
+    if (actionId === 'undo-merge') {
+      await undoMerge(api);
     }
   },
 };
@@ -107,8 +130,11 @@ async function publish(pluginApi) {
   }
   const t = (key) => pluginApi.i18n.t(key);
   await pluginApi.ui.setPages([{ id: 'duplicates', title: t('page.title'), icon: 'users' }]);
+  const undoOn = undoWindowMinutes(pluginApi.plugin.settings) > 0;
+  const pending = undoOn ? await readUndo(pluginApi) : [];
   await pluginApi.ui.setActions('command-palette', [
     { id: 'scan', label: t('action.scanCommand'), icon: 'copy' },
+    ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
   await pluginApi.ui.setActions('contact-list-actions', [
     { id: 'scan-selection', label: t('action.selectionCommand'), icon: 'copy' },
@@ -116,6 +142,12 @@ async function publish(pluginApi) {
 }
 
 export async function activate(pluginApi) {
+  // Drop undo records that outlived their window before anything reads them.
+  try {
+    await readUndo(pluginApi);
+  } catch (err) {
+    pluginApi.log.warn(`undo purge failed: ${err.message}`);
+  }
   try {
     await publish(pluginApi);
   } catch (err) {

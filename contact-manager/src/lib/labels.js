@@ -2,6 +2,7 @@
 // i18n-keyed labels and toasts, no logic of their own.
 
 import { contactName, primaryEmail, primaryPhone } from './contacts.js';
+import { undoWindowMs } from './undo.js';
 
 export const strengthKey = (group) => (group.strength === 'strong' ? 'group.strongBadge' : 'group.possibleBadge');
 
@@ -30,4 +31,12 @@ export function toastMergeResult(api, result) {
   const vars = { groups: result.merged, removed: result.removed, failed: result.failed };
   if (result.failed) api.toast.warning(api.i18n.t('toast.partial', vars));
   else api.toast.success(api.i18n.t('toast.merged', vars));
+  // Toasts have no action buttons, so the undo lives on the page and in the
+  // command palette — the toast just says how long it stays available.
+  if (result.undoable) {
+    api.toast.info(api.i18n.t('toast.undoHint', { minutes: undoWindowMinutes(api.plugin?.settings) }));
+  }
 }
+
+/** The `undoMinutes` setting as a whole number of minutes (0 = undo off). */
+export const undoWindowMinutes = (settings) => Math.round(undoWindowMs(settings) / 60_000);
