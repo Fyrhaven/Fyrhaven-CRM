@@ -7,11 +7,10 @@
 ## Current State
 - **Version**: 1.4.0 (`manifest.json` is the single source of truth; `package.json` matches)
 - **Last changes**: Save-time duplicate warning (v1.4.0), on top of merge undo (v1.3.0)
-- **Released**: `contact-manager-v1.2.0` is the newest GitHub release, and
-  `main` is at v1.2.0. The v1.3.0 (merge undo) and v1.4.0 (save-time duplicate
-  warning) work sits on the branch `feat/contact-manager-duplicate-warning`,
-  which is **2 commits ahead of `main` and not merged yet**. To finish it:
-  open a PR from that branch into `main`, then run `npm run release` on `main`.
+- **Released**: `contact-manager-v1.2.0` is the newest GitHub release, but
+  `main` already carries v1.4.0 (PRs #45 and #48 are merged). The v1.3.0 and
+  v1.4.0 releases are still to be cut: run `npm run release` on `main` to tag
+  `contact-manager-v1.3.0` and `contact-manager-v1.4.0` and upload the ZIPs.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -190,8 +189,10 @@ contact-manager/
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in
   `contact-manager/`; there is no separate `bulwark-addons` repository.
-- **Branches**: `main` is the release branch. `contact-manager` mirrors the
-  plugin work. Feature branches are `feat/contact-manager-<feature>`.
+- **Branches**: `main` is the release branch and carries the current version.
+  `contact-manager` mirrors the plugin work and is kept in step with `main`.
+  Feature branches are `feat/contact-manager-<feature>` and are merged into
+  `main` through a PR.
 - **Roadmap**: https://github.com/zyntrax/bulwark-plugins/issues/40 is the
   single roadmap issue; it links every feature issue. Milestones
   `Contact Manager v1.2.0` … `v2.0.0` group them by release.
