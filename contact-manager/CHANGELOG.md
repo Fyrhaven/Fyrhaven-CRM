@@ -7,6 +7,19 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.4.0] — 2026-10-21
+
+### Added
+
+- **Warning while saving.** After a contact is created or changed, the plugin
+  compares it with the address books and shows a non-blocking warning when it
+  looks like an existing contact, naming the match and the reason (same email,
+  phone or name). Backed by the `onAfterContactCreate` and
+  `onAfterContactUpdate` hooks — saving is never blocked.
+- **`warnOnSave` setting** to turn that warning off.
+- The open contact's *Duplicate check* block is the persistent hint: it offers
+  *Review duplicates*, which opens the shared review dialog.
+
 ## [1.3.0] — 2026-10-21
 
 ### Added
