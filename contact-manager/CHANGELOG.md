@@ -7,6 +7,28 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.3.0] — 2026-10-21
+
+### Added
+
+- **Undo a merge.** Every merge now leaves a short-lived undo record, and the
+  Contact Manager page shows a banner with *Undo merge* and *Forget*. Undo
+  brings back every removed contact and returns the kept contact to its
+  earlier field values.
+- **Undo window setting.** *Settings → Plugins → Contact Manager → Undo window*
+  controls how long a merge can be undone (default 15 minutes, `0` turns undo
+  off).
+- **Command palette entry** *Undo the last merge*, shown while an undo record
+  exists.
+- **Partial undos are retried.** When a contact cannot be re-created the rest
+  is kept undoable and the toast reports how many steps failed.
+
+### Changed
+
+- The merge confirmation no longer says the merge "cannot be undone".
+- Undo records are bounded (100 removed cards / ~400 kB) and expire on their
+  own; expired records are purged when the plugin loads or reads them.
+
 ## [1.2.0] — 2026-10-20
 
 ### Added

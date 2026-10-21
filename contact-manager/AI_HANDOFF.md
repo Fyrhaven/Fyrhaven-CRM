@@ -1,12 +1,16 @@
 # AI Handoff - Contact Manager Plugin
 
 ## Current State
-- **Version**: 1.2.0 (manifest.json)
-- **Last changes**: Field-by-field merge conflict resolution (v1.2.0)
+- **Version**: 1.3.0 (manifest.json)
+- **Last changes**: Undo for merges (v1.3.0)
 - **Files modified**:
-  - `src/lib/preview.js` - `previewFields` returns kept, previous, added, changed and not-merged values; added `conflictFields` and `previewCounts`
-  - `src/lib/review-dialog.js` - complete-details section for the selected Keep contact, legend, per-group summary, Resolve differences picker, green `+` / orange `~` / orange `≠` badges
-  - `manifest.json` - new `dialog.*` strings in `en` and `de`, version bumped
+  - `src/lib/undo.js` - new: undo records (retention window, size limits, purge), `buildEntry`, `saveUndo`, `readUndo`, `undoLastMerge`, `clearUndo`
+  - `src/lib/duplicates.js` - `mergeGroups` fills an optional `journal` (plan plus the cards it really removed)
+  - `src/lib/review-dialog.js` - stores the undo batch after a merge, confirm text mentions the undo window
+  - `src/lib/manager-page.js` - undo banner with Undo merge / Forget
+  - `src/lib/labels.js` - `toast.undoHint`, `undoWindowMinutes`
+  - `src/index.js` - purges expired records on activate, palette entry `undo-merge`, `undoMerge`
+  - `manifest.json` - `undoMinutes` setting, `undo.*` and `action.undoCommand` strings in `en` and `de`, version bumped
 
 ## Implementation Summary
 
@@ -48,8 +52,11 @@ An *How to read this* legend above the groups explains every indicator.
 
 ### Testing
 - `test/preview.test.mjs` - complete details, added/changed values, conflicts, counts (7 tests)
-- `test/ui-dialog.test.mjs` - green/orange indicators, Keep redraw, legend, merge flow
-- Full suite: 72 tests in 7 files
+- `test/ui-dialog.test.mjs` - green/orange indicators, Keep redraw, legend, merge flow, undo record written after a merge
+- `test/undo.test.mjs` - retention window, size limits, eviction, purge, restore, partial restore
+- `test/ui-page.test.mjs` - undo banner, Undo merge, Forget
+- `test/bundle.test.mjs` - palette undo entry, undo action toasts
+- Full suite: 90 tests in 8 files
 
 ## Roadmap (GitHub)
 
@@ -107,6 +114,7 @@ contact-manager/
 │   ├── preview.test.mjs   # complete details, added/changed values, conflicts
 │   ├── ui-page.test.mjs   # the manager page
 │   ├── ui-dialog.test.mjs # the review dialog and detail section
+│   ├── undo.test.mjs      # undo records: retention, restore, partial failures
 │   └── bundle.test.mjs    # the built bundle + locale completeness
 ├── test-utils/
 │   ├── fake-api.mjs       # recording fake of plugin host API

@@ -54,12 +54,33 @@ describe('review dialog', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge' })); });
     expect(api.calls().map((c) => c.method)).toEqual(['ui.confirm', 'contacts.update', 'contacts.remove']);
     expect(api.calls('ui.confirm')[0].args[0]).toMatchObject({ danger: true, confirmLabel: 'Merge' });
+    expect(api.calls('ui.confirm')[0].args[0].message)
+      .toBe('Keeping 1, deleting 1. You can undo this for 15 minutes on the Contact Manager page.');
     expect(api.calls('contacts.update')[0].args[0]).toBe('d1');
     // entries are copied verbatim; only the comparison key is normalised
     expect(Object.values(api.calls('contacts.update')[0].args[1].phones).map((p) => p.number))
       .toEqual(['+4917612345678']);
     expect(api.calls('contacts.remove')[0].args[0]).toBe('d2');
-    await waitFor(() => expect(result).toEqual({ merged: 1, removed: 1, failed: 0 }));
+    await waitFor(() => expect(result).toEqual({ merged: 1, removed: 1, failed: 0, undoable: 1 }));
+    // ...and the merge is undoable: the deleted card and the patch target are on record
+    const [batch] = await api.storage.get('undoBatches');
+    expect(batch.entries).toHaveLength(1);
+    expect(batch.entries[0].keptId).toBe('d1');
+    expect(batch.entries[0].removed.map((card) => card.id)).toEqual(['d2']);
+  });
+
+  it('does not promise an undo when the undo window is off', async () => {
+    const api = fakeApi({
+      translations: manifest.locales,
+      settings: { undoMinutes: 0 },
+      handlers: { 'ui.confirm': async () => false },
+    });
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [group()], onResult: () => {} }));
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge' })); });
+    expect(api.calls('ui.confirm')[0].args[0].message).toBe('Keeping 1, deleting 1.');
   });
 
   it('keeps whoever the selector says', async () => {
