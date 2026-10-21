@@ -19,6 +19,7 @@ import { loadCards, matchOptions } from './lib/contacts.js';
 import { findDuplicateGroups, readDismissed } from './lib/duplicates.js';
 import { toastMergeResult, undoWindowMinutes } from './lib/labels.js';
 import { undoLastMerge, readUndo } from './lib/undo.js';
+import { warnAboutDuplicates } from './lib/watch.js';
 import { makeManagerPage } from './lib/manager-page.js';
 import { makeReviewDialog } from './lib/review-dialog.js';
 import { makeDuplicateSection } from './lib/detail-section.js';
@@ -114,6 +115,15 @@ export const hooks = {
     if (actionId === 'undo-merge') {
       await undoMerge(api);
     }
+  },
+
+  // Never block a save: both are observers. They only say what the new
+  // contact looks like next to the ones already in the address books.
+  async onAfterContactCreate(contact) {
+    await warnAboutDuplicates(api, contact);
+  },
+  async onAfterContactUpdate(contact) {
+    await warnAboutDuplicates(api, contact);
   },
 };
 

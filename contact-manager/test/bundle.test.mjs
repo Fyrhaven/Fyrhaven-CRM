@@ -104,6 +104,22 @@ describe('built plugin', () => {
     expect(api.calls('toast.info').at(-1).args[0]).toBe('Nothing to undo.');
   });
 
+  it('warns about a duplicate after a create and after an edit, without blocking', async () => {
+    const existing = { id: 'a', name: { full: 'Ada Lovelace' }, emails: { e0: { address: 'ada@example.org' } } };
+    const api = pluginApi({}, { 'contacts.search': async () => [existing] });
+    const plugin = load(api);
+    const saved = { id: 'b', name: { full: 'Ada Lovelace' }, emails: { e0: { address: 'ada@example.org' } } };
+
+    const created = await plugin.hooks.onAfterContactCreate(saved);
+    expect(created).toBeUndefined(); // observers cannot stop the save
+    expect(api.calls('toast.warning').at(-1).args[0])
+      .toContain('This looks like an existing contact: Ada Lovelace');
+
+    const updated = await plugin.hooks.onAfterContactUpdate(saved);
+    expect(updated).toBeUndefined();
+    expect(api.calls('toast.warning')).toHaveLength(2);
+  });
+
   it('re-publishes on locale change and clears when disabled', async () => {
     const api = pluginApi();
     const plugin = load(api);
