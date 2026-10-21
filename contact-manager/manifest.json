@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan and duplicate hints in contact details.",
   "type": "ui-extension",
@@ -44,6 +44,12 @@
       "type": "boolean",
       "label": "settings.matchByName.label",
       "description": "settings.matchByName.description",
+      "default": true
+    },
+    "warnOnSave": {
+      "type": "boolean",
+      "label": "settings.warnOnSave.label",
+      "description": "settings.warnOnSave.description",
       "default": true
     },
     "undoMinutes": {
@@ -157,8 +163,11 @@
       "settings.matchByPhone.description": "Contacts that share a phone number are certain duplicates.",
       "settings.matchByName.label": "Match by name",
       "settings.matchByName.description": "Contacts with the same name are possible duplicates. Review them before merging.",
+      "settings.warnOnSave.label": "Warn about duplicates when saving",
+      "settings.warnOnSave.description": "After you create or change a contact, compare it with your address books and warn when it looks like an existing contact. Saving is never blocked.",
       "settings.undoMinutes.label": "Undo window",
       "settings.undoMinutes.description": "How many minutes a merge can be undone. The removed contacts and their data are kept in local plugin storage for that long. 0 turns undo off.",
+      "watch.toast": "This looks like an existing contact: {name} ({reason}). Open the contact or the Contact Manager page to review and merge.",
       "undo.action": "Undo merge",
       "undo.forget": "Forget",
       "undo.bannerTitle": "The last merge removed {count} contacts.",
@@ -272,8 +281,11 @@
       "settings.matchByPhone.description": "Kontakte mit gleicher Telefonnummer sind sichere Duplikate.",
       "settings.matchByName.label": "Über Namen abgleichen",
       "settings.matchByName.description": "Kontakte mit gleichem Namen sind mögliche Duplikate. Prüfen Sie sie vor dem Zusammenführen.",
+      "settings.warnOnSave.label": "Beim Speichern vor Duplikaten warnen",
+      "settings.warnOnSave.description": "Vergleicht einen neu erstellten oder geänderten Kontakt mit Ihren Adressbüchern und warnt, wenn er wie ein vorhandener Kontakt aussieht. Das Speichern wird nie blockiert.",
       "settings.undoMinutes.label": "Zeitfenster für Rückgängig",
       "settings.undoMinutes.description": "Wie viele Minuten sich ein Zusammenführen rückgängig machen lässt. Die entfernten Kontakte und ihre Daten bleiben so lange im lokalen Plugin-Speicher. 0 schaltet Rückgängig ab.",
+      "watch.toast": "Das sieht nach einem vorhandenen Kontakt aus: {name} ({reason}). Öffnen Sie den Kontakt oder die Kontakt-Manager-Seite, um zu prüfen und zusammenzuführen.",
       "undo.action": "Zusammenführen rückgängig",
       "undo.forget": "Verwerfen",
       "undo.bannerTitle": "Das letzte Zusammenführen hat {count} Kontakte entfernt.",

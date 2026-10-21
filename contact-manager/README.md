@@ -51,6 +51,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
 | Undo banner | Top of the Contact Manager page | *Undo merge* / *Forget* for the newest merge record |
 | `contact-detail-section` slot | Inside an open contact | A *Duplicate check* block with a *Review duplicates* button |
+| Create/update hooks | After a contact is saved | A non-blocking warning when the saved contact looks like an existing one |
 | `plugin-dialog` slot | Modal, opened by all of the above | The review/merge dialog — the only place that deletes |
 
 All four entry points open the same review dialog. One place decides what is
@@ -78,7 +79,8 @@ contact-manager/
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
 │       ├── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
-│       └── undo.js        # merge undo records: retention, restore, purge
+│       ├── undo.js        # merge undo records: retention, restore, purge
+│       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
 │   ├── fixtures.mjs        # card builders
 │   ├── contacts.test.mjs   # readers, name/email/phone extraction
@@ -88,6 +90,7 @@ contact-manager/
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
+│   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
 │   └── bundle.test.mjs     # the built bundle + locale completeness
 ├── test-utils/
 │   ├── fake-api.mjs        # a recording fake of the plugin host API
@@ -120,16 +123,19 @@ The webmail loads the plugin as **CommonJS** and provides three externals:
 export const slots  = { 'app-page': {component, shouldShow},
                         'plugin-dialog': {component},
                         'contact-detail-section': {component, shouldShow} };
-export const hooks  = { async onAction({ surface, actionId, context }) {} };
+export const hooks  = { async onAction({ surface, actionId, context }) {},
+                        async onAfterContactCreate(contact) {},
+                        async onAfterContactUpdate(contact) {} };
 export async function activate(pluginApi) {}
 ```
 
 * **Slots** are React components rendered by the host in an iframe. The host
   passes `extraProps` from `api.ui.openDialog` in as props, and `onResult`
   closes the dialog with a value.
-* **Hooks** are plain handlers running the host's background frame. Only
-  `onAction` is used; it reacts to the buttons registered with
-  `api.ui.setActions`.
+* **Hooks** are plain handlers running the host's background frame. `onAction`
+  reacts to the buttons registered with `api.ui.setActions`;
+  `onAfterContactCreate` and `onAfterContactUpdate` watch saved contacts for
+  duplicates (see §6.5). They are observers, so they can never stop a save.
 * **`activate()`** is the one-shot initialiser. It publishes the page entry
   and the action buttons, and re-publishes on locale and settings changes so
   labels and the *enabled* switch stay correct.
@@ -374,7 +380,37 @@ Surfaces: the Contact Manager page shows a banner for the newest record with
 *Undo merge* and *Forget*, and the command palette offers *Undo the last
 merge* while a record exists.
 
-### 6.5 Hidden groups
+### 6.5 Warning about duplicates while saving (`src/lib/watch.js`)
+
+The host offers no contact-form surface, so the plugin hooks the observer
+hooks that fire right after a save:
+
+| Hook | Fires |
+|---|---|
+| `onAfterContactCreate(contact)` | after a contact was created |
+| `onAfterContactUpdate(contact)` | after a contact was changed |
+
+`warnAboutDuplicates(api, contact)` then:
+
+1. runs `findDuplicatesOf`, which reuses the contact-details path
+   (`findGroupFor`: `api.contacts.search` by the contact's email, then name,
+   filtered by the same normalised keys);
+2. drops the saved contact itself from the match (by id, or by content when
+   the host sent no id);
+3. shows one warning toast naming the duplicates and the reason, for example
+   *This looks like an existing contact: Ada Lovelace (Same email address:
+   ada@example.org).*
+
+Nothing here can block the save: these are observers, and the handler never
+returns a value. The persistent, clickable hint is the
+`contact-detail-section` block, which offers *Review duplicates* for the open
+contact and opens the shared review dialog.
+
+The `warnOnSave` setting turns the warning off. A failed check is swallowed —
+an unreachable address book must never look like a failed save. The
+`matchByEmail` / `matchByPhone` / `matchByName` switches apply here too.
+
+### 6.6 Hidden groups
 
 Hidden groups are stored as signatures in `api.storage` under
 `dismissedGroups` (`DISMISSED_KEY`). A hidden group stays out of the scan
@@ -397,7 +433,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **90 tests in 8 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **100 tests in 9 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -490,7 +526,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 90 tests, plus any new test you added.
+1. `npm test` passes — all 100 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
@@ -573,6 +609,8 @@ Merging
 
 Safety
   a failing update leaves the duplicates untouched
+  a merge leaves an undo record; undo restores before it reverts
+  a save-time warning never blocks the save (observer hooks only)
   a failing removal is reported, not swallowed
   nothing outside review-dialog.js calls contacts.remove
 ```
