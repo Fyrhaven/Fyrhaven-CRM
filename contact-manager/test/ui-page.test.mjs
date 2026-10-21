@@ -67,6 +67,43 @@ describe('manager page', () => {
     expect(screen.getByText(/duplicate groups/)).toBeTruthy();
   });
 
+  it('offers Undo for the newest merge record and restores the contacts', async () => {
+    const api = pageApi({
+      'ui.confirm': async () => true,
+      'contacts.create': async () => {},
+      'contacts.update': async () => {},
+    });
+    await api.storage.set('undoBatches', [{
+      at: Date.now(),
+      expiresAt: Date.now() + 10 * 60_000,
+      entries: [{ keptId: 'c1', before: {}, absent: ['phones'], removed: [makeCard({ id: 'c2', name: 'A. Lovelace' })] }],
+    }]);
+    await renderPage(api);
+
+    expect(screen.getByText('The last merge removed 1 contacts.')).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Undo merge' })); });
+    await waitFor(() => expect(api.calls('contacts.create')).toHaveLength(1));
+    expect(api.calls('contacts.create')[0].args[0].id).toBeUndefined();
+    expect(api.calls('ui.confirm')[0].args[0]).toMatchObject({ title: 'Undo the last merge?' });
+    expect(api.calls('toast.success').at(-1).args[0])
+      .toBe('Restored 1 contacts and reverted 1 kept contacts.');
+    expect(await api.storage.get('undoBatches')).toBeNull();
+  });
+
+  it('hides the Undo banner when there is no record and forgets on demand', async () => {
+    const api = pageApi({ 'contacts.create': async () => {}, 'contacts.update': async () => {} });
+    await api.storage.set('undoBatches', [{
+      at: Date.now(),
+      expiresAt: Date.now() + 10 * 60_000,
+      entries: [{ keptId: 'c1', before: {}, absent: [], removed: [makeCard({ id: 'c2', name: 'A. Lovelace' })] }],
+    }]);
+    await renderPage(api);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Forget' })); });
+    await waitFor(() => expect(screen.queryByText(/The last merge removed/)).toBeNull());
+    expect(await api.storage.get('undoBatches')).toBeNull();
+    expect(api.calls('toast.info').at(-1).args[0]).toBe('Undo records deleted.');
+  });
+
   it('opens the review dialog for one group and rescans after a merge', async () => {
     const api = pageApi({ 'ui.openDialog': async () => ({ merged: 1, removed: 1, failed: 0 }) });
     await renderPage(api);

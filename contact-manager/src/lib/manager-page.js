@@ -6,7 +6,8 @@
 import { List, ListRow, Page, PageHeader, InfoBar, Alert, EmptyState, Card, Badge, Checkbox, Button, Row, Stack, Text, Heading } from '@plugin-host/ui';
 import { bookIds, bookNamesById, contactName, loadBooks, loadCards, matchOptions } from './contacts.js';
 import { LAST_SCAN_KEY, findDuplicateGroups, planMerge, readDismissed, writeDismissed } from './duplicates.js';
-import { memberLabel, mergeLabel, reasonLine, strengthKey, toastMergeResult } from './labels.js';
+import { memberLabel, mergeLabel, reasonLine, strengthKey, toastMergeResult, undoWindowMinutes } from './labels.js';
+import { readUndo, undoLastMerge, clearUndo } from './undo.js';
 
 const FOCUS_COOLDOWN_MS = 5000;
 
@@ -23,6 +24,7 @@ export function makeManagerPage(React, api) {
     const [bookNames, setBookNames] = useState(() => new Map());
     const [showHidden, setShowHidden] = useState(false);
     const [selected, setSelected] = useState(() => new Set());
+    const [undo, setUndo] = useState(null); // the newest undo record, if any
     const [run, setRun] = useState(0); // bump to scan again
     const lastScanAt = useRef(0);
 
@@ -31,10 +33,13 @@ export function makeManagerPage(React, api) {
       setStatus('scanning');
       setError('');
       try {
-        const [cards, books, dismissed] = await Promise.all([loadCards(api), loadBooks(api), readDismissed(api)]);
+        const [cards, books, dismissed, batches] = await Promise.all([
+          loadCards(api), loadBooks(api), readDismissed(api), readUndo(api),
+        ]);
         const hiddenSet = new Set(dismissed);
         const found = findDuplicateGroups(cards, matchOptions(api.plugin.settings), []);
         const when = new Date().toISOString();
+        setUndo(batches.at(-1) ?? null);
         setBookNames(bookNamesById(books));
         setGroups(found.filter((group) => !hiddenSet.has(group.signature)));
         setHiddenGroups(found.filter((group) => hiddenSet.has(group.signature)));
@@ -92,6 +97,33 @@ export function makeManagerPage(React, api) {
       });
       toastMergeResult(api, result);
       if (result) void scan();
+    };
+
+    /** Undo the newest merge record, then rescan so the restored dupes show. */
+    const undoMerge = async () => {
+      const total = undo?.entries?.reduce((n, entry) => n + entry.removed.length, 0) ?? 0;
+      const ok = await api.ui.confirm({
+        title: t('undo.confirmTitle'),
+        message: t('undo.confirmBody', { count: total }),
+        confirmLabel: t('undo.action'),
+        danger: false,
+      });
+      if (!ok) return;
+      try {
+        const result = await undoLastMerge(api);
+        const vars = { restored: result.restored, reverted: result.reverted, failed: result.failed };
+        if (result.failed) api.toast.warning(t('undo.partial', vars));
+        else api.toast.success(t('undo.done', vars));
+      } catch (err) {
+        api.toast.error(t('undo.failed', { reason: String(err?.message ?? err) }));
+      }
+      void scan();
+    };
+
+    const forgetUndo = async () => {
+      await clearUndo(api);
+      setUndo(null);
+      api.toast.info(t('undo.forgotten'));
     };
 
     const hide = async (group) => {
@@ -178,6 +210,20 @@ export function makeManagerPage(React, api) {
             : null),
       }),
       status === 'scanning' ? h(InfoBar, { tone: 'primary', title: t('scan.running') }) : null,
+      undo
+        ? h(InfoBar, { tone: 'neutral', title: t('undo.bannerTitle', {
+            count: undo.entries.reduce((n, entry) => n + entry.removed.length, 0),
+          }) },
+            h(Stack, { gap: 2 },
+              h(Text, { tone: 'muted' }, t('undo.bannerHint', {
+                when: new Date(undo.expiresAt).toLocaleTimeString(api.i18n.getLocale()),
+                minutes: undoWindowMinutes(api.plugin.settings),
+              })),
+              h(Row, { gap: 2 },
+                h(Button, { size: 'sm', icon: 'undo', onClick: () => void undoMerge() }, t('undo.action')),
+                h(Button, { size: 'sm', variant: 'secondary', onClick: () => void forgetUndo() },
+                  t('undo.forget')))))
+        : null,
       status === 'error'
         ? h(Stack, { gap: 2 },
             h(Alert, { tone: 'danger' }, t('scan.failed', { reason: error })),
