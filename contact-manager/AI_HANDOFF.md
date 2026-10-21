@@ -309,5 +309,5 @@ Notes for the next session:
   single roadmap issue; it links every feature issue. Milestones
   `Contact Manager v1.2.0` … `v2.0.0` group them by release.
 - **Releases**: tagged `contact-manager-vX.Y.Z`; installable ZIPs are the
-  release assets. The newest release is `contact-manager-v1.2.0`.
+  release assets. The newest release is `contact-manager-v1.4.0`.
 - Ship a feature by closing its issue in the release commit/PR.
