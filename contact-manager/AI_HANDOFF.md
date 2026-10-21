@@ -1,16 +1,39 @@
 # AI Handoff - Contact Manager Plugin
 
 ## Current State
-- **Version**: 1.3.0 (manifest.json)
-- **Last changes**: Undo for merges (v1.3.0)
+- **Version**: 1.4.0 (manifest.json)
+- **Last changes**: Save-time duplicate warning (v1.4.0)
 - **Files modified**:
-  - `src/lib/undo.js` - new: undo records (retention window, size limits, purge), `buildEntry`, `saveUndo`, `readUndo`, `undoLastMerge`, `clearUndo`
-  - `src/lib/duplicates.js` - `mergeGroups` fills an optional `journal` (plan plus the cards it really removed)
-  - `src/lib/review-dialog.js` - stores the undo batch after a merge, confirm text mentions the undo window
-  - `src/lib/manager-page.js` - undo banner with Undo merge / Forget
-  - `src/lib/labels.js` - `toast.undoHint`, `undoWindowMinutes`
-  - `src/index.js` - purges expired records on activate, palette entry `undo-merge`, `undoMerge`
-  - `manifest.json` - `undoMinutes` setting, `undo.*` and `action.undoCommand` strings in `en` and `de`, version bumped
+  - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
+  - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
+  - `manifest.json` - `warnOnSave` setting, `watch.toast` string in `en` and `de`, version bumped
+
+## Implementation Summary
+
+### Save-time duplicate warning
+
+The host has no contact form surface, so the plugin watches the observer
+hooks that fire after a save (`onAfterContactCreate`, `onAfterContactUpdate`).
+`warnAboutDuplicates` searches the address books with `findGroupFor` (email,
+then name), drops the saved card itself (by id, or by content when the host
+sends no id) and toasts a warning naming the match and the reason. Observer
+hooks cannot stop a save, so the feature never blocks the user. The
+`warnOnSave` setting turns it off; the `contact-detail-section` block stays
+the persistent, clickable hint (it has the *Review duplicates* button).
+
+### Merge undo (v1.3.0)
+
+`src/lib/undo.js` stores one bounded, expiring batch per merge under
+`undoBatches`: `{ at, expiresAt, entries: [{ keptId, before, absent, removed }] }`.
+Retention: `undoMinutes` (default 15, 0 = off), 100 cards / ~400 kB, oldest
+batch evicted first, expired records purged on load and on every read.
+`undoLastMerge` re-creates the removed cards first and reverts the kept
+contact only when its duplicates are back; failures stay retryable. Surfaces:
+the page banner (*Undo merge* / *Forget*) and the palette action
+*Undo the last merge*.
+
+### Merge duplicate window visual indicators (v1.2.0)
+
 
 ## Implementation Summary
 
@@ -54,9 +77,10 @@ An *How to read this* legend above the groups explains every indicator.
 - `test/preview.test.mjs` - complete details, added/changed values, conflicts, counts (7 tests)
 - `test/ui-dialog.test.mjs` - green/orange indicators, Keep redraw, legend, merge flow, undo record written after a merge
 - `test/undo.test.mjs` - retention window, size limits, eviction, purge, restore, partial restore
+- `test/watch.test.mjs` - save-time detection and warning, create and edit paths, setting off
 - `test/ui-page.test.mjs` - undo banner, Undo merge, Forget
 - `test/bundle.test.mjs` - palette undo entry, undo action toasts
-- Full suite: 90 tests in 8 files
+- Full suite: 100 tests in 9 files
 
 ## Roadmap (GitHub)
 
@@ -115,6 +139,7 @@ contact-manager/
 │   ├── ui-page.test.mjs   # the manager page
 │   ├── ui-dialog.test.mjs # the review dialog and detail section
 │   ├── undo.test.mjs      # undo records: retention, restore, partial failures
+│   ├── watch.test.mjs     # save-time duplicate warning
 │   └── bundle.test.mjs    # the built bundle + locale completeness
 ├── test-utils/
 │   ├── fake-api.mjs       # recording fake of plugin host API
