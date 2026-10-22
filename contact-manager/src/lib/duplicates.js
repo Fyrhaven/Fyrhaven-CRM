@@ -186,6 +186,29 @@ export function findDuplicateGroups(cards, opts = {}, dismissed = []) {
 
 // ── Merge planning ─────────────────────────────────────────────
 
+/**
+ * Donor names that differ from the kept contact's name and are not already a
+ * nickname of it — the names a merge can preserve as nicknames (`#49`).
+ * `[{ value, key, fromId }]`, de-duplicated by normalised name, in member
+ * order. An email address is never a name, so a nameless card is skipped.
+ */
+export function nameSuggestions(primary, others) {
+  if (!primary) return [];
+  const keptKey = normalizeName(contactName(primary));
+  const taken = new Set(Object.values(primary.nicknames ?? {})
+    .map((entry) => normalizeName(entry?.name)).filter(Boolean));
+  const out = [];
+  for (const other of others ?? []) {
+    const value = contactName(other);
+    const key = normalizeName(value);
+    if (!value || value.includes('@') || !key) continue;
+    if (key === keptKey || taken.has(key)) continue;
+    taken.add(key);
+    out.push({ value, key, fromId: other.id });
+  }
+  return out;
+}
+
 function addressKey(value) {
   if (!value || typeof value !== 'object') return '';
   const full = text(value.full || value.fullAddress);
@@ -265,6 +288,9 @@ export function pickPrimary(members) {
  * in the order it would appear — so the UI can show a preview.
  * `changed` lists the conflicting fields the user chose to replace —
  * `[{ field, value, fromId }]`.
+ * `nameSuggestions` lists the donor names that differ from the kept name and
+ * are therefore offered as nicknames — `[{ value, key, fromId }]`; the patch
+ * adds every one the user did not drop (`choices.nicknames[key] = 'drop'`).
  */
 export function planMerge(group, keepId, choices = {}) {
   const members = (group?.members ?? []).filter(isMergeable);
@@ -273,7 +299,7 @@ export function planMerge(group, keepId, choices = {}) {
   const patch = {};
   const added = [];
   const changed = [];
-  if (!primary) return { primary: null, others: [], patch, added, changed };
+  if (!primary) return { primary: null, others: [], patch, added, changed, nameSuggestions: [] };
 
   for (const [field, normalize] of UNION_FIELDS) {
     const out = { ...(primary[field] ?? {}) };
@@ -333,7 +359,27 @@ export function planMerge(group, keepId, choices = {}) {
     }
   }
 
-  return { primary, others, patch, added, changed };
+  // Different names: keep each donor name as a nickname unless the user
+  // chose to discard it, so a merge never silently loses a name (#49).
+  // `choices.nicknames[key]` is 'nickname' (the default) or 'drop'; 'name'
+  // means the dialog reused the name as the kept contact's name instead.
+  const suggestions = nameSuggestions(primary, others);
+  const finalNameKey = normalizeName(contactName({ name: patch.name ?? primary.name }));
+  for (const suggestion of suggestions) {
+    if (suggestion.key === finalNameKey) continue; // already the contact's name
+    if (choices?.nicknames?.[suggestion.key] !== undefined
+      && choices.nicknames[suggestion.key] !== 'nickname') continue;
+    const out = { ...(patch.nicknames ?? primary.nicknames ?? {}) };
+    const taken = new Set(Object.values(out).map((entry) => normalizeName(entry?.name)).filter(Boolean));
+    if (taken.has(suggestion.key)) continue;
+    let newKey = 'nickname';
+    for (let n = 2; newKey in out; n += 1) newKey = `nickname-${n}`;
+    out[newKey] = { name: suggestion.value };
+    patch.nicknames = out;
+    added.push({ field: 'nicknames', value: { name: suggestion.value }, fromId: suggestion.fromId });
+  }
+
+  return { primary, others, patch, added, changed, nameSuggestions: suggestions };
 }
 
 // ── Merging for real ───────────────────────────────────────────

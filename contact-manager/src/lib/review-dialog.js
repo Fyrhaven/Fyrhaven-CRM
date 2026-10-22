@@ -133,6 +133,40 @@ export function makeReviewDialog(React, api) {
           : null);
     };
 
+    const renderNicknamePicker = (suggestions, donorById, signature) => {
+      if (!suggestions.length) return null;
+      const state = choicesBy[signature] ?? {};
+      return h(Section, { title: t('dialog.nicknameTitle') },
+        h(Text, { tone: 'muted', style: { fontSize: '12px' } }, t('dialog.nicknameHint')),
+        ...suggestions.map((suggestion) => {
+          const value = state.nicknames?.[suggestion.key] ?? 'nickname';
+          return h(Field, { key: suggestion.key, label: t('dialog.nicknameLabel', {
+            value: suggestion.value,
+            name: donorById[suggestion.fromId] || suggestion.fromId,
+          }) },
+            h(Select, {
+              value,
+              options: [
+                { value: 'nickname', label: t('dialog.nicknameOption') },
+                { value: 'name', label: t('dialog.nameOption') },
+                { value: 'drop', label: t('dialog.dropOption') },
+              ],
+              onChange: (next) => setChoicesBy((previous) => {
+                const groupChoices = { ...(previous[signature] ?? {}) };
+                const nicknames = { ...(groupChoices.nicknames ?? {}) };
+                if (next === 'nickname') delete nicknames[suggestion.key];
+                else nicknames[suggestion.key] = next;
+                if (Object.keys(nicknames).length) groupChoices.nicknames = nicknames;
+                else delete groupChoices.nicknames;
+                // "Use as the name" reuses the existing name-conflict choice.
+                if (next === 'name') groupChoices.name = suggestion.fromId;
+                else if (groupChoices.name === suggestion.fromId) delete groupChoices.name;
+                return { ...previous, [signature]: groupChoices };
+              }),
+            }));
+        }));
+    };
+
     const renderResolver = (conflicts, donorById, signature) => {
       if (!conflicts.length) return null;
       return h(Section, { title: t('dialog.resolveTitle') },
@@ -202,6 +236,9 @@ export function makeReviewDialog(React, api) {
             // Field-by-field conflict resolution: keep the current value or
             // take one from a duplicate before the preview is built.
             renderResolver(fieldConflicts, nameById, signature),
+            // Different names: offer the donor names as nicknames so a merge
+            // never loses the name the contact was saved under (#49).
+            renderNicknamePicker(basePlan.primary ? basePlan.nameSuggestions : [], nameById, signature),
             // Complete details of the contact to keep: what stays, what the
             // merge adds, and which duplicate values will not be merged.
             plan && plan.primary ? h(Section, { title: t('dialog.previewTitle', { name: keptName }) },
