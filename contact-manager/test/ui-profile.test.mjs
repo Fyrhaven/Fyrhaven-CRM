@@ -18,8 +18,13 @@ const CARDS = [
 ];
 
 const MESSAGES = [
-  { id: 'm1', from: { email: 'ada@example.org' }, to: [], subject: 'The engine notes', receivedAt: '2026-10-01T10:00:00Z' },
+  { id: 'm1', from: { email: 'ada@example.org' }, to: [], subject: 'The engine notes', receivedAt: '2026-10-01T10:00:00Z', attachments: [{ name: 'engine.pdf', size: 42 }] },
   { id: 'm2', from: { email: 'noise@x.de' }, to: [], subject: 'Unrelated' },
+];
+
+const EVENTS = [
+  { id: 'e1', title: 'Engine kickoff', start: '2026-09-20T09:00:00Z', participants: [{ email: 'ada@example.org' }] },
+  { id: 'e2', title: 'Unrelated meeting', start: '2026-09-21T09:00:00Z', participants: [{ email: 'x@y.de' }] },
 ];
 
 const TASKS = [
@@ -36,6 +41,7 @@ function profileApi(handlers = {}) {
       'contacts.search': async () => [],
       'email.search': async () => MESSAGES,
       'tasks.list': async () => TASKS,
+      'calendar.getEvents': async () => EVENTS,
       ...handlers,
     },
   });
@@ -56,7 +62,7 @@ describe('contacts page', () => {
     expect(screen.getByText('Engines Ltd')).toBeTruthy();
     expect(screen.getByText('maths')).toBeTruthy();
     expect(screen.getAllByText('ada@example.org').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText('The engine notes')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('The engine notes').length).toBeGreaterThan(0));
     expect(screen.queryByText('Unrelated')).toBeNull();
   });
 
@@ -84,6 +90,15 @@ describe('contacts page', () => {
 
     await waitFor(() => expect(screen.getByText('grace@navy.mil')).toBeTruthy());
     expect(screen.queryByText('Engines Ltd')).toBeNull();
+  });
+
+  it('shows the meetings and files of the interaction history', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await waitFor(() => expect(screen.getByText('Engine kickoff')).toBeTruthy());
+    expect(screen.queryByText('Unrelated meeting')).toBeNull();
+    expect(screen.getByText('engine.pdf')).toBeTruthy();
   });
 
   it('shows the open tasks that mention the contact', async () => {

@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.7.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: Contacts page with the 360° profile (v1.7.0), on top of the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.8.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: Meetings, files and company rollup on the profile (v1.8.0), on top of the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.4.0` is the newest GitHub release (v1.3.0 and
   v1.2.0 before it). `main` and `contact-manager` are in step at v1.4.0
   (PRs #45 and #48 merged).
@@ -19,6 +19,17 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Meetings, files and company rollup (v1.8.0)
+
+The profile now tracks three more activity sources without manual linking:
+calendar events (`eventsForContact` on `api.calendar.getEvents`), attachments
+of the recent messages (`attachmentsForMessages`, de-duplicated by name and
+size) and the company line (`companyNameOf` / `companyOf` /
+`peopleOfCompany`). Companies are contacts with `kind: 'org'`; people link by
+organisation name or email domain, and `companyDomains` derives a company's
+domains from its people when it has none. The manifest gained `calendar:read`,
+and every optional call degrades to a muted line.
 
 ### Contacts page and 360° profile (v1.7.0)
 
@@ -143,7 +154,7 @@ An *How to read this* legend above the groups explains every indicator.
 - `test/ui-profile.test.mjs` - the Contacts page
 - `test/ui-page.test.mjs` - undo banner, Undo merge, Forget
 - `test/bundle.test.mjs` - palette undo entry, undo action toasts
-- Full suite: 142 tests in 13 files
+- Full suite: 148 tests in 13 files
 
 ## Roadmap (GitHub)
 
@@ -332,11 +343,13 @@ Hard limits to remember before promising CRM data:
 Shipped so far: v1.2.0 merge preview, v1.3.0 undo, v1.4.0 save-time warning,
 v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete).
 
-**Phase 2 has started:** v1.7.0 shipped the Contacts page with the 360°
-profile (#10) — details, duplicates, recent messages and open tasks. Still
-missing from Phase 2: the next meeting from `api.calendar`, saved searches
-(#13) and bulk actions (#14). Then Phase 3 (#22 companies, #36 follow-up
-tasks, #38 notes).
+**Next: #22 — company profiles.** The model is decided (company = contact
+with `kind: 'org'`, people linked by organisation name or email domain) and
+v1.8.0 already ships the linking helpers, the company line and the activity
+rollup primitives. What is missing is the company editor mode and the company
+page (people, rolled-up mail/meetings/tasks/files, projects). After that:
+#57 (projects, milestones, time, expenses — local-only) and #58 (files
+section). Deals/pipeline and custom fields are explicitly out of scope.
 
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in
