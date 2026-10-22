@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan and duplicate hints in contact details.",
   "type": "ui-extension",
@@ -13,7 +13,8 @@
     "ui:commands",
     "ui:observe",
     "email:read",
-    "tasks:read"
+    "tasks:read",
+    "calendar:read"
   ],
   "entrypoint": "index.js",
   "minAppVersion": "1.15.0",
@@ -256,7 +257,14 @@
       "profile.noSubject": "(no subject)",
       "profile.tasks": "Open tasks",
       "profile.noTasks": "No open task mentions this contact.",
-      "profile.degraded": "Messages and tasks are unavailable — the plugin may be missing the email or tasks permission."
+      "profile.degraded": "Messages and tasks are unavailable — the plugin may be missing the email or tasks permission.",
+      "profile.meetings": "Meetings",
+      "profile.noMeetings": "No meeting with this contact in the last six months or the next three.",
+      "profile.files": "Files",
+      "profile.noFiles": "No attachments in the recent messages.",
+      "profile.noTitle": "(untitled)",
+      "profile.companyLine": "Company: {name}",
+      "profile.companyWithPeople": "Company: {name} · {count} people"
     },
     "de": {
       "page.title": "Kontakt-Manager",
@@ -450,7 +458,14 @@
       "profile.noSubject": "(kein Betreff)",
       "profile.tasks": "Offene Aufgaben",
       "profile.noTasks": "Keine offene Aufgabe erwähnt diesen Kontakt.",
-      "profile.degraded": "Nachrichten und Aufgaben sind nicht verfügbar – dem Plugin fehlt möglicherweise die E-Mail- oder Aufgaben-Berechtigung."
+      "profile.degraded": "Nachrichten und Aufgaben sind nicht verfügbar – dem Plugin fehlt möglicherweise die E-Mail- oder Aufgaben-Berechtigung.",
+      "profile.meetings": "Termine",
+      "profile.noMeetings": "Kein Termin mit diesem Kontakt in den letzten sechs Monaten oder den nächsten drei.",
+      "profile.files": "Dateien",
+      "profile.noFiles": "Keine Anhänge in den letzten Nachrichten.",
+      "profile.noTitle": "(ohne Titel)",
+      "profile.companyLine": "Firma: {name}",
+      "profile.companyWithPeople": "Firma: {name} · {count} Personen"
     }
   }
 }

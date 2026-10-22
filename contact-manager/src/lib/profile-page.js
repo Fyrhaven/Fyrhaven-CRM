@@ -8,7 +8,10 @@ import {
 } from '@plugin-host/ui';
 import { bookNamesById, contactName, emailEntries, loadBooks, loadCards, phoneEntries } from './contacts.js';
 import { makeDuplicateSection } from './detail-section.js';
-import { filterCards, tasksForContact, timelineForContact } from './profile.js';
+import {
+  attachmentsForMessages, companyNameOf, companyOf, eventsForContact, filterCards,
+  peopleOfCompany, tasksForContact, timelineForContact,
+} from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 
 export function makeProfilePage(React, api) {
@@ -22,7 +25,7 @@ export function makeProfilePage(React, api) {
     const [status, setStatus] = useState('loading'); // loading | ready | error
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState('');
-    const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], degraded: false });
+    const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: false });
 
     const load = useCallback(async () => {
       setStatus('loading');
@@ -49,24 +52,31 @@ export function makeProfilePage(React, api) {
     // permission or a failing API must leave the profile readable.
     useEffect(() => {
       if (!selected) {
-        setContext({ status: 'idle', messages: [], tasks: [], degraded: false });
+        setContext({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: false });
         return undefined;
       }
       let live = true;
-      setContext({ status: 'loading', messages: [], tasks: [], degraded: false });
+      setContext({ status: 'loading', messages: [], tasks: [], events: [], files: [], degraded: false });
       const email = emailEntries(selected)[0]?.address;
       const text = email || contactName(selected);
       const messages = text
         ? api.email.search({ text, limit: 10 }).catch(() => null)
         : Promise.resolve([]);
+      const now = new Date();
+      const from = new Date(now.getTime() - 180 * 24 * 3600 * 1000).toISOString();
+      const to = new Date(now.getTime() + 90 * 24 * 3600 * 1000).toISOString();
       const tasks = api.tasks.list({ includeCompleted: false }).catch(() => null);
-      void Promise.all([messages, tasks]).then(([found, open]) => {
+      const events = api.calendar.getEvents({ from, to }).catch(() => null);
+      void Promise.all([messages, tasks, events]).then(([found, open, diary]) => {
         if (!live) return;
+        const timeline = timelineForContact(found ?? [], selected).slice(0, 10);
         setContext({
           status: 'ready',
-          messages: timelineForContact(found ?? [], selected).slice(0, 10),
+          messages: timeline,
           tasks: tasksForContact(open ?? [], selected),
-          degraded: found === null || open === null,
+          events: eventsForContact(diary ?? [], selected).slice(0, 10),
+          files: attachmentsForMessages(timeline).slice(0, 10),
+          degraded: found === null || open === null || diary === null,
         });
       });
       return () => { live = false; };
@@ -121,6 +131,9 @@ export function makeProfilePage(React, api) {
                       orgName(selected) || titleName(selected)
                         ? h(Text, { tone: 'muted' }, [titleName(selected), orgName(selected)].filter(Boolean).join(' · '))
                         : null,
+                      companyNameOf(selected)
+                        ? h(Text, { tone: 'muted' }, companyLine(selected, cards, t))
+                        : null,
                       Object.keys(selected.keywords ?? {}).length
                         ? h(Row, { gap: 2, wrap: true },
                             ...Object.keys(selected.keywords).map((tag) => h(Badge, { key: tag, tone: 'neutral' }, tag)))
@@ -136,6 +149,20 @@ export function makeProfilePage(React, api) {
                       h(Row, { gap: 2 },
                         h(Button, { size: 'sm', icon: 'edit', onClick: () => void edit() }, t('detail.edit'))))),
                   h(Duplicates, { contact: selected }),
+                  h(Section, { title: t('profile.meetings') },
+                    context.status === 'ready' && !context.events.length
+                      ? h(Text, { tone: 'muted' }, t('profile.noMeetings'))
+                      : null,
+                    ...context.events.map((event) => h(Row, { key: event.id, gap: 2, wrap: true },
+                      h(Text, { tone: 'muted' }, formatDate(event.start, api.i18n.getLocale())),
+                      h(Text, null, event.title || t('profile.noTitle'))))),
+                  h(Section, { title: t('profile.files') },
+                    context.status === 'ready' && !context.files.length
+                      ? h(Text, { tone: 'muted' }, t('profile.noFiles'))
+                      : null,
+                    ...context.files.map((file) => h(Row, { key: `${file.emailId}-${file.name}`, gap: 2, wrap: true },
+                      h(Text, null, file.name),
+                      h(Text, { tone: 'muted' }, file.subject)))),
                   h(Section, { title: t('profile.messages') },
                     context.status === 'loading' ? h(Text, { tone: 'muted' }, t('profile.loading')) : null,
                     context.status === 'ready' && !context.messages.length
@@ -156,6 +183,15 @@ export function makeProfilePage(React, api) {
               : h(EmptyState, { title: t('profile.select') }))
         : null);
   };
+}
+
+function companyLine(card, cards, t) {
+  const name = companyNameOf(card);
+  const company = companyOf(cards, card);
+  const people = company ? peopleOfCompany(cards, company).length : 0;
+  return company
+    ? t('profile.companyWithPeople', { name, count: people })
+    : t('profile.companyLine', { name });
 }
 
 const orgName = (card) => Object.values(card.organizations ?? {})[0]?.name ?? '';

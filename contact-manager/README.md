@@ -60,7 +60,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| `contacts` app-page | Navigation rail → *Contacts* | Searchable contact list and the 360° profile: details, duplicates, recent messages, open tasks |
+| `contacts` app-page | Navigation rail → *Contacts* | Searchable contact list and the 360° profile: details, company, duplicates, messages, meetings, files and tasks |
 | `plugin-dialog` slot | Modal, opened by all of the above and by *New contact* | The review/merge dialog and the **contact editor** — the only places that write contacts |
 
 All four entry points open the same review dialog. One place decides what is
@@ -219,6 +219,7 @@ The `name` of a card may also arrive as a flat `fullName` or as
 | `ui:observe` | The `plugin-dialog` slot |
 | `email:read` | The recent messages on the profile |
 | `tasks:read` | The open tasks on the profile |
+| `calendar:read` | The meetings on the profile |
 
 Every slot and action must be covered by a permission — `test/bundle.test.mjs`
 asserts this, so a new surface without a permission fails the test run.
@@ -489,8 +490,18 @@ right.
 * **Open tasks** — `api.tasks.list({ includeCompleted: false })`, then
   `tasksForContact` keeps the tasks whose title or description mentions the
   contact's name or an email address.
-* **Degradation** — messages and tasks need the `email:read` and `tasks:read`
-  permissions. A missing permission or a failing call leaves the profile
+* **Meetings** — `api.calendar.getEvents` over the last six months and the next
+  three, filtered by `eventsForContact` (participants by email/name, or the
+  title).
+* **Files** — `attachmentsForMessages` flattens and de-duplicates the
+  attachments of those messages (name + size), so the profile lists what was
+  exchanged without storing any bytes.
+* **Company** — `companyNameOf` shows the organisation; `companyOf` finds the
+  matching company record and `peopleOfCompany` counts its people. Companies
+  are contacts with `kind: 'org'`; people link through their organisation name
+  or email domain (#22).
+* **Degradation** — messages, tasks and meetings need the `email:read`,
+  `tasks:read` and `calendar:read` permissions. A missing permission or a failing call leaves the profile
   readable and shows one muted line instead of an error.
 
 `profile.js` holds the pure matching rules (`filterCards`, `contactTerms`,
@@ -520,7 +531,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **142 tests in 13 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **148 tests in 13 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -613,7 +624,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 142 tests, plus any new test you added.
+1. `npm test` passes — all 148 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
