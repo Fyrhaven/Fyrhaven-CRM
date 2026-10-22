@@ -2,11 +2,14 @@
 // Manager page and the contact-details section all funnel through here, so
 // the dialog props and the result toast stay in one place.
 
-export async function openEditor(api, { mode = 'create', contact = null } = {}) {
+export async function openEditor(api, { mode = 'create', contact = null, company = false } = {}) {
+  const titleKey = company
+    ? (mode === 'edit' ? 'editor.titleCompanyEdit' : 'editor.titleCompany')
+    : (mode === 'edit' ? 'editor.titleEdit' : 'editor.title');
   return api.ui.openDialog({
-    title: api.i18n.t(mode === 'edit' ? 'editor.titleEdit' : 'editor.title'),
+    title: api.i18n.t(titleKey),
     slot: 'plugin-dialog',
-    extraProps: { editor: true, mode, contact },
+    extraProps: { editor: true, mode, contact, company },
   });
 }
 

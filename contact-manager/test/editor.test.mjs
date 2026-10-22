@@ -2,7 +2,8 @@
 // writes, validation and the dirty check.
 import { describe, expect, it } from 'vitest';
 import {
-  cardFromDraft, draftFromCard, emptyDraft, isDirty, validateDraft,
+  cardFromDraft, companyCardFromDraft, companyDraftFromCard, draftFromCard, emptyCompanyDraft,
+  emptyDraft, isDirty, validateCompanyDraft, validateDraft,
 } from '../src/lib/editor.js';
 import { makeCard } from './fixtures.mjs';
 
@@ -146,5 +147,53 @@ describe('isDirty', () => {
     expect(isDirty(draft, { ...emptyDraft(), given: 'Ada' })).toBe(false);
     expect(isDirty(draft, { ...emptyDraft(), given: 'Grace' })).toBe(true);
     expect(isDirty({ ...draft, bookIds: ['b2', 'b1'] }, { ...draft, bookIds: ['b1', 'b2'] })).toBe(false);
+  });
+});
+
+describe('company drafts', () => {
+  it('builds a company card with kind org, domains, address and the marker keyword', () => {
+    const draft = {
+      ...emptyCompanyDraft(),
+      name: 'Acme Ltd',
+      domains: 'acme.com, https://acme.de/',
+      address: { street: 'Main St 1', postcode: '12345', locality: 'London', region: '', country: 'UK' },
+      notes: 'Key account',
+      tags: 'partner, priority',
+      bookIds: ['b1'],
+    };
+    const card = companyCardFromDraft(draft, 'create');
+    expect(card.kind).toBe('org');
+    expect(card.name).toEqual({ full: 'Acme Ltd' });
+    expect(Object.values(card.onlineServices ?? {}).map((entry) => entry.uri)).toEqual(['acme.com', 'acme.de']);
+    expect(card.addresses.a0).toMatchObject({ street: 'Main St 1', locality: 'London', country: 'UK' });
+    expect(card.notes).toEqual({ n0: { note: 'Key account' } });
+    expect(card.keywords).toEqual({ company: true, partner: true, priority: true });
+    expect(card.addressBookIds).toEqual({ b1: true });
+  });
+
+  it('round-trips a company card back into a draft', () => {
+    const card = companyCardFromDraft({
+      ...emptyCompanyDraft(),
+      name: 'Acme Ltd',
+      domains: 'acme.com',
+      notes: 'Key account',
+      tags: 'partner',
+      bookIds: ['b1'],
+    });
+    const draft = companyDraftFromCard(card, [{ id: 'b1', name: 'Work' }]);
+    expect(draft).toMatchObject({
+      name: 'Acme Ltd',
+      domains: 'acme.com',
+      notes: 'Key account',
+      tags: 'partner',
+      bookIds: ['b1'],
+    });
+  });
+
+  it('requires a name, and an address book only on create', () => {
+    expect(validateCompanyDraft(emptyCompanyDraft(), 'edit')).toEqual([{ field: 'name', key: 'editor.error.companyName' }]);
+    const named = { ...emptyCompanyDraft(), name: 'Acme' };
+    expect(validateCompanyDraft(named, 'create')).toEqual([{ field: 'books', key: 'editor.error.book' }]);
+    expect(validateCompanyDraft({ ...named, bookIds: ['b1'] }, 'create')).toEqual([]);
   });
 });

@@ -13,7 +13,8 @@ import {
 } from '@plugin-host/ui';
 import { loadBooks, text } from './contacts.js';
 import {
-  cardFromDraft, draftFromCard, emptyDraft, isDirty, validateDraft,
+  cardFromDraft, companyCardFromDraft, companyDraftFromCard, draftFromCard, emptyCompanyDraft,
+  emptyDraft, isDirty, validateCompanyDraft, validateDraft,
 } from './editor.js';
 
 export function makeEditorDialog(React, api) {
@@ -22,12 +23,16 @@ export function makeEditorDialog(React, api) {
 
   return function EditorDialog(props) {
     const mode = props.mode === 'edit' ? 'edit' : 'create';
+    const company = props.company === true;
     const contact = props.contact ?? null;
     const [initial, setInitial] = useState(() => {
-      if (contact) return draftFromCard(contact, props.books ?? []);
-      // A new contact starts in the first address book the dialog already knows.
       const knownBooks = Array.isArray(props.books) ? props.books : [];
-      return { ...emptyDraft(), bookIds: knownBooks.length ? [knownBooks[0].id] : [] };
+      if (contact) {
+        return company ? companyDraftFromCard(contact, knownBooks) : draftFromCard(contact, knownBooks);
+      }
+      // A new record starts in the first address book the dialog already knows.
+      const template = company ? emptyCompanyDraft() : emptyDraft();
+      return { ...template, bookIds: knownBooks.length ? [knownBooks[0].id] : [] };
     });
     const [draft, setDraft] = useState(initial);
     const [books, setBooks] = useState(Array.isArray(props.books) ? props.books : []);
@@ -91,12 +96,12 @@ export function makeEditorDialog(React, api) {
 
     const save = async () => {
       if (busy) return;
-      const found = validateDraft(draft, mode);
+      const found = (company ? validateCompanyDraft : validateDraft)(draft, mode);
       setErrors(found);
       if (found.length) return;
       setBusy(true);
       setFailure('');
-      const card = cardFromDraft(draft, mode);
+      const card = (company ? companyCardFromDraft : cardFromDraft)(draft, mode);
       try {
         if (mode === 'create') await api.contacts.create(card);
         else await api.contacts.update(contact.id, card);
@@ -132,6 +137,72 @@ export function makeEditorDialog(React, api) {
       const error = errors.find((entry) => entry.field === field);
       return error ? t(error.key) : undefined;
     };
+
+    if (company) {
+      return h(Stack, { gap: 4 },
+        failure ? h(Alert, { tone: 'danger' }, t('editor.failed', { reason: failure })) : null,
+        errors.length
+          ? h(Alert, { tone: 'danger' },
+              h(Stack, { gap: 1 }, ...errors.map((error) => h(Text, { key: error.field }, t(error.key)))))
+          : null,
+        h(Text, { tone: 'muted' }, mode === 'create' ? t('editor.introCompanyCreate') : t('editor.introCompanyEdit')),
+        h(Field, { label: t('editor.companyName'), error: hasError('name') ? errorText('name') : undefined },
+          h(Input, {
+            value: draft.name,
+            placeholder: t('editor.companyNamePlaceholder'),
+            onChange: (event) => set('name', event.target.value),
+          })),
+        h(Field, { label: t('editor.domains'), hint: t('editor.domainsHint') },
+          h(Input, {
+            value: draft.domains,
+            placeholder: 'acme.com, acme.de',
+            onChange: (event) => set('domains', event.target.value),
+          })),
+        h(Section, { title: t('editor.addressSection') },
+          h(Field, { label: t('editor.street') },
+            h(Input, { value: draft.address.street, onChange: (event) => setAddress('street', event.target.value) })),
+          h(Row, { gap: 2, wrap: true },
+            h(Field, { label: t('editor.postcode') },
+              h(Input, { value: draft.address.postcode, onChange: (event) => setAddress('postcode', event.target.value) })),
+            h(Field, { label: t('editor.locality') },
+              h(Input, { value: draft.address.locality, onChange: (event) => setAddress('locality', event.target.value) })),
+            h(Field, { label: t('editor.region') },
+              h(Input, { value: draft.address.region, onChange: (event) => setAddress('region', event.target.value) })),
+            h(Field, { label: t('editor.country') },
+              h(Input, { value: draft.address.country, onChange: (event) => setAddress('country', event.target.value) })))),
+        h(Section, { title: t('editor.notesSection') },
+          h(Field, { label: t('editor.notes') },
+            h(Textarea, { value: draft.notes, rows: 3, onChange: (event) => set('notes', event.target.value) })),
+          h(Field, { label: t('editor.tags'), hint: t('editor.tagsHint') },
+            h(Input, { value: draft.tags, onChange: (event) => set('tags', event.target.value) }))),
+        h(Section, { title: t('editor.booksSection'), description: t('editor.booksHint') },
+          books.length
+            ? h(Stack, { gap: 1 }, ...books.map((book) => h(Checkbox, {
+              key: book.id,
+              checked: draft.bookIds.includes(book.id),
+              label: book.name || book.id,
+              onChange: (on) => toggleBook(book.id, on),
+            })))
+            : h(Text, { tone: 'muted' }, t('editor.noBooks'))),
+        h(DialogButtons, {
+          buttons: [
+            { id: 'cancel', label: t('dialog.cancel'), variant: 'secondary', disabled: busy },
+            ...(mode === 'edit' ? [{ id: 'delete', label: t('editor.delete'), variant: 'danger', disabled: busy }] : []),
+            {
+              id: 'save',
+              label: mode === 'create' ? t('editor.createCompany') : t('editor.save'),
+              variant: 'primary',
+              busy,
+              disabled: busy,
+            },
+          ],
+          onClick: (id) => {
+            if (id === 'save') void save();
+            else if (id === 'delete') void remove();
+            else void cancel();
+          },
+        }));
+    }
 
     return h(Stack, { gap: 4 },
       failure ? h(Alert, { tone: 'danger' }, t('editor.failed', { reason: failure })) : null,

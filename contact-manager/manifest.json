@@ -264,7 +264,23 @@
       "profile.noFiles": "No attachments in the recent messages.",
       "profile.noTitle": "(untitled)",
       "profile.companyLine": "Company: {name}",
-      "profile.companyWithPeople": "Company: {name} · {count} people"
+      "profile.companyWithPeople": "Company: {name} · {count} people",
+      "action.newCompany": "New company",
+      "editor.titleCompany": "New company",
+      "editor.titleCompanyEdit": "Edit company",
+      "editor.introCompanyCreate": "Companies live in your address books as organisation records, so their data is shared like any contact.",
+      "editor.introCompanyEdit": "Change the company details. Linked people are found through their organisation name and email domain.",
+      "editor.companyName": "Company name",
+      "editor.companyNamePlaceholder": "Acme Ltd",
+      "editor.domains": "Domains",
+      "editor.domainsHint": "Comma-separated, for example acme.com. People with a matching email domain are linked automatically.",
+      "editor.createCompany": "Create company",
+      "editor.error.companyName": "Enter a company name.",
+      "profile.companyBadge": "Company",
+      "profile.editCompany": "Edit company",
+      "profile.people": "People",
+      "profile.peopleCount": "{count} linked people",
+      "profile.noPeople": "No person is linked to this company yet. Add the company name to a contact's organisation, or its domain here."
     },
     "de": {
       "page.title": "Kontakt-Manager",
@@ -465,7 +481,23 @@
       "profile.noFiles": "Keine Anhänge in den letzten Nachrichten.",
       "profile.noTitle": "(ohne Titel)",
       "profile.companyLine": "Firma: {name}",
-      "profile.companyWithPeople": "Firma: {name} · {count} Personen"
+      "profile.companyWithPeople": "Firma: {name} · {count} Personen",
+      "action.newCompany": "Neue Firma",
+      "editor.titleCompany": "Neue Firma",
+      "editor.titleCompanyEdit": "Firma bearbeiten",
+      "editor.introCompanyCreate": "Firmen liegen als Organisationsdatensätze in deinen Adressbüchern und werden daher wie Kontakte geteilt.",
+      "editor.introCompanyEdit": "Ändere die Firmendaten. Verknüpfte Personen werden über den Organisationsnamen und die E-Mail-Domain gefunden.",
+      "editor.companyName": "Firmenname",
+      "editor.companyNamePlaceholder": "Acme GmbH",
+      "editor.domains": "Domains",
+      "editor.domainsHint": "Kommagetrennt, zum Beispiel acme.de. Personen mit passender E-Mail-Domain werden automatisch verknüpft.",
+      "editor.createCompany": "Firma erstellen",
+      "editor.error.companyName": "Gib einen Firmennamen ein.",
+      "profile.companyBadge": "Firma",
+      "profile.editCompany": "Firma bearbeiten",
+      "profile.people": "Personen",
+      "profile.peopleCount": "{count} verknüpfte Personen",
+      "profile.noPeople": "Noch keine Person mit dieser Firma verknüpft. Trage den Firmennamen als Organisation eines Kontakts ein oder die Domain hier."
     }
   }
 }
