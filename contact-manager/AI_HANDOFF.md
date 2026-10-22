@@ -297,42 +297,33 @@ contact-manager/
 
 ### Where to pick up next
 
-**Everything is merged, released and green.** `main` and `contact-manager` are
-both at v1.4.0, the working tree is clean, and the 100-test suite passes.
+**Direction (2026-10-21): an eWay-CRM-style workspace.** The product goal is no
+longer just duplicate cleanup — it is the contact/CRM layer of Bulwark. The
+full map of eWay-CRM modules to host capabilities, the phases and the
+non-goals live in **issue #54**
+(https://github.com/zyntrax/bulwark-plugins/issues/54), linked from the
+roadmap issue #40.
 
-The two open directions are written up in **Open Findings** above, and both
-have a GitHub issue:
+Hard limits to remember before promising CRM data:
 
-1. **Nickname/alias preservation on merge** — issue **#49**
-   (https://github.com/zyntrax/bulwark-plugins/issues/49, milestone v1.2.0).
-   The host fully supports nicknames (they are even indexed and searchable in
-   Stalwart), but the merge currently throws away a differing name instead of
-   offering it as a nickname. This is a self-contained change to `planMerge` +
-   the review dialog and is the best next single feature. The issue body has
-   the full implementation detail and acceptance criteria.
-2. **Turning the plugin into a real contact manager** — issue **#51**
-   (https://github.com/zyntrax/bulwark-plugins/issues/51, milestone v1.3.0).
-   The v1.3.0 milestone (issues #9–#15) is untouched; #51 is the umbrella that
-   also records the two structural blockers: the host exposes no contact form
-   surface, and the plugin has no create-a-contact path at all. Start with
-   #9 (the editor).
+- `api.storage` is per-account, per-browser `localStorage` — **not** a shared
+  server store. Deals, notes or pipelines the plugin invents are single-user
+  and do not sync between devices.
+- Contacts, address books, mail, calendar events and tasks are native APIs
+  (`api.contacts`, `api.email.search`, `api.calendar`, `api.tasks`); custom
+  object types and custom fields do not exist.
+- There is no server-side scheduler; background work runs only while the
+  webmail is open.
 
-**Suggested order: #49 first** — it is self-contained and unblocks nothing
-else, so it is a clean, low-risk win. Then #51 / #9.
+Shipped so far: v1.2.0 merge preview, v1.3.0 undo, v1.4.0 save-time warning,
+v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete).
 
-Before starting either, re-check the roadmap issue #40 and the open issues for
-the current state (the roadmap lives on GitHub, not in this file).
-
-Notes for the next session:
-- The `gh` CLI is **not installed** on this machine, so `npm run release`
-  (which shells out to `gh`) will fail. Releases were cut via the GitHub API
-  with the same tag naming and asset layout. Installing `gh` would restore
-  the documented workflow.
-- The repository is **private**; unauthenticated GitHub API/web calls return
-  404. A token is available via the git credential store
-  (`git credential fill` for `https://github.com/zyntrax/bulwark-plugins.git`).
-- The repo is `zyntrax/bulwark-plugins` — there is no `bulwark-addons`
-  repository.
+**Next: Phase 2 of #54 — #10, the 360° contact profile.** One page per
+contact: the card, tags, notes, duplicates, recent mail from/to the contact
+(`api.email.search`), open tasks mentioning it (`api.tasks.list`), and the
+next meeting. This is the record view the rest of the CRM hangs off. After
+that: #13 smart search, #14 bulk actions, then Phase 3 (#22 companies, #36
+follow-up tasks, #38 notes).
 
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in
