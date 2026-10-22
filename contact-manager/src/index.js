@@ -139,6 +139,10 @@ export const hooks = {
     }
     if (actionId === 'new-contact') {
       toastEditorResult(api, await openEditor(api, { mode: 'create' }));
+      return;
+    }
+    if (actionId === 'new-company') {
+      toastEditorResult(api, await openEditor(api, { mode: 'create', company: true }));
     }
   },
 
@@ -173,6 +177,7 @@ async function publish(pluginApi) {
   await pluginApi.ui.setActions('command-palette', [
     { id: 'scan', label: t('action.scanCommand'), icon: 'copy' },
     { id: 'new-contact', label: t('action.newContact'), icon: 'user-plus' },
+    { id: 'new-company', label: t('action.newCompany'), icon: 'building' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
   await pluginApi.ui.setActions('contact-list-actions', [

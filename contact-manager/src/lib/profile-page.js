@@ -9,8 +9,8 @@ import {
 import { bookNamesById, contactName, emailEntries, loadBooks, loadCards, phoneEntries } from './contacts.js';
 import { makeDuplicateSection } from './detail-section.js';
 import {
-  attachmentsForMessages, companyNameOf, companyOf, eventsForContact, filterCards,
-  peopleOfCompany, tasksForContact, timelineForContact,
+  attachmentsForMessages, companyDomains, companyNameOf, companyOf, eventsForContact, filterCards,
+  isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 
@@ -57,8 +57,12 @@ export function makeProfilePage(React, api) {
       }
       let live = true;
       setContext({ status: 'loading', messages: [], tasks: [], events: [], files: [], degraded: false });
+      const companyRecord = isCompany(selected);
+      const relevant = companyRecord ? [selected, ...peopleOfCompany(cards, selected)] : [selected];
       const email = emailEntries(selected)[0]?.address;
-      const text = email || contactName(selected);
+      const text = companyRecord
+        ? (companyDomains(cards, selected)[0] || contactName(selected))
+        : (email || contactName(selected));
       const messages = text
         ? api.email.search({ text, limit: 10 }).catch(() => null)
         : Promise.resolve([]);
@@ -69,19 +73,22 @@ export function makeProfilePage(React, api) {
       const events = api.calendar.getEvents({ from, to }).catch(() => null);
       void Promise.all([messages, tasks, events]).then(([found, open, diary]) => {
         if (!live) return;
-        const timeline = timelineForContact(found ?? [], selected).slice(0, 10);
+        const byId = (items) => [...new Map(items.map((item) => [item.id, item])).values()];
+        const timeline = byId(relevant.flatMap((card) => timelineForContact(found ?? [], card)))
+          .sort((a, b) => String(b.receivedAt ?? '').localeCompare(String(a.receivedAt ?? '')))
+          .slice(0, 10);
         setContext({
           status: 'ready',
           messages: timeline,
-          tasks: tasksForContact(open ?? [], selected),
-          events: eventsForContact(diary ?? [], selected).slice(0, 10),
+          tasks: byId(relevant.flatMap((card) => tasksForContact(open ?? [], card))),
+          events: byId(relevant.flatMap((card) => eventsForContact(diary ?? [], card))).slice(0, 10),
           files: attachmentsForMessages(timeline).slice(0, 10),
           degraded: found === null || open === null || diary === null,
         });
       });
       return () => { live = false; };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selected?.id]);
+    }, [selected?.id, cards]);
 
     const edit = async () => {
       if (!selected) return;
@@ -97,11 +104,57 @@ export function makeProfilePage(React, api) {
     const bookLabel = (card) => Object.keys(card.addressBookIds ?? {})
       .map((id) => books.get(id)).filter(Boolean).join(', ');
 
+    const createCompany = async () => {
+      toastEditorResult(api, await openEditor(api, { mode: 'create', company: true }));
+      void load();
+    };
+
+    const company = selected && isCompany(selected) ? selected : null;
+    const people = company ? peopleOfCompany(cards, company) : [];
+    const domains = company ? companyDomains(cards, company) : [];
+    const companyTags = company
+      ? Object.keys(company.keywords ?? {}).filter((tag) => tag !== 'company')
+      : [];
+
+    const companyCard = () => h(Card, null,
+      h(Stack, { gap: 2 },
+        h(Row, { gap: 2, wrap: true },
+          h(Heading, { level: 2 }, contactName(company) || company.id),
+          h(Badge, { tone: 'primary' }, t('profile.companyBadge'))),
+        domains.length
+          ? h(Row, { gap: 2, wrap: true },
+              ...domains.map((domain) => h(Badge, { key: domain, tone: 'neutral' }, domain)))
+          : null,
+        companyTags.length
+          ? h(Row, { gap: 2, wrap: true },
+              ...companyTags.map((tag) => h(Badge, { key: tag, tone: 'neutral' }, tag)))
+          : null,
+        addressLine(company) ? h(Text, { tone: 'muted' }, addressLine(company)) : null,
+        notesLine(company) ? h(Text, null, notesLine(company)) : null,
+        h(Row, { gap: 2 },
+          h(Button, { size: 'sm', icon: 'edit', onClick: () => void edit() }, t('profile.editCompany')))));
+
+    const peopleSection = () => h(Section, {
+      title: t('profile.people'),
+      description: t('profile.peopleCount', { count: people.length }),
+    },
+      people.length
+        ? h(List, { label: t('profile.people') }, ...people.map((person) => h(ListRow, {
+          key: person.id,
+          title: contactName(person) || person.id,
+          subtitle: emailEntries(person)[0]?.address ?? '',
+          onClick: () => setSelectedId(person.id),
+        })))
+        : h(Text, { tone: 'muted' }, t('profile.noPeople')));
+
     return h(Page, null,
       h(PageHeader, {
         title: t('page.contactsTitle'),
         description: t('page.contactsDescription'),
-        actions: h(Button, { icon: 'user-plus', onClick: () => void create() }, t('action.newContact')),
+        actions: h(Row, { gap: 2 },
+          h(Button, { icon: 'user-plus', onClick: () => void create() }, t('action.newContact')),
+          h(Button, { icon: 'building', variant: 'secondary', onClick: () => void createCompany() },
+            t('action.newCompany'))),
       }),
       status === 'loading' ? h(Text, { tone: 'muted' }, t('profile.loading')) : null,
       status === 'error' ? h(EmptyState, { title: t('profile.unavailable') }) : null,
@@ -125,7 +178,7 @@ export function makeProfilePage(React, api) {
                 : h(Text, { tone: 'muted' }, t('profile.noMatch'))),
             selected
               ? h(Stack, { gap: 4, style: { flex: '1 1 auto', minWidth: '0' } },
-                  h(Card, null,
+                  company ? companyCard() : h(Card, null,
                     h(Stack, { gap: 2 },
                       h(Heading, { level: 2 }, contactName(selected) || selected.id),
                       orgName(selected) || titleName(selected)
@@ -148,7 +201,8 @@ export function makeProfilePage(React, api) {
                       notesLine(selected) ? h(Text, null, notesLine(selected)) : null,
                       h(Row, { gap: 2 },
                         h(Button, { size: 'sm', icon: 'edit', onClick: () => void edit() }, t('detail.edit'))))),
-                  h(Duplicates, { contact: selected }),
+                  company ? peopleSection() : null,
+                  company ? null : h(Duplicates, { contact: selected }),
                   h(Section, { title: t('profile.meetings') },
                     context.status === 'ready' && !context.events.length
                       ? h(Text, { tone: 'muted' }, t('profile.noMeetings'))
