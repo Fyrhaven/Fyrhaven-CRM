@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan and duplicate hints in contact details.",
   "type": "ui-extension",
@@ -11,7 +11,9 @@
     "ui:app-page",
     "ui:contacts",
     "ui:commands",
-    "ui:observe"
+    "ui:observe",
+    "email:read",
+    "tasks:read"
   ],
   "entrypoint": "index.js",
   "minAppVersion": "1.15.0",
@@ -239,7 +241,22 @@
       "editor.error.email": "That email address is not valid.",
       "editor.error.phone": "That phone number is too short.",
       "editor.error.book": "Choose at least one address book.",
-      "detail.edit": "Edit contact"
+      "detail.edit": "Edit contact",
+      "page.contactsTitle": "Contacts",
+      "page.contactsDescription": "Browse your contacts and see everything that belongs to one: details, duplicates, recent messages and open tasks.",
+      "profile.searchLabel": "Search contacts",
+      "profile.searchPlaceholder": "Name, email address or phone",
+      "profile.noMatch": "No contact matches that search.",
+      "profile.loading": "Loading…",
+      "profile.unavailable": "The contacts could not be loaded.",
+      "profile.select": "Choose a contact to see the profile.",
+      "profile.nicknameLine": "Also known as {name}",
+      "profile.messages": "Recent messages",
+      "profile.noMessages": "No messages from or to this contact.",
+      "profile.noSubject": "(no subject)",
+      "profile.tasks": "Open tasks",
+      "profile.noTasks": "No open task mentions this contact.",
+      "profile.degraded": "Messages and tasks are unavailable — the plugin may be missing the email or tasks permission."
     },
     "de": {
       "page.title": "Kontakt-Manager",
@@ -418,7 +435,22 @@
       "editor.error.email": "Diese E-Mail-Adresse ist ungültig.",
       "editor.error.phone": "Diese Telefonnummer ist zu kurz.",
       "editor.error.book": "Wähle mindestens ein Adressbuch.",
-      "detail.edit": "Kontakt bearbeiten"
+      "detail.edit": "Kontakt bearbeiten",
+      "page.contactsTitle": "Kontakte",
+      "page.contactsDescription": "Durchsuche deine Kontakte und sieh alles zu einem Kontakt: Details, Duplikate, letzte Nachrichten und offene Aufgaben.",
+      "profile.searchLabel": "Kontakte durchsuchen",
+      "profile.searchPlaceholder": "Name, E-Mail-Adresse oder Telefon",
+      "profile.noMatch": "Kein Kontakt passt zu dieser Suche.",
+      "profile.loading": "Wird geladen…",
+      "profile.unavailable": "Die Kontakte konnten nicht geladen werden.",
+      "profile.select": "Wähle einen Kontakt, um das Profil zu sehen.",
+      "profile.nicknameLine": "Auch bekannt als {name}",
+      "profile.messages": "Letzte Nachrichten",
+      "profile.noMessages": "Keine Nachrichten von oder an diesen Kontakt.",
+      "profile.noSubject": "(kein Betreff)",
+      "profile.tasks": "Offene Aufgaben",
+      "profile.noTasks": "Keine offene Aufgabe erwähnt diesen Kontakt.",
+      "profile.degraded": "Nachrichten und Aufgaben sind nicht verfügbar – dem Plugin fehlt möglicherweise die E-Mail- oder Aufgaben-Berechtigung."
     }
   }
 }
