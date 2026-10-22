@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.4.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: Save-time duplicate warning (v1.4.0), on top of merge undo (v1.3.0)
+- **Version**: 1.5.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: Nickname preservation on merge (v1.5.0), on top of the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.4.0` is the newest GitHub release (v1.3.0 and
   v1.2.0 before it). `main` and `contact-manager` are in step at v1.4.0
   (PRs #45 and #48 merged).
@@ -19,6 +19,18 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Nickname preservation on merge (v1.5.0)
+
+When duplicate members carry different names, `nameSuggestions(primary, others)`
+lists the donor names (normalised comparison, no emails, no existing nicknames).
+`planMerge` writes each accepted name into `patch.nicknames` by default and
+returns `nameSuggestions` for the dialog; `choices.nicknames[key] = 'drop'`
+excludes one, and a name that becomes the contact's name (`choices.name`) is
+never also added as a nickname. The review dialog renders a *Different names*
+section with *Keep as a nickname* / *Use it as the name* / *Discard it* per
+suggestion. The nickname rides in the same update that patches the kept
+contact, so the undo record (`buildEntry`) captures and reverts it too.
 
 ### Save-time duplicate warning (v1.4.0)
 
@@ -103,7 +115,7 @@ An *How to read this* legend above the groups explains every indicator.
 - `test/watch.test.mjs` - save-time detection and warning, create and edit paths, setting off
 - `test/ui-page.test.mjs` - undo banner, Undo merge, Forget
 - `test/bundle.test.mjs` - palette undo entry, undo action toasts
-- Full suite: 100 tests in 9 files
+- Full suite: 107 tests in 9 files
 
 ## Roadmap (GitHub)
 
@@ -122,14 +134,20 @@ todo list.
 
 ## Open Findings (2026-10-21)
 
-Two directions were explored and are **not yet implemented**. Both now have
-a GitHub issue (the roadmap issue #40 links them):
+One direction shipped, one is still open. Both have a GitHub issue (the
+roadmap issue #40 links them):
 
-1. **Nicknames / alias names** — issue **#49** (milestone v1.2.0).
+1. **Nicknames / alias names** — issue **#49** — **shipped in v1.5.0**. The
+   research below is kept for context.
 2. **Turning the plugin into a real contact manager** — issue **#51**
-   (milestone v1.3.0).
+   (milestone v1.3.0) — **open**. Start with **#9**, the full contact editor
+   plus the missing create path; see the note at the end of this file.
 
-### 1. Nicknames / alias names are supported by the host, but the merge drops them
+### 1. Nicknames / alias names are supported by the host, but the merge drops them (shipped in v1.5.0)
+
+> **Shipped in v1.5.0.** `nameSuggestions()` + `planMerge`'s `nickname`
+> handling and the dialog's *Different names* picker implement this. The
+> notes below are the original research.
 
 Researched against the Stalwart source (the server behind Bulwark):
 

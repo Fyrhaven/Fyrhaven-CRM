@@ -52,7 +52,7 @@ signatures, the last scan summary).
 | Undo banner | Top of the Contact Manager page | *Undo merge* / *Forget* for the newest merge record |
 | `contact-detail-section` slot | Inside an open contact | A *Duplicate check* block with a *Review duplicates* button |
 | Create/update hooks | After a contact is saved | A non-blocking warning when the saved contact looks like an existing one |
-| `plugin-dialog` slot | Modal, opened by all of the above | The review/merge dialog — the only place that deletes |
+| `plugin-dialog` slot | Modal, opened by all of the above | The review/merge dialog — the only place that deletes, and where a differing name is kept as a nickname |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -286,7 +286,7 @@ selector; `planMerge(group, keepId, choices)` honours that override.
 ### 6.2 Building the patch
 
 `planMerge(group, keepId, choices)` returns
-`{ primary, others, patch, added, changed }`:
+`{ primary, others, patch, added, changed, nameSuggestions }`:
 
 * `patch` is a **partial JSContact card** for `api.contacts.update`. The host
   treats an omitted key as “keep” and `undefined` as “clear”, so the patch
@@ -310,6 +310,14 @@ selector; `planMerge(group, keepId, choices)` honours that override.
   encryption keys, and any client-only field.
 * `added` is the list of everything the merge brings in,
   `[{ field, value, fromId }]`, in the order it would appear.
+* `nameSuggestions` lists the donor names that differ from the kept name
+  (`nameSuggestions(primary, others)` — normalised comparison, no email
+  addresses, no value that is already a nickname). Each one is written to
+  `patch.nicknames` by default, so a merge never silently loses the name a
+  contact was saved under. `choices.nicknames[normalisedName] = 'drop'` keeps
+  it out; the dialog's *Use it as the name* option sets `choices.name`
+  instead, and a name that ends up as the contact's name is never also added
+  as a nickname.
 * `conflictFields(plan)` lists the conflicting single-value fields with their
   current value and every donor option, so the dialog can render the
   *Resolve differences* pickers.
@@ -433,7 +441,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **100 tests in 9 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **107 tests in 9 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -526,7 +534,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 100 tests, plus any new test you added.
+1. `npm test` passes — all 107 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
