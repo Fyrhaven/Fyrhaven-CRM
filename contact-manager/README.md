@@ -4,6 +4,11 @@ Find, review and merge **duplicate contacts** across all address books, drawn
 entirely with Bulwark's own UI kit so it looks like part of the app. It is
 meant to grow into a general contact-management addon.
 
+> **Direction:** an eWay-CRM-style CRM workspace inside Bulwark — contacts and
+> companies, activities, follow-ups and a pipeline — within what the plugin
+> host allows. The module-by-module map, the phases and the non-goals are in
+> [issue #54](https://github.com/zyntrax/bulwark-plugins/issues/54).
+
 This document is written for **human developers and AI coding assistants**.
 Section 9 (“Working on this plugin”) is the part an AI model should read
 first; section 10 is a compact, machine-checkable contract.
