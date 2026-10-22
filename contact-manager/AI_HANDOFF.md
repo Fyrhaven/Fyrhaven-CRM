@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.6.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: Contact editor with create/edit/delete (v1.6.0), on top of nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.7.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: Contacts page with the 360° profile (v1.7.0), on top of the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.4.0` is the newest GitHub release (v1.3.0 and
   v1.2.0 before it). `main` and `contact-manager` are in step at v1.4.0
   (PRs #45 and #48 merged).
@@ -19,6 +19,16 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Contacts page and 360° profile (v1.7.0)
+
+The second app page (`pageId: 'contacts'`) is the CRM record view.
+`profile.js` holds the pure rules (`filterCards`, `contactTerms`,
+`tasksForContact`, `timelineForContact`); `profile-page.js` renders the list
+plus the profile (details, tags, notes, the duplicate block, recent messages
+from `api.email.search`, open tasks from `api.tasks.list`). The manifest now
+asks for `email:read` and `tasks:read`; both calls are wrapped so a missing
+permission leaves the profile readable with a muted explanation.
 
 ### Contact editor (v1.6.0)
 
@@ -129,9 +139,11 @@ An *How to read this* legend above the groups explains every indicator.
 - `test/watch.test.mjs` - save-time detection and warning, create and edit paths, setting off
 - `test/editor.test.mjs` - draft/card conversions, validation, dirty check
 - `test/ui-editor.test.mjs` - create, validation, cancel, edit and delete
+- `test/profile.test.mjs` - contact search, task and timeline matching
+- `test/ui-profile.test.mjs` - the Contacts page
 - `test/ui-page.test.mjs` - undo banner, Undo merge, Forget
 - `test/bundle.test.mjs` - palette undo entry, undo action toasts
-- Full suite: 128 tests in 11 files
+- Full suite: 142 tests in 13 files
 
 ## Roadmap (GitHub)
 
@@ -276,6 +288,8 @@ contact-manager/
 │   ├── watch.test.mjs     # save-time duplicate warning
 │   ├── editor.test.mjs    # draft/card conversions and validation
 │   ├── ui-editor.test.mjs # the create/edit/delete dialog
+│   ├── profile.test.mjs   # contact search, task and timeline matching
+│   ├── ui-profile.test.mjs # the Contacts page
 │   └── bundle.test.mjs    # the built bundle + locale completeness
 ├── test-utils/
 │   ├── fake-api.mjs       # recording fake of plugin host API
@@ -318,12 +332,11 @@ Hard limits to remember before promising CRM data:
 Shipped so far: v1.2.0 merge preview, v1.3.0 undo, v1.4.0 save-time warning,
 v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete).
 
-**Next: Phase 2 of #54 — #10, the 360° contact profile.** One page per
-contact: the card, tags, notes, duplicates, recent mail from/to the contact
-(`api.email.search`), open tasks mentioning it (`api.tasks.list`), and the
-next meeting. This is the record view the rest of the CRM hangs off. After
-that: #13 smart search, #14 bulk actions, then Phase 3 (#22 companies, #36
-follow-up tasks, #38 notes).
+**Phase 2 has started:** v1.7.0 shipped the Contacts page with the 360°
+profile (#10) — details, duplicates, recent messages and open tasks. Still
+missing from Phase 2: the next meeting from `api.calendar`, saved searches
+(#13) and bulk actions (#14). Then Phase 3 (#22 companies, #36 follow-up
+tasks, #38 notes).
 
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in

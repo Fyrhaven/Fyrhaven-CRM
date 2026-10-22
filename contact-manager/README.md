@@ -60,6 +60,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
+| `contacts` app-page | Navigation rail → *Contacts* | Searchable contact list and the 360° profile: details, duplicates, recent messages, open tasks |
 | `plugin-dialog` slot | Modal, opened by all of the above and by *New contact* | The review/merge dialog and the **contact editor** — the only places that write contacts |
 
 All four entry points open the same review dialog. One place decides what is
@@ -91,6 +92,8 @@ contact-manager/
 │       ├── editor.js      # the editor's draft <-> JSContact model, validation
 │       ├── editor-dialog.js # the create/edit form (plugin-dialog slot)
 │       ├── open-editor.js # one place that opens the editor and toasts the result
+│       ├── profile.js     # pure search / task / timeline matching for the profile
+│       ├── profile-page.js # the Contacts page: list + 360° profile
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
 │   ├── fixtures.mjs        # card builders
@@ -103,6 +106,8 @@ contact-manager/
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
 │   ├── ui-editor.test.mjs  # the create/edit/delete dialog
+│   ├── profile.test.mjs    # contact search, task and timeline matching
+│   ├── ui-profile.test.mjs # the Contacts page
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
 │   └── bundle.test.mjs     # the built bundle + locale completeness
 ├── test-utils/
@@ -212,6 +217,8 @@ The `name` of a card may also arrive as a flat `fullName` or as
 | `ui:contacts` | The contact list action and the contact detail section |
 | `ui:commands` | The command palette action |
 | `ui:observe` | The `plugin-dialog` slot |
+| `email:read` | The recent messages on the profile |
+| `tasks:read` | The open tasks on the profile |
 
 Every slot and action must be covered by a permission — `test/bundle.test.mjs`
 asserts this, so a new surface without a permission fails the test run.
@@ -463,7 +470,34 @@ pure model; `editor-dialog.js` is the form.
 * **Errors** — a failed write keeps the dialog open, shows the reason and
   leaves the form intact, so the user can retry.
 
-### 6.7 Hidden groups
+### 6.7 The Contacts page (`src/lib/profile-page.js`)
+
+The second app page (`pageId: 'contacts'`) is the CRM record view: a searchable
+contact list on the left, the 360° profile of the selected contact on the
+right.
+
+* **List** — every contact, filtered by `filterCards` (name, nicknames, email
+  addresses and phone numbers, case-insensitive `contains`). The profile of
+  the open contact stays visible while the list is filtered, the way a mail
+  client keeps the open message.
+* **Profile** — name, organisation · job title, tags, email addresses (the
+  preferred one tinted), phones, nickname, address, notes, and the duplicate
+  block from `contact-detail-section` (same component, same *Review* action).
+* **Recent messages** — `api.email.search({ text: <first email or name>,
+  limit: 10 })`, then `timelineForContact` keeps only summaries that mention
+  the contact in sender, recipients or subject.
+* **Open tasks** — `api.tasks.list({ includeCompleted: false })`, then
+  `tasksForContact` keeps the tasks whose title or description mentions the
+  contact's name or an email address.
+* **Degradation** — messages and tasks need the `email:read` and `tasks:read`
+  permissions. A missing permission or a failing call leaves the profile
+  readable and shows one muted line instead of an error.
+
+`profile.js` holds the pure matching rules (`filterCards`, `contactTerms`,
+`tasksForContact`, `timelineForContact`), so the page itself only loads data
+and renders.
+
+### 6.8 Hidden groups
 
 Hidden groups are stored as signatures in `api.storage` under
 `dismissedGroups` (`DISMISSED_KEY`). A hidden group stays out of the scan
@@ -486,7 +520,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **128 tests in 11 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **142 tests in 13 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -579,7 +613,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 128 tests, plus any new test you added.
+1. `npm test` passes — all 142 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
