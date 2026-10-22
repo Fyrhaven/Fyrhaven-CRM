@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.5.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: Nickname preservation on merge (v1.5.0), on top of the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.6.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: Contact editor with create/edit/delete (v1.6.0), on top of nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.4.0` is the newest GitHub release (v1.3.0 and
   v1.2.0 before it). `main` and `contact-manager` are in step at v1.4.0
   (PRs #45 and #48 merged).
@@ -19,6 +19,20 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Contact editor (v1.6.0)
+
+Bulwark has no contact form surface, so the plugin ships its own. `editor.js`
+is the pure model (`emptyDraft`, `draftFromCard`, `cardFromDraft`,
+`validateDraft`, `isDirty`); `editor-dialog.js` is the form. `index.js`
+dispatches the one `plugin-dialog` slot to either the review dialog or the
+editor (`extraProps.editor`), and `open-editor.js` holds `openEditor` /
+`toastEditorResult` for the palette, the page header and the contact details.
+Create posts to `api.contacts.create`, edit patches with
+`api.contacts.update` (empty fields as `undefined` = clear), delete uses
+`api.contacts.remove` behind a confirmation. Validation blocks empty drafts,
+malformed emails, too-short phones and a missing address book; cancelling a
+dirty draft asks first; a failed write keeps the dialog open.
 
 ### Nickname preservation on merge (v1.5.0)
 
@@ -113,9 +127,11 @@ An *How to read this* legend above the groups explains every indicator.
 - `test/ui-dialog.test.mjs` - green/orange indicators, Keep redraw, legend, merge flow, undo record written after a merge
 - `test/undo.test.mjs` - retention window, size limits, eviction, purge, restore, partial restore
 - `test/watch.test.mjs` - save-time detection and warning, create and edit paths, setting off
+- `test/editor.test.mjs` - draft/card conversions, validation, dirty check
+- `test/ui-editor.test.mjs` - create, validation, cancel, edit and delete
 - `test/ui-page.test.mjs` - undo banner, Undo merge, Forget
 - `test/bundle.test.mjs` - palette undo entry, undo action toasts
-- Full suite: 107 tests in 9 files
+- Full suite: 128 tests in 11 files
 
 ## Roadmap (GitHub)
 
@@ -258,6 +274,8 @@ contact-manager/
 │   ├── ui-dialog.test.mjs # the review dialog and detail section
 │   ├── undo.test.mjs      # undo records: retention, restore, partial failures
 │   ├── watch.test.mjs     # save-time duplicate warning
+│   ├── editor.test.mjs    # draft/card conversions and validation
+│   ├── ui-editor.test.mjs # the create/edit/delete dialog
 │   └── bundle.test.mjs    # the built bundle + locale completeness
 ├── test-utils/
 │   ├── fake-api.mjs       # recording fake of plugin host API

@@ -23,6 +23,8 @@ import { warnAboutDuplicates } from './lib/watch.js';
 import { makeManagerPage } from './lib/manager-page.js';
 import { makeReviewDialog } from './lib/review-dialog.js';
 import { makeDuplicateSection } from './lib/detail-section.js';
+import { makeEditorDialog } from './lib/editor-dialog.js';
+import { openEditor, toastEditorResult } from './lib/open-editor.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
 
@@ -77,15 +79,23 @@ async function undoMerge(pluginApi) {
 
 // ─── Slots ─────────────────────────────────────────────────────
 
+// One dialog slot serves two purposes: the review/merge dialog and the
+// contact editor. `extraProps.editor` picks which component the host renders.
+const ReviewDialog = makeReviewDialog(React, api);
+const EditorDialog = makeEditorDialog(React, api);
+function DialogSlot(props) {
+  return props?.editor ? React.createElement(EditorDialog, props) : React.createElement(ReviewDialog, props);
+}
+
 export const slots = {
   // The Contact Manager page at /apps/contact-manager/duplicates.
   'app-page': {
     component: makeManagerPage(React, api),
     shouldShow: () => enabled(api),
   },
-  // Review and merge, opened from the page, the palette and the list toolbar.
+  // Review/merge and the contact editor, both opened with api.ui.openDialog.
   'plugin-dialog': {
-    component: makeReviewDialog(React, api),
+    component: DialogSlot,
   },
   // The duplicate hint in a contact's details.
   'contact-detail-section': {
@@ -114,6 +124,10 @@ export const hooks = {
     }
     if (actionId === 'undo-merge') {
       await undoMerge(api);
+      return;
+    }
+    if (actionId === 'new-contact') {
+      toastEditorResult(api, await openEditor(api, { mode: 'create' }));
     }
   },
 
@@ -144,6 +158,7 @@ async function publish(pluginApi) {
   const pending = undoOn ? await readUndo(pluginApi) : [];
   await pluginApi.ui.setActions('command-palette', [
     { id: 'scan', label: t('action.scanCommand'), icon: 'copy' },
+    { id: 'new-contact', label: t('action.newContact'), icon: 'user-plus' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
   await pluginApi.ui.setActions('contact-list-actions', [

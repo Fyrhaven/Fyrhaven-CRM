@@ -8,6 +8,7 @@ import { bookIds, bookNamesById, contactName, loadBooks, loadCards, matchOptions
 import { LAST_SCAN_KEY, findDuplicateGroups, planMerge, readDismissed, writeDismissed } from './duplicates.js';
 import { memberLabel, mergeLabel, reasonLine, strengthKey, toastMergeResult, undoWindowMinutes } from './labels.js';
 import { readUndo, undoLastMerge, clearUndo } from './undo.js';
+import { openEditor, toastEditorResult } from './open-editor.js';
 
 const FOCUS_COOLDOWN_MS = 5000;
 
@@ -120,6 +121,12 @@ export function makeManagerPage(React, api) {
       void scan();
     };
 
+    const newContact = async () => {
+      const result = await openEditor(api, { mode: 'create' });
+      toastEditorResult(api, result);
+      if (result) void scan();
+    };
+
     const forgetUndo = async () => {
       await clearUndo(api);
       setUndo(null);
@@ -202,6 +209,8 @@ export function makeManagerPage(React, api) {
         title: t('page.title'),
         description: t('page.description'),
         actions: h(Row, { gap: 2 },
+          h(Button, { icon: 'user-plus', variant: 'secondary', onClick: () => void newContact() },
+            t('action.newContact')),
           h(Button, { icon: 'refresh', busy: status === 'scanning', onClick: () => setRun((n) => n + 1) },
             status === 'ready' ? t('action.rescan') : t('action.scan')),
           status === 'ready' && (showHidden || hiddenGroups.length)

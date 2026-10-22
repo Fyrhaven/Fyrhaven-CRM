@@ -6,6 +6,7 @@ import { Stack, Heading, Text, Button, Row, Badge } from '@plugin-host/ui';
 import { matchOptions } from './contacts.js';
 import { findGroupFor } from './duplicates.js';
 import { memberLabel, reasonLine, strengthKey, toastMergeResult } from './labels.js';
+import { openEditor, toastEditorResult } from './open-editor.js';
 
 export function makeDuplicateSection(React, api) {
   const { createElement: h, useCallback, useEffect, useState } = React;
@@ -45,6 +46,12 @@ export function makeDuplicateSection(React, api) {
       if (result) setRun((n) => n + 1); // the dupes are gone — check again
     };
 
+    const edit = async () => {
+      if (!contact) return;
+      toastEditorResult(api, await openEditor(api, { mode: 'edit', contact }));
+      setRun((n) => n + 1); // the saved card may have gained or lost duplicates
+    };
+
     return h(Stack, { gap: 2 },
       h(Heading, { level: 4 }, t('detail.title')),
       state.status === 'checking' ? h(Text, { tone: 'muted' }, t('detail.checking')) : null,
@@ -59,7 +66,9 @@ export function makeDuplicateSection(React, api) {
             ...state.group.members.map((member) =>
               h(Text, { key: member.id, tone: 'muted' }, memberLabel(member))),
             h(Row, { gap: 2 },
-              h(Button, { size: 'sm', icon: 'git-merge', onClick: () => void review() }, t('detail.review'))))
+              h(Button, { size: 'sm', icon: 'git-merge', onClick: () => void review() }, t('detail.review')),
+              h(Button, { size: 'sm', variant: 'secondary', icon: 'edit', onClick: () => void edit() },
+                t('detail.edit'))))
         : null);
   };
 }

@@ -52,7 +52,10 @@ signatures, the last scan summary).
 | Undo banner | Top of the Contact Manager page | *Undo merge* / *Forget* for the newest merge record |
 | `contact-detail-section` slot | Inside an open contact | A *Duplicate check* block with a *Review duplicates* button |
 | Create/update hooks | After a contact is saved | A non-blocking warning when the saved contact looks like an existing one |
-| `plugin-dialog` slot | Modal, opened by all of the above | The review/merge dialog — the only place that deletes, and where a differing name is kept as a nickname |
+| Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
+| *New contact* button | Contact Manager page header | Opens the contact editor (create) |
+| *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
+| `plugin-dialog` slot | Modal, opened by all of the above and by *New contact* | The review/merge dialog and the **contact editor** — the only places that write contacts |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -80,6 +83,9 @@ contact-manager/
 │       ├── detail-section.js# the duplicate hint in contact details
 │       ├── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
 │       ├── undo.js        # merge undo records: retention, restore, purge
+│       ├── editor.js      # the editor's draft <-> JSContact model, validation
+│       ├── editor-dialog.js # the create/edit form (plugin-dialog slot)
+│       ├── open-editor.js # one place that opens the editor and toasts the result
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
 │   ├── fixtures.mjs        # card builders
@@ -90,6 +96,8 @@ contact-manager/
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
+│   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
+│   ├── ui-editor.test.mjs  # the create/edit/delete dialog
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
 │   └── bundle.test.mjs     # the built bundle + locale completeness
 ├── test-utils/
@@ -418,7 +426,39 @@ The `warnOnSave` setting turns the warning off. A failed check is swallowed —
 an unreachable address book must never look like a failed save. The
 `matchByEmail` / `matchByPhone` / `matchByName` switches apply here too.
 
-### 6.6 Hidden groups
+### 6.6 The contact editor (`src/lib/editor.js`, `editor-dialog.js`)
+
+Bulwark has no contact form, so the plugin ships its own. `editor.js` is the
+pure model; `editor-dialog.js` is the form.
+
+* **Draft** — a flat, form-friendly shape: first/last name, nickname, email
+  and phone lists (each with a *preferred* flag), one postal address,
+  organisation, job title, notes, comma-separated tags and the address-book
+  membership. `emptyDraft()`, `draftFromCard(card, books)` and
+  `cardFromDraft(draft, mode)` are all pure.
+* **Writing** — `cardFromDraft` emits only the fields the editor manages, so
+  unmanaged fields survive an edit. An empty value is `undefined`, which the
+  host reads as *clear* on update and ignores on create. Map keys are
+  `e0`/`p0`/`a0`/`o0`/`t0`/`n0`; a preferred entry gets `pref: 1`.
+* **Validation** — `validateDraft(draft, mode)`: a name, an email or a phone
+  is required; emails must look like addresses; a phone needs at least five
+  digits; a new contact needs at least one address book. It returns one
+  `{ field, key }` per field, and the dialog shows the messages in an alert
+  and on the field.
+* **Dirty state** — `isDirty(draft, original)` ignores whitespace and the
+  order of the address books. Cancelling a dirty draft asks first. The
+  address book a new contact starts in is part of the *initial* draft, so
+  opening and closing the dialog never counts as a change.
+* **Delete** — the edit form has a *Delete contact* action behind a
+  confirmation; it is the only way the plugin deletes outside a merge.
+* **Entry points** — the palette and the Contact Manager page open it in
+  create mode, the contact-details section in edit mode. All three go through
+  `openEditor` in `open-editor.js`, and the result toast lives in
+  `toastEditorResult` next to it.
+* **Errors** — a failed write keeps the dialog open, shows the reason and
+  leaves the form intact, so the user can retry.
+
+### 6.7 Hidden groups
 
 Hidden groups are stored as signatures in `api.storage` under
 `dismissedGroups` (`DISMISSED_KEY`). A hidden group stays out of the scan
@@ -441,7 +481,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **107 tests in 9 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **128 tests in 11 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -534,7 +574,7 @@ folder.
 
 A change is complete when:
 
-1. `npm test` passes — all 107 tests, plus any new test you added.
+1. `npm test` passes — all 128 tests, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.

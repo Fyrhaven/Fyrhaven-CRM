@@ -7,6 +7,29 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.6.0] — 2026-10-21
+
+### Added
+
+- **Contact editor (create, edit, delete).** The plugin can now create a
+  contact, change every field it manages, and delete one — all without
+  leaving Bulwark. Opened from the command palette and the Contact Manager
+  page (*New contact*) and from the contact details (*Edit contact*).
+- Fields: first/last name, nickname, multiple email addresses and phone
+  numbers each with a *preferred* flag, one postal address, organisation,
+  job title, notes, tags and address-book membership.
+- **Validation** before writing: a name, email or phone is required, email
+  addresses are checked, phone numbers need at least five digits, and a new
+  contact needs an address book.
+- **Dirty-state protection**: cancelling with unsaved changes asks first.
+- A failed write keeps the dialog open with the reason and the form intact.
+
+### Changed
+
+- The `plugin-dialog` slot now serves two components: the review/merge dialog
+  and the editor (`extraProps.editor` picks which).
+- The command palette gained *New contact*.
+
 ## [1.5.0] — 2026-10-21
 
 ### Added

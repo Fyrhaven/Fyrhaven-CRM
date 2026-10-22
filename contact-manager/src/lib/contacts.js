@@ -10,7 +10,7 @@
 //     addressBookIds: { id: true }, created?, updated? }
 // Maps may also arrive as arrays from imports; both are handled.
 
-const text = (value) => (typeof value === 'string' ? value.trim() : '');
+export const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
 function isAddress(value) {
   const address = text(value);
