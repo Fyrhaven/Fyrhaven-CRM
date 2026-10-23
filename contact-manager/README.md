@@ -50,7 +50,7 @@ signatures, the last scan summary).
 
 | Surface | Where it appears | What it does |
 |---|---|---|
-| `app-page` slot | Navigation rail → *Contact Manager* | Statistics, duplicate groups, hide/restore, multi-select, *Review…* |
+| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts* and *Projects* |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
@@ -60,8 +60,8 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| `contacts` app-page | Navigation rail → *Contacts* | Searchable contact list and the 360° profile: details, company, duplicates, messages, meetings, files and tasks |
-| `projects` app-page | Navigation rail → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list and the 360° profile: details, company, duplicates, messages, meetings, files and tasks |
+| *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | The review/merge dialog, the **contact editor** and the **project editor** — the only places that write |
 
@@ -86,7 +86,8 @@ contact-manager/
 │       ├── contacts.js     # JSContact readers, loaders, settings flags
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
 │       ├── labels.js       # shared display helpers and toasts
-│       ├── manager-page.js # the Contact Manager page (app-page slot)
+│       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
+│       ├── manager-page.js # the Duplicates sub-tab
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
 │       ├── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
@@ -114,6 +115,7 @@ contact-manager/
 │   ├── ui-editor.test.mjs  # the create/edit/delete dialog
 │   ├── profile.test.mjs    # contact search, task and timeline matching
 │   ├── ui-profile.test.mjs # the Contacts page
+│   ├── ui-shell.test.mjs   # the app page sub-tabs
 │   ├── projects.test.mjs   # project model, storage and milestones
 │   ├── ui-projects.test.mjs # the Projects page and the project dialog
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
@@ -483,7 +485,7 @@ pure model; `editor-dialog.js` is the form.
 
 ### 6.7 The Contacts page (`src/lib/profile-page.js`)
 
-The second app page (`pageId: 'contacts'`) is the CRM record view: a searchable
+The *Contacts* sub-tab is the CRM record view: a searchable
 contact list on the left, the 360° profile of the selected contact on the
 right.
 
@@ -532,7 +534,7 @@ is stored under `lastScan` (`LAST_SCAN_KEY`).
 
 ### 6.9 Projects (`src/lib/projects.js`, `projects-page.js`)
 
-The third app page (`pageId: 'projects'`) tracks client work. A project record
+The *Projects* sub-tab tracks client work. A project record
 is `{ schemaVersion, id, name, status, companyId, contactIds, description,
 currency, hourlyRate, createdAt, milestones }` and lives in `api.storage` under
 `projects` (`PROJECTS_KEY`) — **per account and per browser, so it does not
