@@ -2,7 +2,9 @@
 // rules for tasks and messages.
 import { describe, expect, it } from 'vitest';
 import {
-  contactTerms, filterCards, tasksForContact, timelineForContact,
+  attachmentsForMessages, companiesAmong, companyDomains, companyNameOf, companyOf,
+  contactTerms, eventsForContact, filterCards, isCompany, peopleOfCompany,
+  tasksForContact, timelineForContact,
 } from '../src/lib/profile.js';
 import { makeCard } from './fixtures.mjs';
 
@@ -69,5 +71,62 @@ describe('timelineForContact', () => {
   it('returns nothing without terms and tolerates a missing list', () => {
     expect(timelineForContact(messages, makeCard({ id: 'z', name: 'Zoe' }))).toEqual([]);
     expect(timelineForContact(null, ada)).toEqual([]);
+  });
+});
+
+describe('companies', () => {
+  const acme = {
+    id: 'co', kind: 'org', name: { full: 'Acme Ltd' }, keywords: { company: true },
+    onlineServices: { d0: { service: 'domain', uri: 'acme.com' } },
+  };
+  const ana = makeCard({ id: 'ana', name: 'Ana Diaz', emails: ['ana@acme.com'], organizations: { o: { name: 'Acme Ltd' } } });
+  const ben = makeCard({ id: 'ben', name: 'Ben Ito', emails: ['ben@acme.com'] }); // no organization field
+  const other = makeCard({ id: 'z', name: 'Zoe Reed', emails: ['zoe@elsewhere.net'] });
+  const cards = [acme, ana, ben, other];
+
+  it('recognises company records', () => {
+    expect(isCompany(acme)).toBe(true);
+    expect(isCompany(ana)).toBe(false);
+    expect(companyNameOf(acme)).toBe('Acme Ltd');
+    expect(companyNameOf(ana)).toBe('Acme Ltd');
+    expect(companiesAmong(cards).map((card) => card.id)).toEqual(['co']);
+  });
+
+  it('links people by organisation name and by domain', () => {
+    expect(peopleOfCompany(cards, acme).map((card) => card.id)).toEqual(['ana', 'ben']);
+    expect(companyOf(cards, ben)?.id).toBe('co');
+    expect(companyOf(cards, other)).toBeNull();
+  });
+
+  it('derives the domain from the people when the company has none', () => {
+    const bare = { id: 'co2', kind: 'org', name: { full: 'Acme Ltd' } };
+    expect(companyDomains([bare, ana, ben], bare)).toEqual(['acme.com']);
+  });
+});
+
+describe('meetings and files', () => {
+  const ada = makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'] });
+
+  it('keeps the events the contact takes part in', () => {
+    const events = [
+      { id: 'e1', title: 'Kickoff', participants: [{ email: 'ada@example.org' }] },
+      { id: 'e2', title: 'Ada Lovelace review', participants: [] },
+      { id: 'e3', title: 'Unrelated', participants: [{ email: 'x@y.de' }] },
+    ];
+    expect(eventsForContact(events, ada).map((event) => event.id)).toEqual(['e1', 'e2']);
+  });
+
+  it('flattens and de-duplicates the attachments of the messages', () => {
+    const messages = [
+      { id: 'm1', subject: 'Report', receivedAt: '2026-10-01', attachments: [
+        { name: 'q3.pdf', size: 100, type: 'application/pdf', blobId: 'b1' },
+        { name: 'q3.pdf', size: 100, blobId: 'b1' },
+      ] },
+      { id: 'm2', subject: 'Photos', attachments: [{ name: 'q3.pdf', size: 100 }] },
+      { id: 'm3', subject: 'Nothing' },
+    ];
+    const files = attachmentsForMessages(messages);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatchObject({ name: 'q3.pdf', emailId: 'm1', subject: 'Report', type: 'application/pdf' });
   });
 });

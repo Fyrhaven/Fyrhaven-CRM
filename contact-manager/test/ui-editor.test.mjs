@@ -34,7 +34,7 @@ async function renderEditor(api, props) {
   await act(async () => {
     render(React.createElement(Dialog, { ...props, onResult: (value) => { result = value; } }));
   });
-  await waitFor(() => expect(screen.getByLabelText('First name')).toBeTruthy());
+  await waitFor(() => expect(screen.getByLabelText(props.company ? 'Company name' : 'First name')).toBeTruthy());
   return () => result;
 }
 
@@ -158,5 +158,48 @@ describe('contact editor', () => {
 
     await waitFor(() => expect(screen.getByText('Saving failed: offline')).toBeTruthy());
     expect(result()).toBeUndefined();
+  });
+});
+
+describe('company editor', () => {
+  it('creates a company record from the company form', async () => {
+    const api = editorApi();
+    await renderEditor(api, { mode: 'create', company: true, books: BOOKS });
+
+    await type('Company name', 'Acme Ltd');
+    await type('Domains', 'acme.com');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create company' })); });
+
+    await waitFor(() => expect(api.calls('contacts.create')).toHaveLength(1));
+    const card = api.calls('contacts.create')[0].args[0];
+    expect(card.kind).toBe('org');
+    expect(card.name).toEqual({ full: 'Acme Ltd' });
+    expect(Object.values(card.onlineServices).map((entry) => entry.uri)).toEqual(['acme.com']);
+    expect(card.keywords).toEqual({ company: true });
+  });
+
+  it('needs a company name', async () => {
+    const api = editorApi();
+    await renderEditor(api, { mode: 'create', company: true, books: BOOKS });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create company' })); });
+    expect(api.calls('contacts.create')).toHaveLength(0);
+    expect(screen.getAllByText('Enter a company name.').length).toBeGreaterThan(0);
+  });
+
+  it('prefills and saves an existing company', async () => {
+    const company = {
+      id: 'co1', kind: 'org', name: { full: 'Acme Ltd' }, keywords: { company: true },
+      onlineServices: { d0: { service: 'domain', uri: 'acme.com' } }, addressBookIds: { b1: true },
+    };
+    const api = editorApi();
+    await renderEditor(api, { mode: 'edit', company: true, contact: company, books: BOOKS });
+
+    expect(screen.getByLabelText('Company name').value).toBe('Acme Ltd');
+    expect(screen.getByLabelText('Domains').value).toBe('acme.com');
+
+    await type('Company name', 'Acme Group');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save changes' })); });
+    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
+    expect(api.calls('contacts.update')[0].args[1].name).toEqual({ full: 'Acme Group' });
   });
 });
