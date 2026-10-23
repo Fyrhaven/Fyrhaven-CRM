@@ -123,9 +123,11 @@ const refreshMain = () => {
 
 // --- merge the open pull requests into main --------------------------------
 let merged = 0;
+let sawPrs = false;
 for (let round = 0; round < 50; round++) {
   const prs = openPrs();
   if (!prs.length) break;
+  sawPrs = true;
   const onMain = [...new Set(prs.map((pr) => pr.baseRefName))].filter(baseLanded);
   const { ready, blocked } = planShip(prs, ['main', ...onMain]);
   for (const pr of blocked) {
@@ -140,7 +142,9 @@ for (let round = 0; round < 50; round++) {
   }
   if (DRY) break;
 }
-console.log(merged ? `\n${DRY ? 'would merge' : 'merged'} ${merged} pull request(s).` : '\nno open pull requests.');
+if (merged) console.log(`\n${DRY ? 'would merge' : 'merged'} ${merged} pull request(s).`);
+else if (sawPrs) console.log('\nno pull requests were ready to merge.');
+else console.log('\nno open pull requests.');
 
 if (DRY) {
   if (!NO_RELEASE) console.log('[dry-run] would then run: npm run release');
