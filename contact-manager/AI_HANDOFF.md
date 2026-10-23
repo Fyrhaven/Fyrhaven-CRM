@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.9.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: Company profiles (v1.9.0) on top of the activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.10.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: File downloads on the profile (v1.10.0) on top of company profiles (v1.9.0), the activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.9.0` is the newest GitHub release (v1.8.0,
   v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are in
   step at v1.9.0 (PRs #52, #53, #55, #56 and #59 merged).
@@ -352,14 +352,13 @@ Hard limits to remember before promising CRM data:
 Shipped so far: v1.2.0 merge preview, v1.3.0 undo, v1.4.0 save-time warning,
 v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete),
 v1.7.0 Contacts page and 360° profile, v1.8.0 activity tracking (meetings,
-files, company rollup), v1.9.0 company profiles.
+files, company rollup), v1.9.0 company profiles, v1.10.0 file downloads.
 
-**Next: #57 and #58.** #22 (company profiles) shipped in v1.9.0 — companies
-are contacts with `kind: 'org'`, the editor has a company mode and the company
-page shows the linked people and the rolled-up activity. What is left on the
-CRM direction is #57 (projects, milestones, time, expenses — local-only) and
-#58 (files section). Deals/pipeline and custom fields are explicitly out of
-scope.
+**Next: #57.** #22 (company profiles, v1.9.0) and #58 (files, v1.10.0) are
+done — companies are contacts with `kind: 'org'`, and the profile lists and
+saves the attachments of the interaction history. What is left on the CRM
+direction is #57 (projects, milestones, time, expenses — local-only, single
+user). Deals/pipeline and custom fields are explicitly out of scope.
 
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in

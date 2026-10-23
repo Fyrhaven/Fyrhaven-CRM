@@ -163,6 +163,24 @@ export function eventsForContact(events, card) {
 }
 
 /**
+ * A compact, human-readable size for a file — "42 B", "1.5 kB", "2 MB". Empty
+ * for a missing or non-positive size, so the caller can drop that part.
+ */
+export function formatBytes(size) {
+  const bytes = Number(size);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  const units = ['B', 'kB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const shown = unit === 0 ? String(Math.round(value)) : String(Math.round(value * 10) / 10);
+  return `${shown} ${units[unit]}`;
+}
+
+/**
  * Every attachment in a message list, flattened and de-duplicated by name and
  * size, newest message first: `[{ emailId, subject, receivedAt, name, type,
  * size, blobId }]`.
