@@ -7,9 +7,10 @@
 ## Current State
 - **Version**: 1.11.0 (`manifest.json` is the single source of truth; `package.json` matches)
 - **Last changes**: Local projects with milestones as tasks (v1.11.0) on top of file downloads (v1.10.0), company profiles (v1.9.0), the activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
-- **Released**: `contact-manager-v1.10.0` is the newest GitHub release (v1.9.0,
-  v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
-  in step at v1.10.0 (PRs #52, #53, #55, #56, #59 and #62 merged).
+- **Released**: `contact-manager-v1.11.1` is the newest GitHub release (v1.11.0,
+  v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and
+  `contact-manager` are in step at v1.11.1 (PRs #52, #53, #55, #56, #59, #62,
+  #63 and #64 merged).
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
