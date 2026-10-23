@@ -51,7 +51,10 @@ describe('built plugin', () => {
     await plugin.activate(api);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.calls('ui.setPages')[0].args[0])
-      .toEqual([{ id: 'duplicates', title: 'Contact Manager', icon: 'users' }]);
+      .toEqual([
+        { id: 'duplicates', title: 'Contact Manager', icon: 'users' },
+        { id: 'contacts', title: 'Contacts', icon: 'address-book' },
+      ]);
     expect(api.calls('ui.setActions').map((c) => c.args[0]))
       .toEqual(['command-palette', 'contact-list-actions']);
     expect(api.calls('ui.setActions')[0].args[1])

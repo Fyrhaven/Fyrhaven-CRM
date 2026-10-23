@@ -24,6 +24,7 @@ import { makeManagerPage } from './lib/manager-page.js';
 import { makeReviewDialog } from './lib/review-dialog.js';
 import { makeDuplicateSection } from './lib/detail-section.js';
 import { makeEditorDialog } from './lib/editor-dialog.js';
+import { makeProfilePage } from './lib/profile-page.js';
 import { openEditor, toastEditorResult } from './lib/open-editor.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
@@ -79,6 +80,16 @@ async function undoMerge(pluginApi) {
 
 // ─── Slots ─────────────────────────────────────────────────────
 
+// One app-page slot serves two pages: the duplicate manager and the contact
+// profile. The host passes `pageId` to the slot component.
+const ManagerPage = makeManagerPage(React, api);
+const ProfilePage = makeProfilePage(React, api);
+function AppPage(props) {
+  return props?.pageId === 'contacts'
+    ? React.createElement(ProfilePage, props)
+    : React.createElement(ManagerPage, props);
+}
+
 // One dialog slot serves two purposes: the review/merge dialog and the
 // contact editor. `extraProps.editor` picks which component the host renders.
 const ReviewDialog = makeReviewDialog(React, api);
@@ -88,9 +99,9 @@ function DialogSlot(props) {
 }
 
 export const slots = {
-  // The Contact Manager page at /apps/contact-manager/duplicates.
+  // The Contact Manager page and the Contacts (profile) page.
   'app-page': {
-    component: makeManagerPage(React, api),
+    component: AppPage,
     shouldShow: () => enabled(api),
   },
   // Review/merge and the contact editor, both opened with api.ui.openDialog.
@@ -153,7 +164,10 @@ async function publish(pluginApi) {
     return;
   }
   const t = (key) => pluginApi.i18n.t(key);
-  await pluginApi.ui.setPages([{ id: 'duplicates', title: t('page.title'), icon: 'users' }]);
+  await pluginApi.ui.setPages([
+    { id: 'duplicates', title: t('page.title'), icon: 'users' },
+    { id: 'contacts', title: t('page.contactsTitle'), icon: 'address-book' },
+  ]);
   const undoOn = undoWindowMinutes(pluginApi.plugin.settings) > 0;
   const pending = undoOn ? await readUndo(pluginApi) : [];
   await pluginApi.ui.setActions('command-palette', [
