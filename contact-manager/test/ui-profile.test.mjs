@@ -89,6 +89,26 @@ describe('contacts page', () => {
     expect(screen.getByText('No contact matches that search.')).toBeTruthy();
   });
 
+  it('keeps the list and the profile side by side, with the list scrolling in place', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    const split = document.querySelector('[data-pane="split"]');
+    const list = document.querySelector('[data-pane="list"]');
+    const detail = document.querySelector('[data-pane="detail"]');
+
+    // One flex row holding both panes. The split must not depend on the kit
+    // forwarding a `style` prop — the test stand-in drops it, and on a real
+    // host the two panes collapsed into one column.
+    expect(split.style.display).toBe('flex');
+    expect(list.parentElement).toBe(split);
+    expect(detail.parentElement).toBe(split);
+    // The address book scrolls inside its own pane, so a long list cannot
+    // stretch the page and push the profile out of view.
+    expect(list.style.overflowY).toBe('auto');
+    expect(list.style.maxHeight).not.toBe('');
+  });
+
   it('switches the profile when another contact is chosen', async () => {
     const api = profileApi();
     await renderPage(api);
@@ -168,6 +188,18 @@ describe('contacts page', () => {
     // method throws synchronously, before any promise exists to catch.
     const api = profileApi();
     api.calendar = undefined;
+    await renderPage(api);
+
+    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+  });
+
+  it('stays readable when a namespace exists but the method does not', async () => {
+    // The reported production crash: api.email is present, api.email.search is
+    // not, so the call throws "api.email.search is not a function" before any
+    // promise exists — which a bare .catch() cannot see.
+    const api = profileApi();
+    api.email = {};
     await renderPage(api);
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
