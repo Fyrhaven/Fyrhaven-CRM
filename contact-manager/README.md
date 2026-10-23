@@ -87,6 +87,7 @@ contact-manager/
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
 │       ├── labels.js       # shared display helpers and toasts
 │       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
+│       ├── download.js    # hand bytes to the browser as a download (files, project export)
 │       ├── manager-page.js # the Duplicates sub-tab
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
@@ -547,9 +548,21 @@ its state is read back from `api.tasks.list`, so no parallel task store exists.
 junk; deleting a project removes only the local record and leaves its tasks and
 linked contacts alone.
 
-The pure helpers are `emptyProject`, `emptyMilestone`, `normalizeProject`,
-`normalizeProjects`, `validateProject`, `projectsForContact`,
-`projectsForCompany`, `milestoneTaskDraft` and `openMilestoneIds`.
+**Time and expenses** are local too: `timeEntries` (whole minutes, a date, a
+note, a *billable* flag) and `expenses` (an amount, a date, a note, billable).
+`totalMinutes` / `billableMinutes` / `billableExpenses` / `timeAmount` /
+`projectTotal` compute the running totals (rounded to cents) and
+`formatMinutes` / `formatAmount` render them. **Export** (`exportPayload`)
+writes one JSON file per account carrying a `localOnly: true` header;
+**Import** (`parseExport` / `mergeProjects` / `importProjects`) merges such a
+file back in, newest record per id.
+
+The pure helpers are `emptyProject`, `emptyMilestone`, `emptyTimeEntry`,
+`emptyExpense`, `normalizeProject`, `normalizeProjects`, `validateProject`,
+`projectsForContact`, `projectsForCompany`, `milestoneTaskDraft`,
+`openMilestoneIds`, `totalMinutes`, `billableMinutes`, `billableExpenses`,
+`timeAmount`, `projectTotal`, `formatMinutes`, `formatAmount`, `exportPayload`,
+`parseExport` and `mergeProjects`.
 
 ---
 

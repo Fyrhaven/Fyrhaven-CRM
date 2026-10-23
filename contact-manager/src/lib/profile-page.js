@@ -13,6 +13,7 @@ import {
   formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
+import { downloadBlob } from './download.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
@@ -266,20 +267,6 @@ function companyLine(card, cards, t) {
 }
 
 const fileMeta = (file) => [file.type, formatBytes(file.size)].filter(Boolean).join(' · ');
-
-// Hands the bytes to the browser as a download. Nothing is copied to the server
-// (and nothing to api.storage) — the file only ever passes through.
-function downloadBlob(data, name) {
-  if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return;
-  const url = URL.createObjectURL(data);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = name;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
 
 const orgName = (card) => Object.values(card.organizations ?? {})[0]?.name ?? '';
 const titleName = (card) => Object.values(card.titles ?? {})[0]?.name ?? '';

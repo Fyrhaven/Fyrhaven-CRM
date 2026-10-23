@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The Projects page and the project dialog.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
@@ -12,6 +12,12 @@ import { makeCard } from './fixtures.mjs';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
 afterEach(cleanup);
+
+// jsdom has no Blob URL support; the export download needs it.
+const createObjectURL = vi.fn(() => 'blob:test');
+const revokeObjectURL = vi.fn();
+URL.createObjectURL = createObjectURL;
+URL.revokeObjectURL = revokeObjectURL;
 
 const CARDS = [
   makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'] }),
@@ -33,6 +39,15 @@ const PROJECT = {
   hourlyRate: 90,
   createdAt: 0,
   milestones: [{ id: 'm1', title: 'Kickoff', taskId: 't1', due: '2026-11-01' }],
+};
+
+const TIME_PROJECT = {
+  ...PROJECT,
+  timeEntries: [
+    { id: 'te1', at: '2026-10-10', minutes: 60, note: 'Kickoff call', billable: true },
+    { id: 'te2', at: '2026-10-11', minutes: 30, note: 'Internal', billable: false },
+  ],
+  expenses: [{ id: 'ex1', at: '2026-10-12', amount: 12.5, note: 'Domain', billable: true }],
 };
 
 function projectsApi(handlers = {}) {
@@ -114,6 +129,65 @@ describe('projects page', () => {
     await waitFor(() => expect(api.storageSnapshot().projects).toBeUndefined());
     expect(api.calls('tasks.remove')).toHaveLength(0);
     expect(api.calls('toast.success').at(-1).args[0]).toBe('Project deleted.');
+  });
+
+  it('adds time and shows the running totals', async () => {
+    const api = projectsApi();
+    await api.storage.set('projects', [TIME_PROJECT]);
+    await renderPage(api);
+    await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
+
+    // 90 recorded minutes (60 billable) at 90/h plus a 12.50 billable expense
+    expect(screen.getByText('Time: 1 h 30 min · billable 1 h')).toBeTruthy();
+    expect(screen.getByText('Billable 102.50 EUR · expenses 12.50 EUR')).toBeTruthy();
+    expect(screen.getByText('Kickoff call')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Minutes'), { target: { value: '45' } });
+      fireEvent.change(screen.getAllByLabelText('Note')[0], { target: { value: 'Extra' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add time' })); });
+
+    await waitFor(() => expect(api.storageSnapshot().projects[0].timeEntries).toHaveLength(3));
+    expect(api.storageSnapshot().projects[0].timeEntries[2])
+      .toMatchObject({ minutes: 45, note: 'Extra', billable: true });
+  });
+
+  it('adds an expense and removes a time entry', async () => {
+    const api = projectsApi();
+    await api.storage.set('projects', [TIME_PROJECT]);
+    await renderPage(api);
+    await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '7.25' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add expense' })); });
+    await waitFor(() => expect(api.storageSnapshot().projects[0].expenses).toHaveLength(2));
+    expect(api.storageSnapshot().projects[0].expenses[1]).toMatchObject({ amount: 7.25, billable: true });
+
+    // the first Remove button belongs to the first time entry
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0]); });
+    await waitFor(() => expect(api.storageSnapshot().projects[0].timeEntries).toHaveLength(1));
+    expect(api.storageSnapshot().projects[0].timeEntries[0].id).toBe('te2');
+  });
+
+  it('exports the projects as a JSON download', async () => {
+    createObjectURL.mockClear();
+    const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const api = projectsApi();
+      await api.storage.set('projects', [TIME_PROJECT]);
+      await renderPage(api);
+      await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
+
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
+    } finally {
+      click.mockRestore();
+    }
   });
 });
 
