@@ -7,13 +7,10 @@
 ## Current State
 - **Version**: 1.13.2 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
 - **Last changes**: the *Contacts* page layout fixed (v1.13.2) — the two-pane split is now drawn by the plugin instead of the kit; on top of the two reported bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
-- **Released**: `contact-manager-v1.13.1` is the newest GitHub release (v1.13.0,
-  v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0 and
-  v1.5.0 before it). `main` and `contact-manager` are in step (PRs #52, #53,
-  #55, #56, #59, #62, #63, #64, #65, #66 and #67 merged). **v1.13.2 is
-  prepared on `cline/vhdk14wt`** and still needs its PR, the merge into `main`,
-  the mirror sync and `npm run release` — then a handoff commit saying it is
-  released, the way the v1.13.x releases before it were closed out.
+- **Released**: `contact-manager-v1.13.2` is the newest GitHub release (v1.13.1,
+  v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0
+  and v1.5.0 before it). `main` and `contact-manager` are in step (PRs #52,
+  #53, #55, #56, #59, #62, #63, #64, #65, #66, #67 and #69 merged).
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -434,7 +431,10 @@ of scope.
 - **Branches**: `main` is the release branch and carries the current version.
   `contact-manager` mirrors the plugin work and is kept in step with `main`.
   Feature branches are `feat/contact-manager-<feature>` and are merged into
-  `main` through a PR.
+  `main` through a PR. **Only `main` and `contact-manager` are long-lived** —
+  a feature branch is deleted once its PR has landed, so the branch list stays
+  short. Deleting one loses nothing: its commits are in `main` through the
+  merge, and the PR keeps the discussion.
 - **Roadmap**: https://github.com/zyntrax/bulwark-plugins/issues/40 is the
   single roadmap issue; it links every feature issue. Milestones
   `Contact Manager v1.2.0` … `v2.0.0` group them by release.

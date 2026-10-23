@@ -73,7 +73,9 @@ assistant must follow when changing the code.
 
 1. **Merge the work into `main`.** Feature branches (`feat/contact-manager-*`)
    are merged through a pull request, which also closes the shipped roadmap
-   issues. Keep the `contact-manager` mirror branch in step with `main`.
+   issues. Keep the `contact-manager` mirror branch in step with `main`, and
+   delete the merged feature branch — `main` and `contact-manager` are the only
+   long-lived branches.
 2. Bump `version` in the plugin's `manifest.json` (and `package.json`) on
    `main`, and add the matching `CHANGELOG.md` entry — newest on top.
 3. `npm test` — all tests green.
