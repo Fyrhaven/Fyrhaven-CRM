@@ -5,6 +5,8 @@ import {
   readDismissed, writeDismissed,
 } from '../src/lib/duplicates.js';
 import { findDuplicateGroups } from '../src/lib/duplicates.js';
+import { contactName } from '../src/lib/contacts.js';
+import { buildEntry } from '../src/lib/undo.js';
 import { makeCard } from './fixtures.mjs';
 
 const groupOf = (members) => findDuplicateGroups(members, {})[0];
@@ -104,6 +106,53 @@ describe('planMerge', () => {
     const duplicate = { id: 'b', addressBookIds: { b1: true }, emails: { e: { address: 'a@x.de' } }, keywords: { family: true } };
     // the patch is the whole keyword map (the host replaces it wholesale)
     expect(planMerge(groupOf([primary, duplicate])).patch.keywords).toEqual({ work: true, family: true });
+  });
+});
+
+describe('nickname suggestions', () => {
+  const bob = makeCard({ id: 'a', name: 'Bob', emails: ['bob@x.de'] });
+  const robert = makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'] });
+
+  it('suggests a differing name and keeps it as a nickname by default', () => {
+    const plan = planMerge(groupOf([bob, robert]));
+    expect(plan.nameSuggestions.map((s) => s.value)).toEqual(['Robert Smith']);
+    expect(Object.values(plan.patch.nicknames).map((n) => n.name)).toEqual(['Robert Smith']);
+    expect(plan.added.filter((entry) => entry.field === 'nicknames')).toHaveLength(1);
+    // the kept contact's own name is untouched
+    expect(plan.patch.name).toBeUndefined();
+    expect(contactName(plan.primary)).toBe('Bob');
+  });
+
+  it('never suggests an equal name (normalised) or an existing nickname', () => {
+    const same = makeCard({ id: 'b', name: 'bob', emails: ['bob@x.de'] });
+    expect(planMerge(groupOf([bob, same])).nameSuggestions).toEqual([]);
+
+    const withNick = makeCard({ id: 'a', name: 'Bob', emails: ['bob@x.de'], nicknames: { n: { name: 'Robert Smith' } } });
+    expect(planMerge(groupOf([withNick, robert])).nameSuggestions).toEqual([]);
+  });
+
+  it('drops a suggested name when the user says so', () => {
+    const key = planMerge(groupOf([bob, robert])).nameSuggestions[0].key;
+    const plan = planMerge(groupOf([bob, robert]), undefined, { nicknames: { [key]: 'drop' } });
+    expect(plan.patch.nicknames).toBeUndefined();
+    expect(plan.nameSuggestions).toHaveLength(1); // still offered, just not written
+  });
+
+  it('adds the name to an existing nickname map without losing its keys', () => {
+    const withNick = makeCard({ id: 'a', name: 'Bob', emails: ['bob@x.de'], nicknames: { n: { name: 'Bobby' } } });
+    const plan = planMerge(groupOf([withNick, robert]));
+    expect(Object.values(plan.patch.nicknames).map((n) => n.name).sort())
+      .toEqual(['Bobby', 'Robert Smith']);
+    expect(plan.patch.nicknames.n).toEqual({ name: 'Bobby' });
+  });
+
+  it('undo records the nickname the merge added', async () => {
+    const api = fakeApi({ handlers: { 'contacts.update': async () => {}, 'contacts.remove': async () => {} } });
+    const journal = [];
+    await mergeGroups(api, [groupOf([bob, robert])], {}, {}, journal);
+    const entry = buildEntry(journal[0].plan, journal[0].removedCards);
+    // Bob had no nicknames before, so undo clears the whole field
+    expect(entry.absent).toContain('nicknames');
   });
 });
 

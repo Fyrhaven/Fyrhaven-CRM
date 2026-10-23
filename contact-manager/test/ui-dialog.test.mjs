@@ -83,6 +83,50 @@ describe('review dialog', () => {
     expect(api.calls('ui.confirm')[0].args[0].message).toBe('Keeping 1, deleting 1.');
   });
 
+  it('offers the other name as a nickname, and can discard or promote it', async () => {
+    // Same email, different names: "Bob" is kept, "Robert Smith" is the other.
+    const named = () => findDuplicateGroups([
+      makeCard({ id: 'n1', name: 'Bob', emails: ['bob@x.de'] }),
+      makeCard({ id: 'n2', name: 'Robert Smith', emails: ['bob@x.de'] }),
+    ], {})[0];
+    const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [named()], onResult: () => {} }));
+    });
+
+    expect(screen.getByText('Different names')).toBeTruthy();
+    const picker = screen.getByLabelText('“Robert Smith” (from Robert Smith)');
+    expect(picker.value).toBe('nickname');
+    expect(screen.getByText('+ Robert Smith')).toBeTruthy(); // previewed as added
+
+    // discarding it leaves nothing to patch, so only the duplicate is removed
+    await act(async () => { fireEvent.change(picker, { target: { value: 'drop' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge' })); });
+    expect(api.calls('contacts.update')).toHaveLength(0);
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('n2');
+  });
+
+  it('can use the other name as the contact name instead of a nickname', async () => {
+    const named = () => findDuplicateGroups([
+      makeCard({ id: 'n1', name: 'Bob', emails: ['bob@x.de'] }),
+      makeCard({ id: 'n2', name: 'Robert Smith', emails: ['bob@x.de'] }),
+    ], {})[0];
+    const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [named()], onResult: () => {} }));
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('“Robert Smith” (from Robert Smith)'), { target: { value: 'name' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge' })); });
+    const patch = api.calls('contacts.update')[0].args[1];
+    expect(patch.name).toEqual({ full: 'Robert Smith' });
+    expect(patch.nicknames).toBeUndefined();
+  });
+
   it('keeps whoever the selector says', async () => {
     const api = dialogApi({ 'contacts.update': async () => {}, 'contacts.remove': async () => {} });
     const Dialog = makeReviewDialog(React, api);
@@ -142,8 +186,10 @@ describe('review dialog', () => {
 
     const different = screen.getByText('≠ Robert Smith');
     expect(different.getAttribute('data-tone')).toBe('warning');
-    expect(screen.getByText('2 kept · 0 new · 0 changed · 1 not merged')).toBeTruthy();
+    // #49: the differing name is also offered as a nickname, so it counts as new
+    expect(screen.getByText('2 kept · 1 new · 0 changed · 1 not merged')).toBeTruthy();
     expect(screen.getByText('Resolve differences')).toBeTruthy();
+    expect(screen.getByText('Different names')).toBeTruthy();
   });
 
   it('resolves a conflicting field with a value from another contact', async () => {
