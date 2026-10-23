@@ -813,3 +813,16 @@ New ideas become a new issue with the `roadmap` label and a milestone.
 | New feature, new surface, new setting | minor (`1.1.0`) |
 | Bug fix, wording change, internal refactor | patch (`1.0.1`) |
 | Removing a surface, a setting or a permission | major (`2.0.0`) — announce it first |
+
+---
+
+## 12. License
+
+No separate `LICENSE` file is committed in this plugin folder yet. Per the
+[repository README](../README.md#license), the code here is released under the
+**same license as Bulwark Mail** unless stated otherwise; that license is not
+restated in this repository, so confirm it — together with any plugin-store
+terms — before distributing or selling the plugin. `manifest.json` names the
+`author` (`Alexander`); add a `LICENSE` file, and a `license` field beside it,
+once the terms are settled.
+
