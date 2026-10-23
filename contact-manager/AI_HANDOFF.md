@@ -7,13 +7,11 @@
 ## Current State
 - **Version**: 1.14.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
 - **Last changes**: multi-select bulk actions on the Contacts list — merge through the review dialog and an undoable bulk delete (v1.14.0) — plus the search box staying above the scrolling list; on top of the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
-- **Released**: `contact-manager-v1.13.2` is the newest GitHub release (v1.13.1,
-  v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0
-  and v1.5.0 before it). `main` and `contact-manager` are in step (PRs #52,
-  #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69 and #70 merged).
-  **v1.14.0 is prepared on `cline/vhdk14wt`** and still needs its PR, the merge
-  into `main`, the mirror sync and `npm run release` — then a handoff commit
-  saying it is released, the way the releases before it were closed out.
+- **Released**: `contact-manager-v1.14.0` is the newest GitHub release (v1.13.2,
+  v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0,
+  v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are in step (PRs
+  #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70 and #71
+  merged).
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
