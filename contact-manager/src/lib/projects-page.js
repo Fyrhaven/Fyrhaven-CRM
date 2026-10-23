@@ -171,7 +171,7 @@ export function makeProjectsPage(React, api) {
               })))),
             h(Stack, { gap: 4, style: { flex: '1 1 auto', minWidth: '0' } },
               selected
-                ? [projectCard(), milestonesSection()]
+                ? h(React.Fragment, null, projectCard(), milestonesSection())
                 : h(EmptyState, { title: t('projects.select') })))
           : h(EmptyState, {
             title: t('projects.empty'),
