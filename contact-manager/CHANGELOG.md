@@ -7,6 +7,25 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.5.0] — 2026-10-21
+
+### Added
+
+- **The other name is kept as a nickname.** When duplicates carry different
+  names (for example *Bob* and *Robert Smith*), the review dialog now offers
+  the differing name with three choices: *Keep as a nickname* (default),
+  *Use it as the name*, or *Discard it*. The nickname is written in the same
+  `api.contacts.update` that patches the kept contact, so Stalwart keeps the
+  contact findable under both names.
+- The merge preview shows the nickname as a green `+` addition, and the undo
+  record covers it — undoing a merge removes the nickname it added.
+
+### Changed
+
+- `planMerge` returns `nameSuggestions` and writes every accepted name into
+  `patch.nicknames`; a name that becomes the contact's name is never also
+  added as a nickname.
+
 ## [1.4.0] — 2026-10-21
 
 ### Added

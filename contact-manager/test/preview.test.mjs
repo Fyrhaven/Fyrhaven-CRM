@@ -59,7 +59,9 @@ describe('previewFields', () => {
     const twin = makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'], phones: ['+4917612345678'] });
     const fields = previewFields(planMerge(groupOf(kept, twin), 'a'));
 
-    expect(previewCounts(fields)).toEqual({ kept: 3, added: 1, changed: 0, conflicts: 1 });
+    // kept: name, email, note · added: phone + the other name as nickname (#49)
+    // conflicts: the differing name is still reported as not merged
+    expect(previewCounts(fields)).toEqual({ kept: 3, added: 2, changed: 0, conflicts: 1 });
   });
 
   it('offers each conflicting value as a choice for the kept contact', () => {
