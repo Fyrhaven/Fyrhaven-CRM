@@ -259,12 +259,15 @@ because the editor is the prerequisite for every other "manager" feature.
 - Major: Removing surfaces, settings, or permissions (announce first)
 
 ## Release Checklist
-1. bump `version` in `manifest.json` (semver)
-2. add `CHANGELOG.md` entry for that version (newest on top)
-3. `npm test` - all tests green
-4. `npm run package` - rebuild the ZIP
-5. commit the source, then run `npm run release` on `main`
-6. the script packages, tags and uploads the ZIP to GitHub Releases
+1. merge the feature branch into `main` through a PR (closes the roadmap
+   issues) and keep the `contact-manager` mirror branch in step with `main`
+2. bump `version` in `manifest.json` (semver) and `package.json`
+3. add the `CHANGELOG.md` entry for that version (newest on top)
+4. `npm test` - all tests green
+5. commit and push the source on `main`, then run `npm run release`
+6. the script packages, tags and uploads the ZIP to GitHub Releases; it refuses
+   to run when `manifest.json`, `package.json` and the top `CHANGELOG.md` entry
+   disagree
 
 ## Project Structure
 ```
@@ -314,9 +317,11 @@ contact-manager/
 
 1. **Run tests**: `cd contact-manager && npm test` (builds first, then runs vitest suite)
 2. **Build package**: `npm run package` (creates contact-manager.zip)
-3. **Update version**: bump `manifest.json` version and add CHANGELOG entry
-4. **Commit**: source only (the ZIP is a GitHub release asset)
-5. **GitHub**: run `npm run release` on `main`. It tags
+3. **Update version**: bump `manifest.json` version (and `package.json`) and add the CHANGELOG entry
+4. **Merge**: merge the feature branch into `main` through a PR and keep the
+   `contact-manager` mirror branch in step with `main`
+5. **Commit**: source only (the ZIP is a GitHub release asset)
+6. **GitHub**: run `npm run release` on `main`. It tags
    `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
    the ZIP attached; the roadmap and todos live in GitHub issues/milestones.
 
@@ -363,5 +368,10 @@ scope.
   single roadmap issue; it links every feature issue. Milestones
   `Contact Manager v1.2.0` … `v2.0.0` group them by release.
 - **Releases**: tagged `contact-manager-vX.Y.Z`; installable ZIPs are the
-  release assets. The newest release is `contact-manager-v1.4.0`.
+  release assets. The newest release is `contact-manager-v1.9.0`.
+- **Cutting a release**: merge the feature PR(s) into `main`, keep
+  `contact-manager` in step, bump `manifest.json`/`package.json` + `CHANGELOG.md`
+  on `main`, then run `npm run release` — it tags, pushes the tag and uploads
+  the ZIP. The script refuses to run when the manifest, package and top
+  changelog versions disagree.
 - Ship a feature by closing its issue in the release commit/PR.
