@@ -5,13 +5,16 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.14.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: multi-select bulk actions on the Contacts list — merge through the review dialog and an undoable bulk delete (v1.14.0) — plus the search box staying above the scrolling list; on top of the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.14.1 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: the capability probe and a precise unavailable notice (v1.14.1) — the plugin's documented host contract does **not** match a current host: `api.email` exists but has no `search`, so the profile's messages, files, meetings and tasks are inert on a current install, and the probe now reports the method names the host really uses; on top of multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.14.0` is the newest GitHub release (v1.13.2,
   v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0,
   v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are in step (PRs
-  #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70 and #71
-  merged).
+  #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70, #71 and #72
+  merged). **v1.14.1 is prepared on `fix/contact-manager-api-probe`** and still
+  needs its PR, the merge, the mirror sync and `npm run release` — then a
+  handoff commit saying it is released, as the releases before it were closed
+  out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -21,6 +24,40 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### The optional-API contract is not what the docs said (v1.14.1)
+
+Reported from the running webmail: `api2.email.search is not a function`, on the
+**latest** host version. That rules out "the host is too old" — the plugin's
+documented host contract simply does not describe the API a current install
+exposes. `api.email` is present, so it is not a permission-less namespace being
+absent; it is there with no `search` method.
+
+Two consequences, both handled:
+
+- **The notice was guessing.** It said *"Messages, meetings and tasks are
+  unavailable — the plugin may be missing the email, calendar or tasks
+  permission"* whether one API failed or all three, which blames permissions the
+  user may well have granted. `context.degraded` is now the list of pieces that
+  actually came back null, and the notice names only those.
+- **The plugin cannot introspect the host**, so `src/lib/capabilities.js` probes
+  what is really there — `detectCapabilities(api)` returns
+  `{ present, keys, missing }` per optional namespace, and `activate()` logs one
+  line when something is missing:
+
+  ```
+  optional APIs unavailable (email, calendar) — host exposes email: query, send | tasks: create, list | calendar: absent
+  ```
+
+  `keys` is the payload: the method names the host *does* use are what tells a
+  renamed method from a missing one. Silent when nothing is missing.
+
+**Open:** the real names are unknown until that line is read from a live
+install. Do **not** add speculative method-name fallbacks — correct the names in
+`WANTED_METHODS` and the call sites once the probe reports them. If the host has
+no mail API at all, the profile's messages, files, meetings and tasks sections
+are dead weight and should be reconsidered rather than kept as permanently
+degraded.
 
 ### Bulk actions on a selection (v1.14.0)
 

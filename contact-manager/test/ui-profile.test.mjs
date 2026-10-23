@@ -193,7 +193,7 @@ describe('contacts page', () => {
     await renderPage(api);
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Unavailable: Messages, Tasks/)).toBeTruthy());
   });
 
   it('stays readable when the optional APIs are missing entirely', async () => {
@@ -204,7 +204,7 @@ describe('contacts page', () => {
     await renderPage(api);
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Unavailable: Meetings/)).toBeTruthy());
   });
 
   it('stays readable when a namespace exists but the method does not', async () => {
@@ -216,7 +216,7 @@ describe('contacts page', () => {
     await renderPage(api);
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Unavailable: Messages/)).toBeTruthy());
   });
 
   it('stays readable when an optional call returns no promise', async () => {
@@ -227,7 +227,7 @@ describe('contacts page', () => {
     await renderPage(api);
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Unavailable: Meetings, Tasks/)).toBeTruthy());
   });
 
   it('merges a hand-picked selection through the same review dialog', async () => {
