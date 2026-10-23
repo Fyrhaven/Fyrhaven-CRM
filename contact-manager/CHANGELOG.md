@@ -7,6 +7,24 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.7.0] — 2026-10-21
+
+### Added
+
+- **Contacts page with a 360° profile.** A second page lists every contact
+  with a search box over names, nicknames, emails and phones. Selecting one
+  shows its details, tags, notes, the duplicate check, the **recent messages**
+  from and to the contact and the **open tasks** that mention it — the record
+  view the CRM direction (#54) builds on.
+- Messages and tasks come from `api.email.search` and `api.tasks.list`, so the
+  plugin now asks for the `email:read` and `tasks:read` permissions. If either
+  is missing the profile still loads and says so.
+
+### Changed
+
+- The navigation rail now carries two entries: *Contact Manager* (duplicates)
+  and *Contacts* (the profile).
+
 ## [1.6.0] — 2026-10-21
 
 ### Added
