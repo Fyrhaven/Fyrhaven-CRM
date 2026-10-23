@@ -14,6 +14,7 @@ import {
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { downloadBlob } from './download.js';
+import { optionalCall } from './optional.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
@@ -65,13 +66,13 @@ export function makeProfilePage(React, api) {
         ? (companyDomains(cards, selected)[0] || contactName(selected))
         : (email || contactName(selected));
       const messages = text
-        ? api.email.search({ text, limit: 10 }).catch(() => null)
+        ? optionalCall(() => api.email.search({ text, limit: 10 }))
         : Promise.resolve([]);
       const now = new Date();
       const from = new Date(now.getTime() - 180 * 24 * 3600 * 1000).toISOString();
       const to = new Date(now.getTime() + 90 * 24 * 3600 * 1000).toISOString();
-      const tasks = api.tasks.list({ includeCompleted: false }).catch(() => null);
-      const events = api.calendar.getEvents({ from, to }).catch(() => null);
+      const tasks = optionalCall(() => api.tasks.list({ includeCompleted: false }));
+      const events = optionalCall(() => api.calendar.getEvents({ from, to }));
       void Promise.all([messages, tasks, events]).then(([found, open, diary]) => {
         if (!live) return;
         const byId = (items) => [...new Map(items.map((item) => [item.id, item])).values()];

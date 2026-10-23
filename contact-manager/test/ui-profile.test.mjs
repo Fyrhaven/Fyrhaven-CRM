@@ -160,7 +160,29 @@ describe('contacts page', () => {
     await renderPage(api);
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText(/Messages and tasks are unavailable/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+  });
+
+  it('stays readable when the optional APIs are missing entirely', async () => {
+    // An older host that does not expose api.calendar at all: reading the
+    // method throws synchronously, before any promise exists to catch.
+    const api = profileApi();
+    api.calendar = undefined;
+    await renderPage(api);
+
+    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+  });
+
+  it('stays readable when an optional call returns no promise', async () => {
+    const api = profileApi({
+      'tasks.list': () => undefined,
+      'calendar.getEvents': () => undefined,
+    });
+    await renderPage(api);
+
+    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
   });
 
   it('offers the editor from the profile and after creating a contact', async () => {
