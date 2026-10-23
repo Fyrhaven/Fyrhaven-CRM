@@ -7,6 +7,26 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.13.0] — 2026-10-23
+
+### Added
+
+- **Time and expenses per project (#57).** A project now records **time
+  entries** (whole minutes on a date, with a note and a *billable* flag) and
+  **expenses** (an amount, a date, a note, billable). The project card shows
+  the running totals: recorded and billable time, and the billable amount —
+  billable minutes at the hourly rate plus the billable expenses, rounded to
+  cents and shown in the project's currency.
+- **Export and import (#57).** *Export* writes one JSON file holding every
+  project, with a header saying the data lives in one browser only; *Import*
+  merges such a file back in (newest record per id), so the data is never
+  trapped.
+
+### Notes
+
+Everything here stays **local to this browser**; nothing is sent to the server.
+Deleting a project still drops only its local record.
+
 ## [1.12.0] — 2026-10-23
 
 ### Changed
