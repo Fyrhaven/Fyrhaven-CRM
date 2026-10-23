@@ -54,6 +54,7 @@ describe('built plugin', () => {
       .toEqual([
         { id: 'duplicates', title: 'Contact Manager', icon: 'users' },
         { id: 'contacts', title: 'Contacts', icon: 'address-book' },
+        { id: 'projects', title: 'Projects', icon: 'folder' },
       ]);
     expect(api.calls('ui.setActions').map((c) => c.args[0]))
       .toEqual(['command-palette', 'contact-list-actions']);
@@ -62,6 +63,7 @@ describe('built plugin', () => {
         { id: 'scan', label: 'Find duplicate contacts', icon: 'copy' },
         { id: 'new-contact', label: 'New contact', icon: 'user-plus' },
         { id: 'new-company', label: 'New company', icon: 'building' },
+        { id: 'new-project', label: 'New project', icon: 'folder' },
       ]);
     expect(api.calls('ui.setActions')[1].args[1])
       .toEqual([{ id: 'scan-selection', label: 'Find duplicates in selection', icon: 'copy' }]);
@@ -79,7 +81,7 @@ describe('built plugin', () => {
     await plugin.activate(api);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.calls('ui.setActions')[0].args[1].map((action) => action.id))
-      .toEqual(['scan', 'new-contact', 'new-company', 'undo-merge']);
+      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'undo-merge']);
 
     // with the undo window turned off the entry disappears and records are dropped
     const offApi = pluginApi({ undoMinutes: 0 });
@@ -87,7 +89,8 @@ describe('built plugin', () => {
     const offPlugin = load(offApi);
     await offPlugin.activate(offApi);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(offApi.calls('ui.setActions')[0].args[1].map((action) => action.id)).toEqual(['scan', 'new-contact', 'new-company']);
+    expect(offApi.calls('ui.setActions')[0].args[1].map((action) => action.id))
+      .toEqual(['scan', 'new-contact', 'new-company', 'new-project']);
   });
 
   it('the new-contact action opens the editor dialog', async () => {
@@ -97,6 +100,15 @@ describe('built plugin', () => {
     const call = api.calls('ui.openDialog')[0];
     expect(call.args[0]).toMatchObject({ slot: 'plugin-dialog', title: 'New contact' });
     expect(call.args[0].extraProps).toMatchObject({ editor: true, mode: 'create', contact: null });
+  });
+
+  it('the new-project action opens the project dialog', async () => {
+    const api = pluginApi({}, { 'ui.openDialog': async () => null });
+    const plugin = load(api);
+    await plugin.hooks.onAction({ surface: 'command-palette', actionId: 'new-project', context: {} });
+    const call = api.calls('ui.openDialog')[0];
+    expect(call.args[0]).toMatchObject({ slot: 'plugin-dialog', title: 'New project' });
+    expect(call.args[0].extraProps.projectEditor).toMatchObject({ mode: 'create', project: null });
   });
 
   it('the undo action restores the last merge and toasts the outcome', async () => {

@@ -25,7 +25,10 @@ import { makeReviewDialog } from './lib/review-dialog.js';
 import { makeDuplicateSection } from './lib/detail-section.js';
 import { makeEditorDialog } from './lib/editor-dialog.js';
 import { makeProfilePage } from './lib/profile-page.js';
+import { makeProjectsPage } from './lib/projects-page.js';
+import { makeProjectDialog } from './lib/project-dialog.js';
 import { openEditor, toastEditorResult } from './lib/open-editor.js';
+import { openProject, toastProjectResult } from './lib/open-project.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
 
@@ -80,22 +83,27 @@ async function undoMerge(pluginApi) {
 
 // ─── Slots ─────────────────────────────────────────────────────
 
-// One app-page slot serves two pages: the duplicate manager and the contact
-// profile. The host passes `pageId` to the slot component.
+// One app-page slot serves three pages: the duplicate manager, the contact
+// profile and the local projects. The host passes `pageId` to the slot.
 const ManagerPage = makeManagerPage(React, api);
 const ProfilePage = makeProfilePage(React, api);
+const ProjectsPage = makeProjectsPage(React, api);
 function AppPage(props) {
-  return props?.pageId === 'contacts'
-    ? React.createElement(ProfilePage, props)
-    : React.createElement(ManagerPage, props);
+  if (props?.pageId === 'contacts') return React.createElement(ProfilePage, props);
+  if (props?.pageId === 'projects') return React.createElement(ProjectsPage, props);
+  return React.createElement(ManagerPage, props);
 }
 
-// One dialog slot serves two purposes: the review/merge dialog and the
-// contact editor. `extraProps.editor` picks which component the host renders.
+// One dialog slot serves three purposes: the review/merge dialog, the contact
+// editor and the project editor. `extraProps.editor` / `extraProps.projectEditor`
+// pick which component the host renders.
 const ReviewDialog = makeReviewDialog(React, api);
 const EditorDialog = makeEditorDialog(React, api);
+const ProjectDialog = makeProjectDialog(React, api);
 function DialogSlot(props) {
-  return props?.editor ? React.createElement(EditorDialog, props) : React.createElement(ReviewDialog, props);
+  if (props?.editor) return React.createElement(EditorDialog, props);
+  if (props?.projectEditor) return React.createElement(ProjectDialog, props);
+  return React.createElement(ReviewDialog, props);
 }
 
 export const slots = {
@@ -143,6 +151,10 @@ export const hooks = {
     }
     if (actionId === 'new-company') {
       toastEditorResult(api, await openEditor(api, { mode: 'create', company: true }));
+      return;
+    }
+    if (actionId === 'new-project') {
+      toastProjectResult(api, await openProject(api, { mode: 'create' }));
     }
   },
 
@@ -171,6 +183,7 @@ async function publish(pluginApi) {
   await pluginApi.ui.setPages([
     { id: 'duplicates', title: t('page.title'), icon: 'users' },
     { id: 'contacts', title: t('page.contactsTitle'), icon: 'address-book' },
+    { id: 'projects', title: t('page.projectsTitle'), icon: 'folder' },
   ]);
   const undoOn = undoWindowMinutes(pluginApi.plugin.settings) > 0;
   const pending = undoOn ? await readUndo(pluginApi) : [];
@@ -178,6 +191,7 @@ async function publish(pluginApi) {
     { id: 'scan', label: t('action.scanCommand'), icon: 'copy' },
     { id: 'new-contact', label: t('action.newContact'), icon: 'user-plus' },
     { id: 'new-company', label: t('action.newCompany'), icon: 'building' },
+    { id: 'new-project', label: t('action.newProject'), icon: 'folder' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
   await pluginApi.ui.setActions('contact-list-actions', [
