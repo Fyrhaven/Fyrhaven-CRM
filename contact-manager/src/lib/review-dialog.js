@@ -217,7 +217,9 @@ export function makeReviewDialog(React, api) {
                 ariaLabel: `${t('dialog.include')}: ${group.members.map(contactName).join(', ')}`,
                 onChange: (on) => toggle(signature, on),
               }),
-              h(Badge, { tone: group.strength === 'strong' ? 'success' : 'warning' }, t(strengthKey(group))),
+              h(Badge, {
+                tone: group.strength === 'strong' ? 'success' : group.strength === 'manual' ? 'neutral' : 'warning',
+              }, t(strengthKey(group))),
               h(Text, { tone: 'muted' }, t('group.members', { count: group.members.length }))),
             h(Text, { tone: 'muted' }, reasonLine(t, group)),
             h(Field, { label: t('dialog.keep') },

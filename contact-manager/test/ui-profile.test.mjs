@@ -96,6 +96,7 @@ describe('contacts page', () => {
     const split = document.querySelector('[data-pane="split"]');
     const list = document.querySelector('[data-pane="list"]');
     const detail = document.querySelector('[data-pane="detail"]');
+    const scroll = document.querySelector('[data-pane="list-scroll"]');
 
     // One flex row holding both panes. The split must not depend on the kit
     // forwarding a `style` prop — the test stand-in drops it, and on a real
@@ -105,8 +106,20 @@ describe('contacts page', () => {
     expect(detail.parentElement).toBe(split);
     // The address book scrolls inside its own pane, so a long list cannot
     // stretch the page and push the profile out of view.
-    expect(list.style.overflowY).toBe('auto');
-    expect(list.style.maxHeight).not.toBe('');
+    expect(scroll.style.overflowY).toBe('auto');
+    expect(scroll.parentElement).toBe(list);
+  });
+
+  it('keeps the search box out of the scrolling list', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    const scroll = document.querySelector('[data-pane="list-scroll"]');
+    const search = screen.getByLabelText('Search contacts');
+    // The box sits above the scroll area rather than inside it, so it stays
+    // visible however far the address book is scrolled.
+    expect(scroll.contains(search)).toBe(false);
+    expect(search.parentElement).toBe(scroll.parentElement);
   });
 
   it('switches the profile when another contact is chosen', async () => {
@@ -215,6 +228,71 @@ describe('contacts page', () => {
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.getByText(/Messages, meetings and tasks are unavailable/)).toBeTruthy());
+  });
+
+  it('merges a hand-picked selection through the same review dialog', async () => {
+    const api = profileApi({ 'ui.openDialog': async () => ({ merged: 1, removed: 1, failed: 0 }) });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    expect(screen.getByText('2 selected')).toBeTruthy();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge selected' })); });
+
+    const call = api.calls('ui.openDialog')[0];
+    expect(call.args[0].slot).toBe('plugin-dialog');
+    const group = call.args[0].extraProps.groups[0];
+    // a deliberate selection carries no evidence, and the dialog says so
+    expect(group.strength).toBe('manual');
+    expect(group.members.map((card) => card.id).sort()).toEqual(['a', 'g']);
+  });
+
+  it('will not merge fewer than two contacts', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace' })); });
+
+    expect(screen.getByRole('button', { name: 'Merge selected' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(false);
+  });
+
+  it('deletes the selection after a confirmation and keeps it undoable', async () => {
+    const api = profileApi({ 'ui.confirm': async () => true });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete selected' })); });
+
+    await waitFor(() => expect(api.calls('contacts.remove')).toHaveLength(1));
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('g');
+    expect(api.calls('ui.confirm')[0].args[0].danger).toBe(true);
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Deleted 1 contact(s).');
+    // the removal can be undone from the page banner
+    expect(api.storageSnapshot().undoBatches.at(-1).entries[0].removed.map((card) => card.id)).toEqual(['g']);
+  });
+
+  it('keeps the selection when the delete is not confirmed', async () => {
+    const api = profileApi({ 'ui.confirm': async () => false });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete selected' })); });
+
+    expect(api.calls('contacts.remove')).toHaveLength(0);
+    expect(screen.getByText('1 selected')).toBeTruthy();
+  });
+
+  it('clears the selection on demand', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Clear selection' })); });
+
+    expect(screen.queryByText('1 selected')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete selected' })).toBeNull();
   });
 
   it('offers the editor from the profile and after creating a contact', async () => {
