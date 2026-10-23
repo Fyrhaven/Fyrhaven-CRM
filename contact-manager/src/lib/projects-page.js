@@ -14,6 +14,7 @@ import { contactName, loadCards } from './contacts.js';
 import { openProject, toastProjectResult } from './open-project.js';
 import { downloadBlob } from './download.js';
 import { optionalCall } from './optional.js';
+import { CONTENT_PANE, HIDDEN, SPLIT, sidePane } from './layout.js';
 import {
   billableExpenses, billableMinutes, deleteProject, emptyExpense, emptyMilestone,
   emptyTimeEntry, exportPayload, formatAmount, formatMinutes, importProjects,
@@ -317,22 +318,22 @@ export function makeProjectsPage(React, api) {
           h(Button, {
             variant: 'secondary', icon: 'upload', onClick: () => fileRef.current?.click(),
           }, t('projects.import')),
-          h(Input, {
-            ref: fileRef,
-            type: 'file',
-            accept: 'application/json,.json',
-            style: { display: 'none' },
-            'aria-label': t('projects.import'),
-            onChange: importFile,
-          })),
+          h('div', { style: HIDDEN },
+            h(Input, {
+              ref: fileRef,
+              type: 'file',
+              accept: 'application/json,.json',
+              'aria-label': t('projects.import'),
+              onChange: importFile,
+            }))),
       }),
       h(InfoBar, { tone: 'neutral' }, t('projects.localNotice')),
       status === 'loading' ? h(Text, { tone: 'muted' }, t('projects.loading')) : null,
       status === 'error' ? h(EmptyState, { title: t('projects.unavailable') }) : null,
       status === 'ready'
         ? (projects.length
-          ? h(Row, { gap: 4 },
-            h(Stack, { gap: 2, style: { flex: '0 0 280px', minWidth: '220px' } },
+          ? h('div', { 'data-pane': 'split', style: SPLIT },
+            h('div', { 'data-pane': 'list', style: sidePane(280) },
               h(List, { label: t('page.projectsTitle') }, ...projects.map((project) => h(ListRow, {
                 key: project.id,
                 title: project.name,
@@ -340,7 +341,7 @@ export function makeProjectsPage(React, api) {
                 selected: project.id === selectedId,
                 onClick: () => setSelectedId(project.id),
               })))),
-            h(Stack, { gap: 4, style: { flex: '1 1 auto', minWidth: '0' } },
+            h('div', { 'data-pane': 'detail', style: CONTENT_PANE },
               selected
                 ? h(React.Fragment, null, projectCard(), milestonesSection(), timeSection(), expensesSection())
                 : h(EmptyState, { title: t('projects.select') })))

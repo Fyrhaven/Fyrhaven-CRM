@@ -5,14 +5,15 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.13.1 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: two reported bugs fixed (v1.13.1) — the *Contacts* sub-tab crashed when an optional API (`api.calendar` / `api.tasks` / `api.email`) was missing, and new/edited projects were never written to storage; on top of project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
-- **Released**: `contact-manager-v1.13.0` is the newest GitHub release (v1.12.0,
-  v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before
-  it). `main` and `contact-manager` are in step at v1.13.0 (PRs #52, #53, #55,
-  #56, #59, #62, #63, #64, #65 and #66 merged). **v1.13.1 is staged on
-  `cline/vhdk14wt`** and still needs its PR, the merge into `main`, the
-  `contact-manager` mirror sync and `npm run release`.
+- **Version**: 1.13.2 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: the *Contacts* page layout fixed (v1.13.2) — the two-pane split is now drawn by the plugin instead of the kit; on top of the two reported bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Released**: `contact-manager-v1.13.1` is the newest GitHub release (v1.13.0,
+  v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0 and
+  v1.5.0 before it). `main` and `contact-manager` are in step (PRs #52, #53,
+  #55, #56, #59, #62, #63, #64, #65, #66 and #67 merged). **v1.13.2 is
+  prepared on `cline/vhdk14wt`** and still needs its PR, the merge into `main`,
+  the mirror sync and `npm run release` — then a handoff commit saying it is
+  released, the way the v1.13.x releases before it were closed out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -22,6 +23,35 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### The page skeleton is plugin-owned (v1.13.2)
+
+The *Contacts* page built its list-beside-profile layout out of the kit's
+`Row`/`Stack` and sized the panes with `style={{ flex: '0 0 320px' }}`. On a
+real host that collapsed into one column: the contact list ran the full width
+of the page, grew without bound, and pushed the profile (details, duplicate
+check, meetings, files, messages, tasks) off the bottom.
+
+Two assumptions were doing the work, and neither is checkable from this repo:
+that `Row` lays its children out horizontally, and that `Stack`/`Row` forward
+an inline `style` prop to the DOM node. The unit-test stand-in *drops* `style`
+entirely, which is why 220+ green tests never saw it — the third bug in a row
+to hide in that gap, after the optional-API crash and the unsaved projects.
+
+`src/lib/layout.js` now holds the skeleton as plain data — `SPLIT` (a wrapping
+flex row), `sidePane(basis)` (fixed basis, `overflowY: auto`, bounded height so
+a long list scrolls in place), `CONTENT_PANE` (shrinks, stacks its sections) and
+`HIDDEN` — and the pages draw it with plain elements. `data-pane` markers
+(`split`, `list`, `detail`) give the layout tests something stable to assert on.
+
+The kit still draws every piece of *content* inside the panes, so the page keeps
+looking like part of the app. `Row`/`Stack` remain in use for the actions row, a
+card's inner stack and the dialog footer — this is layout only, not a fork.
+
+The *Projects* page used the identical pattern and is fixed the same way, and
+its import `<input type="file">` is now hidden by a wrapper element instead of
+an inline `style` prop on the kit's `Input` (which, if dropped, would surface a
+raw file control in the toolbar).
 
 ### Optional host calls and project persistence (v1.13.1)
 
@@ -387,7 +417,8 @@ v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete),
 v1.7.0 Contacts page and 360° profile, v1.8.0 activity tracking (meetings,
 files, company rollup), v1.9.0 company profiles, v1.10.0 file downloads,
 v1.11.0 local projects, v1.12.0 one tab with sub-tabs, v1.13.0 project
-time/expenses and export, v1.13.1 optional-call crash and project saving fixes.
+time/expenses and export, v1.13.1 optional-call crash and project saving fixes,
+v1.13.2 the plugin-owned two-pane page skeleton.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real

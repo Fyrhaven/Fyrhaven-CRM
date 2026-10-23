@@ -15,6 +15,7 @@ import {
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { downloadBlob } from './download.js';
 import { optionalCall } from './optional.js';
+import { CONTENT_PANE, SPLIT, sidePane } from './layout.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
@@ -172,8 +173,8 @@ export function makeProfilePage(React, api) {
       status === 'loading' ? h(Text, { tone: 'muted' }, t('profile.loading')) : null,
       status === 'error' ? h(EmptyState, { title: t('profile.unavailable') }) : null,
       status === 'ready'
-        ? h(Row, { gap: 4 },
-            h(Stack, { gap: 2, style: { flex: '0 0 320px', minWidth: '240px' } },
+        ? h('div', { 'data-pane': 'split', style: SPLIT },
+            h('div', { 'data-pane': 'list', style: sidePane(320) },
               h(SearchInput, {
                 value: query,
                 label: t('profile.searchLabel'),
@@ -190,7 +191,7 @@ export function makeProfilePage(React, api) {
                 })))
                 : h(Text, { tone: 'muted' }, t('profile.noMatch'))),
             selected
-              ? h(Stack, { gap: 4, style: { flex: '1 1 auto', minWidth: '0' } },
+              ? h('div', { 'data-pane': 'detail', style: CONTENT_PANE },
                   company ? companyCard() : h(Card, null,
                     h(Stack, { gap: 2 },
                       h(Heading, { level: 2 }, contactName(selected) || selected.id),

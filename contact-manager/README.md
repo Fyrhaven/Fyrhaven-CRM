@@ -86,6 +86,7 @@ contact-manager/
 │       ├── contacts.js     # JSContact readers, loaders, settings flags
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
 │       ├── labels.js       # shared display helpers and toasts
+│       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
 │       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
 │       ├── download.js    # hand bytes to the browser as a download (files, project export)
 │       ├── manager-page.js # the Duplicates sub-tab
@@ -121,6 +122,7 @@ contact-manager/
 │   ├── projects.test.mjs   # project model, storage and milestones
 │   ├── ui-projects.test.mjs # the Projects page and the project dialog
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
+│   ├── layout.test.mjs     # the plugin-owned page skeleton
 │   ├── ui-kit.test.mjs     # every @plugin-host/ui name the source imports exists
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
 │   └── bundle.test.mjs     # the built bundle + locale completeness
@@ -599,6 +601,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
+| `test/layout.test.mjs` | The page skeleton: a wrapping flex row, a fixed-basis scrolling side pane, a shrinkable detail pane |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
@@ -677,6 +680,12 @@ folder.
   `optionalCall` from `src/lib/optional.js`. A missing namespace throws
   *synchronously*, which a bare `.catch()` cannot catch and which takes the
   whole page down inside a React effect.
+* **Do not build the page skeleton out of the kit.** `Row` and `Stack` are
+  fine for *content* — an actions row, a card's inner stack, a dialog footer —
+  but whether they forward a `style` prop to the DOM is not part of any
+  contract this plugin can check, and the test stand-in drops it. The
+  two-pane split lives in `src/lib/layout.js` and is drawn with plain
+  elements, so a list can never stretch the page and hide the pane beside it.
 
 ### 9.3 Definition of done
 
@@ -734,6 +743,8 @@ committed `build/` directory.
 | Adding a slot without a permission | The host refuses the surface | Add the permission to `manifest.json` |
 | Calling an optional API directly (`api.calendar.getEvents(...).catch(...)`) | A missing namespace throws synchronously and takes the page down | `optionalCall(() => api.calendar.getEvents(range))` |
 | Letting a dialog decide to write | A pure dialog that returns a draft writes nothing | Write in the `open*` funnel (`openProject`, `openEditor`) |
+| Sizing a pane with `style` on a kit component | The kit may drop the prop; the panes collapse into one column and the list runs away | Draw the skeleton with `layout.js` (plain elements) |
+| Hiding a control with `style` on a kit component | The prop may be dropped and the control appears | Wrap it in a plain element with `HIDDEN` |
 
 ---
 
@@ -784,6 +795,13 @@ Projects (local to this browser)
 UI kit
   every name src/ imports from @plugin-host/ui is exported by the kit stand-in
     (test/ui-kit.test.mjs) — an undefined component crashes a page on render
+
+Page skeleton
+  the two-pane split is drawn with plain elements (src/lib/layout.js), never
+    with `style` on a kit component
+  the Contacts and Projects pages put the list and the detail in one flex row
+  the list pane scrolls inside itself (overflowY: auto, bounded height)
+  the import file input is hidden by a wrapper element, not a kit style prop
   a failing removal is reported, not swallowed
   nothing outside review-dialog.js calls contacts.remove
 ```
