@@ -91,6 +91,50 @@ describe('projects page', () => {
     expect(screen.getByText('Open')).toBeTruthy();
   });
 
+  it('creates a project through the dialog and stores it', async () => {
+    const api = projectsApi({
+      'ui.openDialog': async () => ({ saved: 'created', project: { ...PROJECT, id: 'p9', name: 'Intranet' } }),
+    });
+    await renderPage(api);
+    expect(screen.getByText('No projects yet. Create one to track client work.')).toBeTruthy();
+
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'New project' })[0]); });
+
+    await waitFor(() => expect(api.storageSnapshot().projects).toHaveLength(1));
+    expect(api.storageSnapshot().projects[0]).toMatchObject({ id: 'p9', name: 'Intranet' });
+    // the page reloads, so the new project is listed and selected
+    await waitFor(() => expect(screen.getAllByText('Intranet').length).toBeGreaterThan(0));
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Project created.');
+  });
+
+  it('stores an edited project', async () => {
+    const api = projectsApi({
+      'ui.openDialog': async () => ({ saved: 'updated', project: { ...PROJECT, name: 'Website v2' } }),
+    });
+    await api.storage.set('projects', [PROJECT]);
+    await renderPage(api);
+    await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Edit project' })); });
+
+    await waitFor(() => expect(api.storageSnapshot().projects[0].name).toBe('Website v2'));
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Project updated.');
+  });
+
+  it('reports a storage failure instead of claiming the project was created', async () => {
+    const api = projectsApi({
+      'ui.openDialog': async () => ({ saved: 'created', project: { ...PROJECT, id: 'p9', name: 'Intranet' } }),
+    });
+    api.storage.set = async () => { throw new Error('quota exceeded'); };
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'New project' })[0]); });
+
+    await waitFor(() => expect(api.calls('toast.error')).toHaveLength(1));
+    expect(api.calls('toast.error')[0].args[0]).toBe('Could not save the project: quota exceeded');
+    expect(api.calls('toast.success')).toHaveLength(0);
+  });
+
   it('marks a milestone done when its task is no longer open', async () => {
     const api = projectsApi({ 'tasks.list': async () => [] });
     await api.storage.set('projects', [PROJECT]);

@@ -107,6 +107,16 @@ describe('built plugin', () => {
     expect(call.args[0].extraProps.projectEditor).toMatchObject({ mode: 'create', project: null });
   });
 
+  it('the new-project action stores the project it created', async () => {
+    const api = pluginApi({}, {
+      'ui.openDialog': async () => ({ saved: 'created', project: { id: 'p1', name: 'Website' } }),
+    });
+    const plugin = load(api);
+    await plugin.hooks.onAction({ surface: 'command-palette', actionId: 'new-project', context: {} });
+    expect(api.storageSnapshot().projects.map((project) => project.id)).toEqual(['p1']);
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Project created.');
+  });
+
   it('the undo action restores the last merge and toasts the outcome', async () => {
     const api = pluginApi({}, {
       'contacts.create': async () => {},
