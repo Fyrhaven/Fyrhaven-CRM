@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cardKeys, coreNameKey, findDuplicateGroups, nameKey,
+  cardKeys, coreNameKey, findDuplicateGroups, groupFromSelection, nameKey,
   normalizeEmail, normalizeName, normalizePhone,
 } from '../src/lib/duplicates.js';
 import { makeCard } from './fixtures.mjs';
+
+describe('a hand-picked group', () => {
+  it('claims no evidence and signs itself like a detected group', () => {
+    const group = groupFromSelection([makeCard({ id: 'b' }), makeCard({ id: 'a' })]);
+
+    expect(group.strength).toBe('manual');
+    expect(group.reasons).toEqual([]);
+    expect(group.signature).toBe('g:a,b');
+    expect(group.members.map((card) => card.id)).toEqual(['b', 'a']);
+  });
+
+  it('drops anything without an id, so a bad selection cannot be signed', () => {
+    expect(groupFromSelection([{ id: 'a' }, null, {}, { name: 'no id' }]).members).toHaveLength(1);
+    expect(groupFromSelection(null).members).toEqual([]);
+  });
+});
 
 describe('normalisation', () => {
   it('emails: trim + lowercase', () => {

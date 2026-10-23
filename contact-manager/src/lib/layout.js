@@ -24,8 +24,11 @@ export const SPLIT = {
 };
 
 /**
- * A side pane at a fixed basis with its own scrollbar, so a long list scrolls
- * in place instead of stretching the page and hiding the pane beside it.
+ * A side pane at a fixed basis, bounded in height, laid out as a column: the
+ * controls that must stay put (a search box) sit above a scrolling list.
+ *
+ * The pane itself deliberately does **not** scroll. When it did, the search box
+ * scrolled away with the list and could not be reached without scrolling back.
  *
  * @param {number} basis the preferred width in pixels
  */
@@ -34,9 +37,23 @@ export function sidePane(basis) {
     flex: `0 0 ${basis}px`,
     minWidth: '220px',
     maxHeight: '60vh',
-    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0.5rem',
+    minHeight: '0',
   };
 }
+
+/**
+ * The list inside a side pane: this is what scrolls, so everything above it
+ * stays visible however long the list is. `minHeight: 0` is what lets a flex
+ * child shrink and scroll instead of stretching its parent.
+ */
+export const SCROLL_AREA = {
+  flex: '1 1 auto',
+  minHeight: '0',
+  overflowY: 'auto',
+};
 
 /**
  * The pane beside it: takes the rest of the row, is allowed to shrink, and

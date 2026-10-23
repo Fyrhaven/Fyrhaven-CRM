@@ -4,7 +4,11 @@
 import { contactName, primaryEmail, primaryPhone } from './contacts.js';
 import { undoWindowMs } from './undo.js';
 
-export const strengthKey = (group) => (group.strength === 'strong' ? 'group.strongBadge' : 'group.possibleBadge');
+export const strengthKey = (group) => {
+  if (group?.strength === 'strong') return 'group.strongBadge';
+  if (group?.strength === 'manual') return 'group.manualBadge';
+  return 'group.possibleBadge';
+};
 
 const REASON_KEYS = { email: 'group.reasonEmail', phone: 'group.reasonPhone', name: 'group.reasonName' };
 

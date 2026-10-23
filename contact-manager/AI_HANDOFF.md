@@ -5,12 +5,15 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.13.2 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: the *Contacts* page layout fixed (v1.13.2) — the two-pane split is now drawn by the plugin instead of the kit; on top of the two reported bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.14.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: multi-select bulk actions on the Contacts list — merge through the review dialog and an undoable bulk delete (v1.14.0) — plus the search box staying above the scrolling list; on top of the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.13.2` is the newest GitHub release (v1.13.1,
   v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0
   and v1.5.0 before it). `main` and `contact-manager` are in step (PRs #52,
-  #53, #55, #56, #59, #62, #63, #64, #65, #66, #67 and #69 merged).
+  #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69 and #70 merged).
+  **v1.14.0 is prepared on `cline/vhdk14wt`** and still needs its PR, the merge
+  into `main`, the mirror sync and `npm run release` — then a handoff commit
+  saying it is released, the way the releases before it were closed out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -20,6 +23,43 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Bulk actions on a selection (v1.14.0)
+
+The *Contacts* list gained a checkbox per row and a bar that appears once
+something is selected: the count, *Merge selected*, *Delete selected* and
+*Clear selection*. A contact that disappears — deleted, or filtered out — drops
+out of the selection rather than lingering.
+
+The two actions take deliberately different routes, because they carry
+different risk:
+
+- **Merge** does not get its own code. `groupFromSelection(cards)` in
+  `duplicates.js` wraps the selection in a group with `strength: 'manual'`
+  (no evidence is claimed: the plugin matched nothing, the user chose) and the
+  page hands it to `api.ui.openDialog({ slot: 'plugin-dialog' })` exactly as a
+  detected group is handed over. The keep selector, field-by-field conflict
+  resolution, danger confirm and undo therefore all apply unchanged, and the
+  dialog shows *Selected by you* rather than *Certain*/*Possible match*.
+  `strengthKey` in `labels.js` learned the third value for this.
+- **Delete** has no plan to review, so `src/lib/bulk.js` does it: one confirm
+  naming the contacts, then `api.contacts.remove` per card, then a **single undo
+  batch** holding everything that was removed. A card the host refuses to delete
+  is counted in `failed` and reported, never silently skipped. `undoLastMerge`
+  needed one fix for this: a delete-only entry has no kept contact, so
+  `keptId` is empty and the entry must not be counted as a "reverted kept
+  contact" in the toast.
+
+This is the deletion half of #14; bulk tag/address-book edits and bulk export
+stay open.
+
+### The search box stays put (v1.14.0)
+
+`sidePane` made the *pane* scroll, and the search box lived inside it, so
+scrolling the address book carried the box out of view. The pane is now a
+`flex-direction: column` with the box above and a new `SCROLL_AREA` beneath it,
+and only the scroll area scrolls. The pane keeps its bounded height, so a long
+list still cannot stretch the page.
 
 ### The page skeleton is plugin-owned (v1.13.2)
 
@@ -415,13 +455,16 @@ v1.7.0 Contacts page and 360° profile, v1.8.0 activity tracking (meetings,
 files, company rollup), v1.9.0 company profiles, v1.10.0 file downloads,
 v1.11.0 local projects, v1.12.0 one tab with sub-tabs, v1.13.0 project
 time/expenses and export, v1.13.1 optional-call crash and project saving fixes,
-v1.13.2 the plugin-owned two-pane page skeleton.
+v1.13.2 the plugin-owned two-pane page skeleton, v1.14.0 bulk merge and delete
+on a hand-picked selection plus the fixed search box.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real
 tasks; time and expense entries are still open). What is left on the near
 roadmap is the rest of the v1.3.0 milestone: #13 (smart search and saved
-searches), #14 (bulk actions), #12 (contact groups) and #15 (avatars). #11
+searches), #14 (bulk actions — the merge and delete halves shipped in v1.14.0;
+bulk tag and address-book edits and bulk export are still open), #12 (contact
+groups) and #15 (avatars). #11
 (custom fields) needs a host change and stays parked; deals/pipeline stay out
 of scope.
 
