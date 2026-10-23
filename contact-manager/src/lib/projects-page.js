@@ -7,18 +7,21 @@
 // record itself lives in api.storage and does not sync between devices.
 
 import {
-  Badge, Button, Card, EmptyState, Field, Heading, InfoBar, Input, List, ListRow,
+  Badge, Button, Card, Checkbox, EmptyState, Field, Heading, InfoBar, Input, List, ListRow,
   Page, PageHeader, Row, Section, Stack, Text,
 } from '@plugin-host/ui';
 import { contactName, loadCards } from './contacts.js';
 import { openProject, toastProjectResult } from './open-project.js';
+import { downloadBlob } from './download.js';
 import {
-  deleteProject, emptyMilestone, milestoneTaskDraft, newId, openMilestoneIds,
-  readProjects, saveProject,
+  billableExpenses, billableMinutes, deleteProject, emptyExpense, emptyMilestone,
+  emptyTimeEntry, exportPayload, formatAmount, formatMinutes, importProjects,
+  milestoneTaskDraft, newId, openMilestoneIds, parseExport, projectTotal,
+  readProjects, saveProject, totalMinutes,
 } from './projects.js';
 
 export function makeProjectsPage(React, api) {
-  const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
+  const { createElement: h, useCallback, useEffect, useMemo, useRef, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
 
   return function ProjectsPage() {
@@ -28,7 +31,10 @@ export function makeProjectsPage(React, api) {
     const [status, setStatus] = useState('loading');
     const [selectedId, setSelectedId] = useState('');
     const [draft, setDraft] = useState({ title: '', due: '' });
+    const [timeDraft, setTimeDraft] = useState({ at: '', minutes: '', note: '', billable: true });
+    const [expenseDraft, setExpenseDraft] = useState({ at: '', amount: '', note: '', billable: true });
     const [error, setError] = useState('');
+    const fileRef = useRef(null);
 
     const load = useCallback(async () => {
       setStatus('loading');
@@ -106,6 +112,72 @@ export function makeProjectsPage(React, api) {
       void load();
     };
 
+    const addTime = async () => {
+      const minutes = Math.round(Number(timeDraft.minutes) || 0);
+      if (!selected || minutes <= 0) return;
+      await saveProject(api, {
+        ...selected,
+        timeEntries: [...selected.timeEntries, emptyTimeEntry(newId('t'), { ...timeDraft, minutes })],
+      });
+      setTimeDraft({ at: '', minutes: '', note: '', billable: true });
+      void load();
+    };
+
+    const removeTime = async (id) => {
+      if (!selected) return;
+      await saveProject(api, {
+        ...selected,
+        timeEntries: selected.timeEntries.filter((entry) => entry.id !== id),
+      });
+      void load();
+    };
+
+    const addExpense = async () => {
+      const amount = Number(expenseDraft.amount);
+      if (!selected || !Number.isFinite(amount) || amount <= 0) return;
+      await saveProject(api, {
+        ...selected,
+        expenses: [...selected.expenses, emptyExpense(newId('e'), { ...expenseDraft, amount })],
+      });
+      setExpenseDraft({ at: '', amount: '', note: '', billable: true });
+      void load();
+    };
+
+    const removeExpense = async (id) => {
+      if (!selected) return;
+      await saveProject(api, {
+        ...selected,
+        expenses: selected.expenses.filter((entry) => entry.id !== id),
+      });
+      void load();
+    };
+
+    // The portable copy: one JSON file, no server involved.
+    const exportAll = () => {
+      downloadBlob(
+        new Blob([JSON.stringify(exportPayload(projects), null, 2)], { type: 'application/json' }),
+        'contact-manager-projects.json',
+      );
+    };
+
+    const importFile = async (event) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) return;
+      try {
+        const incoming = parseExport(await readText(file));
+        if (!incoming.length) {
+          api.toast.warning(t('projects.importEmpty'));
+          return;
+        }
+        await importProjects(api, incoming);
+        api.toast.success(t('projects.imported', { count: incoming.length }));
+        void load();
+      } catch (err) {
+        api.toast.error(t('projects.importFailed', { reason: String(err?.message ?? err) }));
+      }
+    };
+
     const openIds = new Set(selected ? openMilestoneIds(selected, openTasks) : []);
 
     const projectCard = () => h(Card, null,
@@ -118,6 +190,14 @@ export function makeProjectsPage(React, api) {
         selected.contactIds.length
           ? h(Text, { tone: 'muted' }, t('projects.peopleLine', { names: selected.contactIds.map(nameOf).join(', ') }))
           : null,
+        h(Text, { tone: 'muted' }, t('projects.timeTotal', {
+          time: formatMinutes(totalMinutes(selected)),
+          billable: formatMinutes(billableMinutes(selected)),
+        })),
+        h(Text, { tone: 'muted' }, t('projects.amountTotal', {
+          amount: formatAmount(projectTotal(selected), selected.currency),
+          expenses: formatAmount(billableExpenses(selected), selected.currency),
+        })),
         h(Row, { gap: 2 },
           h(Button, { size: 'sm', icon: 'edit', onClick: () => void edit(selected) }, t('projects.edit')),
           h(Button, { size: 'sm', variant: 'secondary', onClick: () => void remove(selected) }, t('projects.delete')))));
@@ -149,11 +229,102 @@ export function makeProjectsPage(React, api) {
         h(Button, { size: 'sm', onClick: () => void addMilestone() }, t('projects.addMilestone'))),
       error ? h(Text, { tone: 'danger' }, t('projects.milestoneFailed', { reason: error })) : null);
 
+    const timeSection = () => h(Section, {
+      title: t('projects.time'),
+      description: t('projects.timeHint'),
+    },
+      selected.timeEntries.length
+        ? h(Stack, { gap: 1 }, ...selected.timeEntries.map((entry) => h(Row, {
+          key: entry.id, gap: 2, wrap: true,
+        },
+          h(Text, null, formatMinutes(entry.minutes)),
+          entry.at ? h(Text, { tone: 'muted' }, entry.at) : null,
+          entry.note ? h(Text, { tone: 'muted' }, entry.note) : null,
+          h(Badge, { tone: entry.billable ? 'success' : 'neutral' },
+            entry.billable ? t('projects.billable') : t('projects.notBillable')),
+          h(Button, { size: 'sm', variant: 'secondary', onClick: () => void removeTime(entry.id) },
+            t('projects.remove')))))
+        : h(Text, { tone: 'muted' }, t('projects.noTime')),
+      h(Row, { gap: 2, wrap: true },
+        h(Field, { label: t('projects.minutes') },
+          h(Input, {
+            value: timeDraft.minutes,
+            onChange: (event) => setTimeDraft((current) => ({ ...current, minutes: event.target.value })),
+          })),
+        h(Field, { label: t('projects.date') },
+          h(Input, {
+            value: timeDraft.at,
+            onChange: (event) => setTimeDraft((current) => ({ ...current, at: event.target.value })),
+          })),
+        h(Field, { label: t('projects.note') },
+          h(Input, {
+            value: timeDraft.note,
+            onChange: (event) => setTimeDraft((current) => ({ ...current, note: event.target.value })),
+          })),
+        h(Checkbox, {
+          checked: timeDraft.billable,
+          label: t('projects.billable'),
+          onChange: (on) => setTimeDraft((current) => ({ ...current, billable: on })),
+        }),
+        h(Button, { size: 'sm', onClick: () => void addTime() }, t('projects.addTime'))));
+
+    const expensesSection = () => h(Section, {
+      title: t('projects.expenses'),
+      description: t('projects.expensesHint'),
+    },
+      selected.expenses.length
+        ? h(Stack, { gap: 1 }, ...selected.expenses.map((entry) => h(Row, {
+          key: entry.id, gap: 2, wrap: true,
+        },
+          h(Text, null, formatAmount(entry.amount, selected.currency)),
+          entry.at ? h(Text, { tone: 'muted' }, entry.at) : null,
+          entry.note ? h(Text, { tone: 'muted' }, entry.note) : null,
+          h(Badge, { tone: entry.billable ? 'success' : 'neutral' },
+            entry.billable ? t('projects.billable') : t('projects.notBillable')),
+          h(Button, { size: 'sm', variant: 'secondary', onClick: () => void removeExpense(entry.id) },
+            t('projects.remove')))))
+        : h(Text, { tone: 'muted' }, t('projects.noExpenses')),
+      h(Row, { gap: 2, wrap: true },
+        h(Field, { label: t('projects.amount') },
+          h(Input, {
+            value: expenseDraft.amount,
+            onChange: (event) => setExpenseDraft((current) => ({ ...current, amount: event.target.value })),
+          })),
+        h(Field, { label: t('projects.date') },
+          h(Input, {
+            value: expenseDraft.at,
+            onChange: (event) => setExpenseDraft((current) => ({ ...current, at: event.target.value })),
+          })),
+        h(Field, { label: t('projects.note') },
+          h(Input, {
+            value: expenseDraft.note,
+            onChange: (event) => setExpenseDraft((current) => ({ ...current, note: event.target.value })),
+          })),
+        h(Checkbox, {
+          checked: expenseDraft.billable,
+          label: t('projects.billable'),
+          onChange: (on) => setExpenseDraft((current) => ({ ...current, billable: on })),
+        }),
+        h(Button, { size: 'sm', onClick: () => void addExpense() }, t('projects.addExpense'))));
+
     return h(Page, null,
       h(PageHeader, {
         title: t('page.projectsTitle'),
         description: t('page.projectsDescription'),
-        actions: h(Button, { icon: 'plus', onClick: () => void create() }, t('action.newProject')),
+        actions: h(Row, { gap: 2 },
+          h(Button, { icon: 'plus', onClick: () => void create() }, t('action.newProject')),
+          h(Button, { variant: 'secondary', icon: 'download', onClick: exportAll }, t('projects.export')),
+          h(Button, {
+            variant: 'secondary', icon: 'upload', onClick: () => fileRef.current?.click(),
+          }, t('projects.import')),
+          h(Input, {
+            ref: fileRef,
+            type: 'file',
+            accept: 'application/json,.json',
+            style: { display: 'none' },
+            'aria-label': t('projects.import'),
+            onChange: importFile,
+          })),
       }),
       h(InfoBar, { tone: 'neutral' }, t('projects.localNotice')),
       status === 'loading' ? h(Text, { tone: 'muted' }, t('projects.loading')) : null,
@@ -171,7 +342,7 @@ export function makeProjectsPage(React, api) {
               })))),
             h(Stack, { gap: 4, style: { flex: '1 1 auto', minWidth: '0' } },
               selected
-                ? h(React.Fragment, null, projectCard(), milestonesSection())
+                ? h(React.Fragment, null, projectCard(), milestonesSection(), timeSection(), expensesSection())
                 : h(EmptyState, { title: t('projects.select') })))
           : h(EmptyState, {
             title: t('projects.empty'),
@@ -179,4 +350,14 @@ export function makeProjectsPage(React, api) {
           }))
         : null);
   };
+}
+
+// Reads a picked file as text, without a library.
+function readText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('read-failed'));
+    reader.readAsText(file);
+  });
 }
