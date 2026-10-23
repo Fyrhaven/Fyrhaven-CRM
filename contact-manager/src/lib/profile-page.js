@@ -15,7 +15,10 @@ import {
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { downloadBlob } from './download.js';
 import { optionalCall } from './optional.js';
-import { CONTENT_PANE, SPLIT, sidePane } from './layout.js';
+import { CONTENT_PANE, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
+import { groupFromSelection } from './duplicates.js';
+import { toastMergeResult } from './labels.js';
+import { deleteContacts } from './bulk.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
@@ -29,6 +32,7 @@ export function makeProfilePage(React, api) {
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState('');
     const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: false });
+    const [picked, setPicked] = useState(() => new Set());
 
     const load = useCallback(async () => {
       setStatus('loading');
@@ -37,6 +41,11 @@ export function makeProfilePage(React, api) {
         setCards(list);
         setBooks(bookNamesById(addressBooks));
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : list[0]?.id ?? ''));
+        // A deleted or no-longer-matching contact must not stay selected.
+        setPicked((current) => {
+          const next = new Set([...current].filter((id) => list.some((card) => card.id === id)));
+          return next.size === current.size ? current : next;
+        });
         setStatus('ready');
       } catch {
         setStatus('error');
@@ -123,6 +132,58 @@ export function makeProfilePage(React, api) {
       }
     };
 
+    const pickedCards = cards.filter((card) => picked.has(card.id));
+
+    const togglePicked = (id, on) => setPicked((current) => {
+      const next = new Set(current);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+    // A hand-picked selection carries no evidence, so it becomes a group marked
+    // 'manual' and goes through the same review dialog as a duplicate group:
+    // keep selector, conflict resolution, danger confirm and undo included.
+    const mergePicked = async () => {
+      if (pickedCards.length < 2) {
+        api.toast.info(t('contacts.needTwo'));
+        return;
+      }
+      const result = await api.ui.openDialog({
+        title: t('dialog.title'),
+        slot: 'plugin-dialog',
+        extraProps: { groups: [groupFromSelection(pickedCards)] },
+      });
+      toastMergeResult(api, result);
+      setPicked(new Set());
+      void load();
+    };
+
+    // A delete has no plan to review, so it is confirmed here and then handed
+    // to deleteContacts, which keeps an undo batch of everything it removed.
+    const deletePicked = async () => {
+      if (!pickedCards.length) return;
+      const names = pickedCards.map((card) => contactName(card) || card.id);
+      const shown = names.slice(0, 3).join(', ');
+      const ok = await api.ui.confirm({
+        title: t('contacts.deleteTitle', { count: names.length }),
+        message: t('contacts.deleteBody', {
+          names: names.length > 3 ? `${shown} +${names.length - 3}` : shown,
+        }),
+        confirmLabel: t('contacts.deleteConfirm'),
+        danger: true,
+      });
+      if (!ok) return;
+      const result = await deleteContacts(api, pickedCards);
+      if (result.failed) {
+        api.toast.warning(t('contacts.deletePartial', { deleted: result.deleted, failed: result.failed }));
+      } else {
+        api.toast.success(t('contacts.deleted', { count: result.deleted }));
+      }
+      setPicked(new Set());
+      void load();
+    };
+
     const company = selected && isCompany(selected) ? selected : null;
     const people = company ? peopleOfCompany(cards, company) : [];
     const domains = company ? companyDomains(cards, company) : [];
@@ -175,21 +236,45 @@ export function makeProfilePage(React, api) {
       status === 'ready'
         ? h('div', { 'data-pane': 'split', style: SPLIT },
             h('div', { 'data-pane': 'list', style: sidePane(320) },
+              picked.size
+                ? h(Row, { gap: 2, wrap: true },
+                    h(Text, { tone: 'muted' }, t('contacts.selected', { count: picked.size })),
+                    h(Button, {
+                      size: 'sm',
+                      icon: 'git-merge',
+                      disabled: picked.size < 2,
+                      onClick: () => void mergePicked(),
+                    }, t('contacts.mergeSelected')),
+                    h(Button, {
+                      size: 'sm',
+                      variant: 'secondary',
+                      onClick: () => void deletePicked(),
+                    }, t('contacts.deleteSelected')),
+                    h(Button, {
+                      size: 'sm',
+                      variant: 'secondary',
+                      onClick: () => setPicked(new Set()),
+                    }, t('contacts.clearSelection')))
+                : null,
               h(SearchInput, {
                 value: query,
                 label: t('profile.searchLabel'),
                 placeholder: t('profile.searchPlaceholder'),
                 onChange: setQuery,
               }),
-              visible.length
-                ? h(List, { label: t('page.contactsTitle') }, ...visible.map((card) => h(ListRow, {
-                  key: card.id,
-                  title: contactName(card) || card.id,
-                  subtitle: bookLabel(card),
-                  selected: card.id === selectedId,
-                  onClick: () => setSelectedId(card.id),
-                })))
-                : h(Text, { tone: 'muted' }, t('profile.noMatch'))),
+              h('div', { 'data-pane': 'list-scroll', style: SCROLL_AREA },
+                visible.length
+                  ? h(List, { label: t('page.contactsTitle') }, ...visible.map((card) => h(ListRow, {
+                    key: card.id,
+                    title: contactName(card) || card.id,
+                    subtitle: bookLabel(card),
+                    selected: card.id === selectedId,
+                    checked: picked.has(card.id),
+                    onCheck: (on) => togglePicked(card.id, on),
+                    checkLabel: t('contacts.selectRow', { name: contactName(card) || card.id }),
+                    onClick: () => setSelectedId(card.id),
+                  })))
+                  : h(Text, { tone: 'muted' }, t('profile.noMatch')))),
             selected
               ? h('div', { 'data-pane': 'detail', style: CONTENT_PANE },
                   company ? companyCard() : h(Card, null,

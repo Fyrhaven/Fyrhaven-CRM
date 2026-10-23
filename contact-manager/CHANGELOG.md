@@ -7,6 +7,37 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.14.0] — 2026-10-23
+
+### Added
+
+- **Select several contacts and act on them (part of #14).** The *Contacts* list
+  now carries a checkbox per row, and selecting one reveals a bar with the count
+  and three actions:
+  - **Merge selected** — the selection becomes a group and opens the **same
+    review dialog** a detected duplicate group uses, so the keep selector, the
+    field-by-field conflict resolution, the danger confirm and the undo all
+    apply. The dialog labels it *Selected by you* instead of claiming a match
+    the plugin never found, and the action needs at least two contacts.
+  - **Delete selected** — a danger confirm naming the contacts, then a bulk
+    delete that leaves one undo batch, so the page's undo banner restores every
+    removed contact. A contact the host refuses to delete is reported rather
+    than hidden.
+  - **Clear selection.**
+  A contact that disappears — deleted, or filtered out of the list — drops out
+  of the selection instead of lingering in it.
+
+### Fixed
+
+- **The search box stays put.** It sat *inside* the scrolling list, so scrolling
+  the address book carried it out of view. The pane is now a column: the search
+  box fixed above, the list scrolling beneath it. Only the list scrolls.
+
+### Notes
+
+#14 also asks for bulk tag and address-book edits and bulk export; those remain
+open. This release covers the deletion half and the merge path.
+
 ## [1.13.2] — 2026-10-23
 
 ### Fixed
