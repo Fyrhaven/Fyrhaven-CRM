@@ -7,6 +7,19 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.9.0] — 2026-10-22
+
+### Added
+
+- **Company profiles (#22).** Companies are contacts with `kind: 'org'`, so
+  their data lives in the address books and is shared like any contact. The
+  editor gains a company mode (name, domains, address, notes, tags) and the
+  company page shows the domains, the linked people — matched by organisation
+  name or email domain — and the rolled-up messages, meetings, files and open
+  tasks across everyone at the company.
+- The Contacts page gained a *New company* button, and company cards show a
+  *Company* badge that links to their people.
+
 ## [1.8.0] — 2026-10-22
 
 ### Added
