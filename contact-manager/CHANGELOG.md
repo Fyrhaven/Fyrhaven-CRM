@@ -7,6 +7,14 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.11.1] — 2026-10-23
+
+### Fixed
+
+- The Projects page rendered its project card and its milestone list as an
+  array of children without keys, so React logged a "unique key" warning on
+  every render. Both are now children of one fragment.
+
 ## [1.11.0] — 2026-10-23
 
 ### Added
