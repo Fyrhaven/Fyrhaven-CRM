@@ -61,7 +61,9 @@ signatures, the last scan summary).
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
 | `contacts` app-page | Navigation rail → *Contacts* | Searchable contact list and the 360° profile: details, company, duplicates, messages, meetings, files and tasks |
-| `plugin-dialog` slot | Modal, opened by all of the above and by *New contact* | The review/merge dialog and the **contact editor** — the only places that write contacts |
+| `projects` app-page | Navigation rail → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
+| Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | The review/merge dialog, the **contact editor** and the **project editor** — the only places that write |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -94,6 +96,10 @@ contact-manager/
 │       ├── open-editor.js # one place that opens the editor and toasts the result
 │       ├── profile.js     # pure search / task / timeline matching for the profile
 │       ├── profile-page.js # the Contacts page: list + 360° profile
+│       ├── projects.js    # the local project model, storage and milestone helpers
+│       ├── projects-page.js # the Projects page (app-page slot)
+│       ├── project-dialog.js # the create/edit project form (plugin-dialog slot)
+│       ├── open-project.js # one place that opens the project editor
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
 │   ├── fixtures.mjs        # card builders
@@ -108,6 +114,8 @@ contact-manager/
 │   ├── ui-editor.test.mjs  # the create/edit/delete dialog
 │   ├── profile.test.mjs    # contact search, task and timeline matching
 │   ├── ui-profile.test.mjs # the Contacts page
+│   ├── projects.test.mjs   # project model, storage and milestones
+│   ├── ui-projects.test.mjs # the Projects page and the project dialog
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
 │   └── bundle.test.mjs     # the built bundle + locale completeness
 ├── test-utils/
@@ -219,6 +227,7 @@ The `name` of a card may also arrive as a flat `fullName` or as
 | `ui:observe` | The `plugin-dialog` slot |
 | `email:read` | The recent messages on the profile |
 | `tasks:read` | The open tasks on the profile |
+| `tasks:write` | Creating a milestone task from a project |
 | `calendar:read` | The meetings on the profile |
 | `email:blob-read` | Saving an attachment from the profile's Files section |
 
@@ -520,6 +529,25 @@ Hidden groups are stored as signatures in `api.storage` under
 results until it is restored; adding or removing a member changes the
 signature, so the group shows up again on its own. The last scan's summary
 is stored under `lastScan` (`LAST_SCAN_KEY`).
+
+### 6.9 Projects (`src/lib/projects.js`, `projects-page.js`)
+
+The third app page (`pageId: 'projects'`) tracks client work. A project record
+is `{ schemaVersion, id, name, status, companyId, contactIds, description,
+currency, hourlyRate, createdAt, milestones }` and lives in `api.storage` under
+`projects` (`PROJECTS_KEY`) — **per account and per browser, so it does not
+sync between devices**, which the page says out loud.
+
+Milestones are the deliberate exception to "summaries only": each one is
+created as a real task (`api.tasks.create`, title `"Project: Milestone"`) and
+its state is read back from `api.tasks.list`, so no parallel task store exists.
+`normalizeProject` / `normalizeProjects` repair stored records on read and drop
+junk; deleting a project removes only the local record and leaves its tasks and
+linked contacts alone.
+
+The pure helpers are `emptyProject`, `emptyMilestone`, `normalizeProject`,
+`normalizeProjects`, `validateProject`, `projectsForContact`,
+`projectsForCompany`, `milestoneTaskDraft` and `openMilestoneIds`.
 
 ---
 
