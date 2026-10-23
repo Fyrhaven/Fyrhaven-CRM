@@ -71,12 +71,16 @@ assistant must follow when changing the code.
 
 ### Publishing a new version
 
-1. Bump `version` in the plugin's `manifest.json` (and `package.json`).
-2. Add a `CHANGELOG.md` entry for that version — newest on top.
+1. **Merge the work into `main`.** Feature branches (`feat/contact-manager-*`)
+   are merged through a pull request, which also closes the shipped roadmap
+   issues. Keep the `contact-manager` mirror branch in step with `main`.
+2. Bump `version` in the plugin's `manifest.json` (and `package.json`) on
+   `main`, and add the matching `CHANGELOG.md` entry — newest on top.
 3. `npm test` — all tests green.
-4. Commit the source, then run `npm run release` from `main`.
+4. Commit and push `main`, then run `npm run release` from `main`.
 5. The release script rebuilds the ZIP, tags `contact-manager-vX.Y.Z`, pushes
-   the tag and attaches the ZIP to the GitHub release.
+   the tag and attaches the ZIP to the GitHub release. It refuses to run when
+   `manifest.json`, `package.json` and the top `CHANGELOG.md` entry disagree.
 
 ### Roadmap, issues and releases
 

@@ -5,23 +5,27 @@ import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { releaseNotes, checkRelease } from './release-lib.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const REPO_ROOT = path.resolve(ROOT, '..');
 const manifest = JSON.parse(await readFile(path.join(ROOT, 'manifest.json'), 'utf8'));
+const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
 const changelog = await readFile(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
 const tag = `contact-manager-v${manifest.version}`;
 
-/** The CHANGELOG section for this version, without the heading itself. */
-function releaseNotes() {
-  const marker = `## [${manifest.version}]`;
-  const start = changelog.indexOf(marker);
-  if (start === -1) return '';
-  const headingEnd = changelog.indexOf('\n', start);
-  if (headingEnd === -1) return '';
-  const rest = changelog.slice(headingEnd + 1);
-  const end = rest.search(/^## \[/m);
-  return rest.slice(0, end === -1 ? undefined : end).trim();
+// Fail fast on the classic mistake: a commit that ships the feature but forgets
+// the version. The manifest version is the single source of truth, so the top
+// CHANGELOG entry and package.json must agree with it before we tag anything.
+const problems = checkRelease({
+  manifestVersion: manifest.version,
+  packageVersion: pkg.version,
+  changelog,
+});
+if (problems.length) {
+  console.error(`\nCannot release ${manifest.version}:`);
+  for (const problem of problems) console.error(`  - ${problem}`);
+  process.exit(1);
 }
 
 function run(command, args, cwd = ROOT) {
@@ -55,7 +59,7 @@ if (capture('git', ['rev-parse', '-q', '--verify', `refs/tags/${tag}`]).status =
 
 run('git', ['tag', '-a', tag, '-m', `Contact Manager ${manifest.version}`], REPO_ROOT);
 run('git', ['push', 'origin', tag], REPO_ROOT);
-const notes = releaseNotes();
+const notes = releaseNotes(changelog, manifest.version);
 const releaseArgs = [
   'release', 'create', tag,
   path.join(ROOT, 'contact-manager.zip'),

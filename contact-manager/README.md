@@ -643,8 +643,9 @@ npm test                 # 1. build + run the suite
 npm run package          # 2. rebuild the installable ZIP
 ```
 
-Then commit the source and push. Releases are cut from `main` with
-`npm run release`; there is no committed `build/` directory.
+Then commit the source and push. Merge the branch into `main` through a PR
+first; releases are cut from `main` with `npm run release`; there is no
+committed `build/` directory.
 
 ### 9.5 Test-writing conventions
 
@@ -730,16 +731,19 @@ build artifacts are committed.
 
 ### 11.2 Release checklist
 
-1. Bump `version` in `manifest.json` (semver).
-2. Add a `CHANGELOG.md` entry for that version — newest on top, under a
+1. Merge the feature branch into `main` through a pull request — this also
+   closes the shipped roadmap issues — and keep the `contact-manager` mirror
+   branch in step with `main`.
+2. Bump `version` in `manifest.json` (semver) and `package.json` on `main`.
+3. Add a `CHANGELOG.md` entry for that version — newest on top, under a
    `## [x.y.z] — YYYY-MM-DD` heading, split into `### Added`,
    `### Changed`, `### Fixed`, `### Removed` (drop the empty ones).
-3. `npm test` — all tests green.
-4. Commit the source.
-5. Run `npm run release` from `main`. It tests, packages, tags
+4. `npm test` — all tests green.
+5. Commit and push the source on `main`.
+6. Run `npm run release` from `main`. It tests, packages, tags
    `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
-   the ZIP attached.
-6. Close the shipped roadmap issues.
+   the ZIP attached. It stops before tagging if `manifest.json`, `package.json`
+   and the top `CHANGELOG.md` entry disagree.
 
 ### 11.2.1 Roadmap and todos
 
