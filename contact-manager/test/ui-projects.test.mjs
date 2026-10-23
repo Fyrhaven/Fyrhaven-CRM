@@ -135,6 +135,29 @@ describe('projects page', () => {
     expect(api.calls('toast.success')).toHaveLength(0);
   });
 
+  it('lays the project list and the project detail out as a split', async () => {
+    const api = projectsApi();
+    await api.storage.set('projects', [PROJECT]);
+    await renderPage(api);
+    await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
+
+    const split = document.querySelector('[data-pane="split"]');
+    const list = document.querySelector('[data-pane="list"]');
+    const detail = document.querySelector('[data-pane="detail"]');
+    expect(split.style.display).toBe('flex');
+    expect(list.parentElement).toBe(split);
+    expect(detail.parentElement).toBe(split);
+  });
+
+  it('hides the import file input without relying on the kit to forward style', async () => {
+    const api = projectsApi();
+    await renderPage(api);
+
+    const input = document.querySelector('input[type="file"]');
+    expect(input).toBeTruthy();
+    expect(input.parentElement.style.display).toBe('none');
+  });
+
   it('marks a milestone done when its task is no longer open', async () => {
     const api = projectsApi({ 'tasks.list': async () => [] });
     await api.storage.set('projects', [PROJECT]);

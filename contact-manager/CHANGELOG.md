@@ -7,6 +7,34 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.13.2] — 2026-10-23
+
+### Fixed
+
+- **The *Contacts* page lays out as a two-pane split again.** The page built
+  its list-beside-profile skeleton out of the kit's `Row`/`Stack` and sized the
+  panes with an inline `style` prop. On a real host the split collapsed into a
+  single column: the contact list ran the full width of the page, grew without
+  bound and pushed the profile — details, duplicate check, meetings, files,
+  recent messages, open tasks — off the bottom. The skeleton is now drawn by
+  the plugin itself (`src/lib/layout.js`): a plain wrapping flex row, a side
+  pane with its own scrollbar, and a detail pane that can shrink. The kit still
+  draws every piece of content inside the panes, so the page keeps looking like
+  part of the app.
+- **The *Projects* page is fixed the same way** — it used the identical
+  `Row`/`Stack` + `style` pattern, so it collapsed identically.
+- The *Projects* import file input is hidden by a wrapper element instead of an
+  inline `style` prop on the kit's `Input`, so it can no longer surface as a
+  raw file control in the toolbar.
+
+### Notes
+
+The kit's `Row`/`Stack` remain the right choice for *content* (the actions row,
+a card's inner stack, the dialog footer). They are no longer used for the
+page's skeleton, because whether they forward a `style` prop to the DOM is not
+part of any contract the plugin can check — the unit-test stand-in drops it,
+which is why this bug was invisible to the suite.
+
 ## [1.13.1] — 2026-10-23
 
 ### Fixed
