@@ -107,6 +107,34 @@ describe('built plugin', () => {
     expect(call.args[0].extraProps.projectEditor).toMatchObject({ mode: 'create', project: null });
   });
 
+  it('logs once when an optional API is missing, naming what the host exposes', async () => {
+    const api = pluginApi();
+    // the reported shape: the namespace is there, the method the plugin wants is not
+    api.email = { query: async () => [] };
+    const plugin = load(api);
+    await plugin.activate(api);
+
+    const warn = api.calls('log.warn')
+      .map((call) => String(call.args[0]))
+      .find((message) => message.startsWith('optional APIs unavailable'));
+    expect(warn).toContain('optional APIs unavailable (email, tasks, calendar)');
+    expect(warn).toContain('email: query');
+  });
+
+  it('stays quiet when the host exposes every optional API', async () => {
+    const api = pluginApi();
+    api.email = { search: async () => [], getAttachment: async () => null };
+    api.tasks = { list: async () => [], create: async () => ({}) };
+    api.calendar = { getEvents: async () => [] };
+    const plugin = load(api);
+    await plugin.activate(api);
+
+    const noisy = api.calls('log.warn')
+      .map((call) => String(call.args[0]))
+      .filter((message) => message.startsWith('optional APIs unavailable'));
+    expect(noisy).toEqual([]);
+  });
+
   it('the new-project action stores the project it created', async () => {
     const api = pluginApi({}, {
       'ui.openDialog': async () => ({ saved: 'created', project: { id: 'p1', name: 'Website' } }),

@@ -30,6 +30,7 @@ import { makeProjectsPage } from './lib/projects-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { openEditor, toastEditorResult } from './lib/open-editor.js';
 import { openProject, toastProjectResult } from './lib/open-project.js';
+import { detectCapabilities, describeCapabilities, unavailableNamespaces } from './lib/capabilities.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
 
@@ -196,6 +197,20 @@ async function publish(pluginApi) {
 }
 
 export async function activate(pluginApi) {
+  // Say once, loudly, when an optional API is not there — with the method names
+  // the host does expose, which is what makes a wrong method name findable.
+  // Stays silent on a host that has everything.
+  try {
+    const capabilities = detectCapabilities(pluginApi);
+    const unavailable = unavailableNamespaces(capabilities);
+    if (unavailable.length) {
+      pluginApi.log.warn(
+        `optional APIs unavailable (${unavailable.join(', ')}) — host exposes ${describeCapabilities(capabilities)}`,
+      );
+    }
+  } catch (err) {
+    pluginApi.log.warn(`capability check failed: ${err.message}`);
+  }
   // Drop undo records that outlived their window before anything reads them.
   try {
     await readUndo(pluginApi);

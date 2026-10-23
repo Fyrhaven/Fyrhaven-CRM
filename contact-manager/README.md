@@ -89,6 +89,7 @@ contact-manager/
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
 │       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
 │       ├── bulk.js        # bulk delete of a hand-picked selection, with one undo batch
+│       ├── capabilities.js# which optional host APIs this instance really has
 │       ├── download.js    # hand bytes to the browser as a download (files, project export)
 │       ├── manager-page.js # the Duplicates sub-tab
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
@@ -125,6 +126,7 @@ contact-manager/
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
 │   ├── layout.test.mjs     # the plugin-owned page skeleton
 │   ├── bulk.test.mjs       # bulk delete: what it removes, refuses, and undoes
+│   ├── capabilities.test.mjs # the optional-API probe
 │   ├── ui-kit.test.mjs     # every @plugin-host/ui name the source imports exists
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
 │   └── bundle.test.mjs     # the built bundle + locale completeness
@@ -152,6 +154,15 @@ The webmail loads the plugin as **CommonJS** and provides three externals:
 * `@plugin-host` — the plugin API (`api.contacts`, `api.addressBooks`,
   `api.ui`, `api.i18n`, `api.storage`, `api.toast`, `api.log`, `api.plugin`),
 * `@plugin-host/ui` — the UI kit (components only, no logic).
+
+> **The optional APIs are not part of this contract.** `api.email`, `api.tasks`
+> and `api.calendar` are context the plugin can live without, and the host does
+> not guarantee their shape — on a current install `api.email` exists with **no
+> `search` method**, which is what produced `api.email.search is not a function`
+> and used to take the Contacts page down. Everything touching them goes through
+> `optionalCall` (never a bare `.catch()`), `src/lib/capabilities.js` reports at
+> activate time what the host really exposes, and the profile names whichever
+> pieces came back empty.
 
 `src/index.js` exports exactly three things:
 
@@ -605,6 +616,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
 | `test/layout.test.mjs` | The page skeleton: a wrapping flex row, a fixed-basis scrolling side pane, a shrinkable detail pane |
 | `test/bulk.test.mjs` | `deleteContacts`: one undo batch per run, a refusal counted not hidden, and the round trip back through `undoLastMerge` |
+| `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
@@ -795,7 +807,10 @@ Optional host calls
   optionalCall(run) resolves the value, or null when the namespace, the
     method or the promise is missing — it never throws and never rejects
   a missing api.calendar / api.tasks / api.email leaves the Contacts page
-    readable and shows the unavailable notice
+    readable, and the notice names only the pieces that failed
+  detectCapabilities(api) -> per namespace { present, keys, missing }
+  activate() logs one line when something is missing, naming the keys the
+    host does expose; silent when nothing is missing
 
 Projects (local to this browser)
   openProject() stores whatever the dialog returned (create and edit)
