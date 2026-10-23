@@ -745,6 +745,11 @@ build artifacts are committed.
    the ZIP attached. It stops before tagging if `manifest.json`, `package.json`
    and the top `CHANGELOG.md` entry disagree.
 
+`npm run ship` runs steps 1–6 in one command: it merges the open release PRs
+into `main` (retargeting stacked ones), keeps the `contact-manager` mirror in
+step, then runs `npm run release`. `npm run ship -- --dry-run` previews the
+plan without changing anything; `--no-release` stops after the merge.
+
 ### 11.2.1 Roadmap and todos
 
 There is **no local todo file**. The roadmap lives in GitHub:
