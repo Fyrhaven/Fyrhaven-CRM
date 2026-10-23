@@ -7,6 +7,33 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.14.1] — 2026-10-23
+
+### Fixed
+
+- **The unavailable notice says what is actually missing.** It read
+  *"Messages, meetings and tasks are unavailable — the plugin may be missing the
+  email, calendar or tasks permission"* whether one API was missing or all
+  three. It now names only the ones that failed, e.g. *"Unavailable: Messages"*,
+  so the page no longer blames permissions the user may well have granted.
+
+### Added
+
+- **A capability probe on activate.** When an optional API is missing, the
+  plugin logs one line naming what each namespace really exposes:
+
+  ```
+  optional APIs unavailable (email, calendar) — host exposes email: query, send | tasks: create, list | calendar: absent
+  ```
+
+  This exists because the plugin's own documented host contract turned out to
+  describe an API the current host does not have: `api.email` is present on a
+  current install but has no `search` method, which is what produced
+  `api.email.search is not a function`. Reporting the method names the host
+  *does* use is the only way to tell a renamed method from a missing one — the
+  plugin cannot introspect the host from the outside. Silent on a host that has
+  everything.
+
 ## [1.14.0] — 2026-10-23
 
 ### Added

@@ -31,7 +31,7 @@ export function makeProfilePage(React, api) {
     const [status, setStatus] = useState('loading'); // loading | ready | error
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState('');
-    const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: false });
+    const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: [] });
     const [picked, setPicked] = useState(() => new Set());
 
     const load = useCallback(async () => {
@@ -64,11 +64,11 @@ export function makeProfilePage(React, api) {
     // permission or a failing API must leave the profile readable.
     useEffect(() => {
       if (!selected) {
-        setContext({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: false });
+        setContext({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: [] });
         return undefined;
       }
       let live = true;
-      setContext({ status: 'loading', messages: [], tasks: [], events: [], files: [], degraded: false });
+      setContext({ status: 'loading', messages: [], tasks: [], events: [], files: [], degraded: [] });
       const companyRecord = isCompany(selected);
       const relevant = companyRecord ? [selected, ...peopleOfCompany(cards, selected)] : [selected];
       const email = emailEntries(selected)[0]?.address;
@@ -95,7 +95,13 @@ export function makeProfilePage(React, api) {
           tasks: byId(relevant.flatMap((card) => tasksForContact(open ?? [], card))),
           events: byId(relevant.flatMap((card) => eventsForContact(diary ?? [], card))).slice(0, 10),
           files: attachmentsForMessages(timeline).slice(0, 10),
-          degraded: found === null || open === null || diary === null,
+          // Name what is missing rather than guessing: each optional call that
+          // came back null is one of these.
+          degraded: [
+            found === null ? 'email' : null,
+            diary === null ? 'calendar' : null,
+            open === null ? 'tasks' : null,
+          ].filter(Boolean),
         });
       });
       return () => { live = false; };
@@ -338,7 +344,11 @@ export function makeProfilePage(React, api) {
                     ...context.tasks.map((task) => h(Row, { key: task.id, gap: 2, wrap: true },
                       h(Text, null, task.title),
                       task.due ? h(Text, { tone: 'muted' }, formatDate(task.due, api.i18n.getLocale())) : null))),
-                  context.degraded ? h(Text, { tone: 'muted' }, t('profile.degraded')) : null)
+                  context.degraded.length
+                    ? h(Text, { tone: 'muted' }, t('profile.degraded', {
+                        parts: context.degraded.map((part) => t(`profile.degraded.${part}`)).join(', '),
+                      }))
+                    : null)
               : h(EmptyState, { title: t('profile.select') }))
         : null);
   };
