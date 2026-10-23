@@ -7,6 +7,23 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.11.0] — 2026-10-23
+
+### Added
+
+- **Projects (#57).** A *Projects* page tracks client work: a project has a
+  name, a status, a linked company and people, a description, a currency and an
+  hourly rate. **Milestones are real tasks** — each one is created with
+  `api.tasks.create` and its state is read back from `api.tasks.list`, so it
+  appears in your task list like any other task. The new `tasks:write`
+  permission is needed for that.
+
+### Notes
+
+Project records are **local to this browser** (`api.storage`) and do not sync
+between devices; the page says so plainly. Deleting a project drops only that
+local record — its milestone tasks and the linked contacts stay.
+
 ## [1.10.0] — 2026-10-23
 
 ### Added
