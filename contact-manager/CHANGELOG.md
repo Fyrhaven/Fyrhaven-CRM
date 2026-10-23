@@ -7,6 +7,18 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.10.0] — 2026-10-23
+
+### Added
+
+- **Files on the profile (#58).** The *Files* section of a contact and of a
+  company now shows each attachment's type, size and date next to the message
+  it came from, and a *Save* button streams the file to your computer through
+  `api.email.getAttachment`. No copy is kept on the server and nothing is
+  cached locally — the bytes only pass through. The download needs the new
+  `email:blob-read` permission; without it the section stays readable and a
+  failed save shows an error instead of breaking the profile.
+
 ## [1.9.0] — 2026-10-22
 
 ### Added

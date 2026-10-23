@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   attachmentsForMessages, companiesAmong, companyDomains, companyNameOf, companyOf,
-  contactTerms, eventsForContact, filterCards, isCompany, peopleOfCompany,
+  contactTerms, eventsForContact, filterCards, formatBytes, isCompany, peopleOfCompany,
   tasksForContact, timelineForContact,
 } from '../src/lib/profile.js';
 import { makeCard } from './fixtures.mjs';
@@ -130,3 +130,20 @@ describe('meetings and files', () => {
     expect(files[0]).toMatchObject({ name: 'q3.pdf', emailId: 'm1', subject: 'Report', type: 'application/pdf' });
   });
 });
+
+describe('formatBytes', () => {
+  it('shows small sizes in bytes and drops an unknown size', () => {
+    expect(formatBytes(42)).toBe('42 B');
+    expect(formatBytes(0)).toBe('');
+    expect(formatBytes(undefined)).toBe('');
+    expect(formatBytes('nope')).toBe('');
+  });
+
+  it('scales to kB, MB and GB with at most one decimal', () => {
+    expect(formatBytes(1024)).toBe('1 kB');
+    expect(formatBytes(1536)).toBe('1.5 kB');
+    expect(formatBytes(1048576)).toBe('1 MB');
+    expect(formatBytes(2 * 1024 ** 3)).toBe('2 GB');
+  });
+});
+

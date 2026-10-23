@@ -10,7 +10,7 @@ import { bookNamesById, contactName, emailEntries, loadBooks, loadCards, phoneEn
 import { makeDuplicateSection } from './detail-section.js';
 import {
   attachmentsForMessages, companyDomains, companyNameOf, companyOf, eventsForContact, filterCards,
-  isCompany, peopleOfCompany, tasksForContact, timelineForContact,
+  formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 
@@ -107,6 +107,17 @@ export function makeProfilePage(React, api) {
     const createCompany = async () => {
       toastEditorResult(api, await openEditor(api, { mode: 'create', company: true }));
       void load();
+    };
+
+    // Saves an attachment of the interaction history. The bytes are streamed
+    // straight to the browser; nothing is copied to the server or to storage.
+    const saveFile = async (file) => {
+      try {
+        const data = await api.email.getAttachment(file.emailId, file.blobId);
+        downloadBlob(data, file.name);
+      } catch (err) {
+        api.toast.error(t('profile.downloadFailed', { name: file.name, reason: String(err?.message ?? err) }));
+      }
     };
 
     const company = selected && isCompany(selected) ? selected : null;
@@ -216,7 +227,13 @@ export function makeProfilePage(React, api) {
                       : null,
                     ...context.files.map((file) => h(Row, { key: `${file.emailId}-${file.name}`, gap: 2, wrap: true },
                       h(Text, null, file.name),
-                      h(Text, { tone: 'muted' }, file.subject)))),
+                      fileMeta(file) ? h(Text, { tone: 'muted' }, fileMeta(file)) : null,
+                      file.receivedAt
+                        ? h(Text, { tone: 'muted' }, formatDate(file.receivedAt, api.i18n.getLocale()))
+                        : null,
+                      file.subject ? h(Text, { tone: 'muted' }, file.subject) : null,
+                      h(Button, { size: 'sm', variant: 'secondary', onClick: () => void saveFile(file) },
+                        t('profile.download'))))),
                   h(Section, { title: t('profile.messages') },
                     context.status === 'loading' ? h(Text, { tone: 'muted' }, t('profile.loading')) : null,
                     context.status === 'ready' && !context.messages.length
@@ -246,6 +263,22 @@ function companyLine(card, cards, t) {
   return company
     ? t('profile.companyWithPeople', { name, count: people })
     : t('profile.companyLine', { name });
+}
+
+const fileMeta = (file) => [file.type, formatBytes(file.size)].filter(Boolean).join(' · ');
+
+// Hands the bytes to the browser as a download. Nothing is copied to the server
+// (and nothing to api.storage) — the file only ever passes through.
+function downloadBlob(data, name) {
+  if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return;
+  const url = URL.createObjectURL(data);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 const orgName = (card) => Object.values(card.organizations ?? {})[0]?.name ?? '';
