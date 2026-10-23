@@ -103,6 +103,18 @@ function signatureOf(members) {
   return `g:${members.map((m) => m.id).slice().sort().join(',')}`;
 }
 
+/**
+ * One group for a hand-picked set of contacts, so a manual selection can go
+ * through the same review dialog as a detected duplicate group — the keep
+ * selector, the conflict resolution, the danger confirm and the undo all come
+ * with it. `strength` is `'manual'`: the plugin matched nothing here, the user
+ * chose these contacts, so the group claims no evidence.
+ */
+export function groupFromSelection(cards) {
+  const members = (Array.isArray(cards) ? cards : []).filter((card) => card && card.id);
+  return { signature: signatureOf(members), strength: 'manual', reasons: [], members };
+}
+
 // ── Grouping ───────────────────────────────────────────────────
 
 /**

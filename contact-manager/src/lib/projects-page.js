@@ -14,7 +14,7 @@ import { contactName, loadCards } from './contacts.js';
 import { openProject, toastProjectResult } from './open-project.js';
 import { downloadBlob } from './download.js';
 import { optionalCall } from './optional.js';
-import { CONTENT_PANE, HIDDEN, SPLIT, sidePane } from './layout.js';
+import { CONTENT_PANE, HIDDEN, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
 import {
   billableExpenses, billableMinutes, deleteProject, emptyExpense, emptyMilestone,
   emptyTimeEntry, exportPayload, formatAmount, formatMinutes, importProjects,
@@ -334,13 +334,14 @@ export function makeProjectsPage(React, api) {
         ? (projects.length
           ? h('div', { 'data-pane': 'split', style: SPLIT },
             h('div', { 'data-pane': 'list', style: sidePane(280) },
-              h(List, { label: t('page.projectsTitle') }, ...projects.map((project) => h(ListRow, {
-                key: project.id,
-                title: project.name,
-                subtitle: t(`projects.status.${project.status}`),
-                selected: project.id === selectedId,
-                onClick: () => setSelectedId(project.id),
-              })))),
+              h('div', { 'data-pane': 'list-scroll', style: SCROLL_AREA },
+                h(List, { label: t('page.projectsTitle') }, ...projects.map((project) => h(ListRow, {
+                  key: project.id,
+                  title: project.name,
+                  subtitle: t(`projects.status.${project.status}`),
+                  selected: project.id === selectedId,
+                  onClick: () => setSelectedId(project.id),
+                }))))),
             h('div', { 'data-pane': 'detail', style: CONTENT_PANE },
               selected
                 ? h(React.Fragment, null, projectCard(), milestonesSection(), timeSection(), expensesSection())

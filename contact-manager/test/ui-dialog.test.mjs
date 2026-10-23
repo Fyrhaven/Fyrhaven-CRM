@@ -9,7 +9,7 @@ import { fakeApi } from '../test-utils/fake-api.mjs';
 import { SlotPropsContext } from '../test-utils/ui-kit.mjs';
 import { makeReviewDialog } from '../src/lib/review-dialog.js';
 import { makeDuplicateSection } from '../src/lib/detail-section.js';
-import { findDuplicateGroups } from '../src/lib/duplicates.js';
+import { findDuplicateGroups, groupFromSelection } from '../src/lib/duplicates.js';
 import { makeCard } from './fixtures.mjs';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
@@ -27,6 +27,22 @@ function dialogApi(handlers = {}) {
 }
 
 describe('review dialog', () => {
+  it('labels a hand-picked group as a deliberate choice, not a match', async () => {
+    const api = dialogApi();
+    const Dialog = makeReviewDialog(React, api);
+    const picked = groupFromSelection([
+      makeCard({ id: 'a', name: 'Ada Lovelace' }),
+      makeCard({ id: 'g', name: 'Grace Hopper' }),
+    ]);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [picked], onResult: () => {} }));
+    });
+
+    expect(screen.getByText('Selected by you')).toBeTruthy();
+    expect(screen.queryByText('Certain match')).toBeNull();
+    expect(screen.queryByText('Possible match')).toBeNull();
+  });
+
   it('hands Cancel and Merge to the host footer, no buttons in the body', async () => {
     const api = dialogApi();
     const Dialog = makeReviewDialog(React, api);

@@ -136,8 +136,12 @@ export async function undoLastMerge(api, now = Date.now()) {
       const patch = { ...entry.before };
       for (const field of entry.absent) patch[field] = undefined;
       try {
-        if (Object.keys(patch).length) await api.contacts.update(entry.keptId, patch);
-        reverted += 1;
+        // A delete-only entry (a bulk delete) has no kept contact to revert,
+        // so it must not count as one in the toast.
+        if (entry.keptId) {
+          if (Object.keys(patch).length) await api.contacts.update(entry.keptId, patch);
+          reverted += 1;
+        }
         needsRevert = false;
       } catch {
         failed += 1;
