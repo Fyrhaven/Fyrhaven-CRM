@@ -101,7 +101,8 @@ contact-manager/
 │       ├── projects.js    # the local project model, storage and milestone helpers
 │       ├── projects-page.js # the Projects page (app-page slot)
 │       ├── project-dialog.js # the create/edit project form (plugin-dialog slot)
-│       ├── open-project.js # one place that opens the project editor
+│       ├── open-project.js # one place that opens the project editor and saves it
+│       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
 │   ├── fixtures.mjs        # card builders
@@ -119,6 +120,8 @@ contact-manager/
 │   ├── ui-shell.test.mjs   # the app page sub-tabs
 │   ├── projects.test.mjs   # project model, storage and milestones
 │   ├── ui-projects.test.mjs # the Projects page and the project dialog
+│   ├── optional.test.mjs   # optional host calls degrade instead of throwing
+│   ├── ui-kit.test.mjs     # every @plugin-host/ui name the source imports exists
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
 │   └── bundle.test.mjs     # the built bundle + locale completeness
 ├── test-utils/
@@ -595,6 +598,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection |
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
+| `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
+| `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
 `test/bundle.test.mjs` evaluates `dist/index.js` with a `require` that only
@@ -667,12 +672,17 @@ folder.
   summary).
 * **Keep the pure parts pure.** Detection, planning and preview shaping stay
   free of `api` and DOM access so they remain unit-testable.
+* **Never call an optional host API directly.** Mail, tasks and calendar are
+  context the plugin can live without, so every call goes through
+  `optionalCall` from `src/lib/optional.js`. A missing namespace throws
+  *synchronously*, which a bare `.catch()` cannot catch and which takes the
+  whole page down inside a React effect.
 
 ### 9.3 Definition of done
 
 A change is complete when:
 
-1. `npm test` passes — all 148 tests, plus any new test you added.
+1. `npm test` passes — the whole suite, plus any new test you added.
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
@@ -722,6 +732,8 @@ committed `build/` directory.
 | Matching a single-word name | False positives on common surnames | Require two substantial tokens (`coreNameKey`) |
 | Treating a `kind: 'group'` card as a person | Distribution lists get merged | `isMergeable` filters them out |
 | Adding a slot without a permission | The host refuses the surface | Add the permission to `manifest.json` |
+| Calling an optional API directly (`api.calendar.getEvents(...).catch(...)`) | A missing namespace throws synchronously and takes the page down | `optionalCall(() => api.calendar.getEvents(range))` |
+| Letting a dialog decide to write | A pure dialog that returns a draft writes nothing | Write in the `open*` funnel (`openProject`, `openEditor`) |
 
 ---
 
@@ -758,6 +770,20 @@ Safety
   a failing update leaves the duplicates untouched
   a merge leaves an undo record; undo restores before it reverts
   a save-time warning never blocks the save (observer hooks only)
+
+Optional host calls
+  optionalCall(run) resolves the value, or null when the namespace, the
+    method or the promise is missing — it never throws and never rejects
+  a missing api.calendar / api.tasks / api.email leaves the Contacts page
+    readable and shows the unavailable notice
+
+Projects (local to this browser)
+  openProject() stores whatever the dialog returned (create and edit)
+  a failing write is reported and never toasted as a success
+
+UI kit
+  every name src/ imports from @plugin-host/ui is exported by the kit stand-in
+    (test/ui-kit.test.mjs) — an undefined component crashes a page on render
   a failing removal is reported, not swallowed
   nothing outside review-dialog.js calls contacts.remove
 ```
