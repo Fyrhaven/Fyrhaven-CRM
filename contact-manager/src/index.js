@@ -24,6 +24,7 @@ import { makeManagerPage } from './lib/manager-page.js';
 import { makeReviewDialog } from './lib/review-dialog.js';
 import { makeDuplicateSection } from './lib/detail-section.js';
 import { makeEditorDialog } from './lib/editor-dialog.js';
+import { makeAppShell } from './lib/app-shell.js';
 import { makeProfilePage } from './lib/profile-page.js';
 import { makeProjectsPage } from './lib/projects-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
@@ -83,16 +84,13 @@ async function undoMerge(pluginApi) {
 
 // ─── Slots ─────────────────────────────────────────────────────
 
-// One app-page slot serves three pages: the duplicate manager, the contact
-// profile and the local projects. The host passes `pageId` to the slot.
-const ManagerPage = makeManagerPage(React, api);
-const ProfilePage = makeProfilePage(React, api);
-const ProjectsPage = makeProjectsPage(React, api);
-function AppPage(props) {
-  if (props?.pageId === 'contacts') return React.createElement(ProfilePage, props);
-  if (props?.pageId === 'projects') return React.createElement(ProjectsPage, props);
-  return React.createElement(ManagerPage, props);
-}
+// One app-page slot carries the whole plugin: a single navigation-rail entry
+// whose body is split into sub-tabs — Duplicates, Contacts and Projects.
+const AppShell = makeAppShell(React, api, {
+  duplicates: makeManagerPage(React, api),
+  contacts: makeProfilePage(React, api),
+  projects: makeProjectsPage(React, api),
+});
 
 // One dialog slot serves three purposes: the review/merge dialog, the contact
 // editor and the project editor. `extraProps.editor` / `extraProps.projectEditor`
@@ -107,9 +105,9 @@ function DialogSlot(props) {
 }
 
 export const slots = {
-  // The Contact Manager page and the Contacts (profile) page.
+  // The Contact Manager page: Duplicates, Contacts and Projects in sub-tabs.
   'app-page': {
-    component: AppPage,
+    component: AppShell,
     shouldShow: () => enabled(api),
   },
   // Review/merge and the contact editor, both opened with api.ui.openDialog.
@@ -181,9 +179,7 @@ async function publish(pluginApi) {
   }
   const t = (key) => pluginApi.i18n.t(key);
   await pluginApi.ui.setPages([
-    { id: 'duplicates', title: t('page.title'), icon: 'users' },
-    { id: 'contacts', title: t('page.contactsTitle'), icon: 'address-book' },
-    { id: 'projects', title: t('page.projectsTitle'), icon: 'folder' },
+    { id: 'contact-manager', title: t('page.title'), icon: 'users' },
   ]);
   const undoOn = undoWindowMinutes(pluginApi.plugin.settings) > 0;
   const pending = undoOn ? await readUndo(pluginApi) : [];

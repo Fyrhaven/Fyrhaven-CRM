@@ -7,6 +7,16 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.12.0] — 2026-10-23
+
+### Changed
+
+- **One tab, three sub-tabs.** The navigation rail now carries a single
+  *Contact Manager* entry; *Duplicates*, *Contacts* and *Projects* are
+  sub-tabs inside it instead of three separate rail entries. A sub-tab mounts
+  the first time it is opened and then stays mounted but hidden, so switching
+  tabs keeps a scan result or a selected contact.
+
 ## [1.11.1] — 2026-10-23
 
 ### Fixed
