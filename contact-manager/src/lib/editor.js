@@ -178,3 +178,93 @@ export function cardFromDraft(draft, mode = 'create') {
   if (mode === 'create' || ids.length) card.addressBookIds = Object.fromEntries(ids.map((id) => [id, true]));
   return card;
 }
+
+// ── Companies (#22) ────────────────────────────────────────────
+//
+// A company is a contact card with `kind: 'org'`, so it lives in the address
+// books like any other record: shared, searchable, exportable. The draft is
+// smaller than a person's — a name, domains, one address, notes and tags.
+
+/** A blank company draft. */
+export function emptyCompanyDraft() {
+  return {
+    name: '',
+    domains: '',
+    address: { street: '', locality: '', region: '', postcode: '', country: '' },
+    notes: '',
+    tags: '',
+    bookIds: [],
+  };
+}
+
+const domainList = (value) => text(value)
+  .split(/[,\s]+/)
+  .map((domain) => domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, ''))
+  .filter((domain) => domain.includes('.'));
+
+/** The editor's draft for an existing company card. */
+export function companyDraftFromCard(card, books = []) {
+  const draft = emptyCompanyDraft();
+  if (!card) return draft;
+  draft.name = text(card.name?.full) || Object.values(card.organizations ?? {})[0]?.name || '';
+  draft.domains = Object.values(card.onlineServices ?? {})
+    .map((entry) => text(entry?.uri || entry?.service)).filter(Boolean).join(', ');
+  const address = Object.values(card.addresses ?? {})[0];
+  if (address) {
+    draft.address = {
+      street: text(address.street),
+      locality: text(address.locality),
+      region: text(address.region),
+      postcode: text(address.postcode),
+      country: text(address.country),
+    };
+  }
+  draft.notes = Object.values(card.notes ?? {})[0]?.note ?? '';
+  draft.tags = Object.keys(card.keywords ?? {}).filter((tag) => tag !== 'company').join(', ');
+  const known = new Set(books.map((book) => book.id));
+  const owned = bookIds(card);
+  draft.bookIds = known.size ? books.filter((book) => owned.includes(book.id)).map((book) => book.id) : owned;
+  return draft;
+}
+
+/** What is wrong with a company draft: a name is required, plus a book on create. */
+export function validateCompanyDraft(draft, mode = 'create') {
+  const errors = [];
+  if (!text(draft.name)) errors.push({ field: 'name', key: 'editor.error.companyName' });
+  if (mode === 'create' && !(draft.bookIds ?? []).length) {
+    errors.push({ field: 'books', key: 'editor.error.book' });
+  }
+  return errors;
+}
+
+/** The JSContact card for a company draft. */
+export function companyCardFromDraft(draft, mode = 'create') {
+  const name = text(draft.name);
+  const domains = domainList(draft.domains);
+  const address = draft.address ?? {};
+  const addressValues = {
+    street: text(address.street),
+    locality: text(address.locality),
+    region: text(address.region),
+    postcode: text(address.postcode),
+    country: text(address.country),
+  };
+  const hasAddress = Object.values(addressValues).some(Boolean);
+  const notes = text(draft.notes);
+  const tags = text(draft.tags).split(',').map((tag) => tag.trim()).filter(Boolean).filter((tag) => tag !== 'company');
+
+  const card = {
+    kind: 'org',
+    name: name ? { full: name } : undefined,
+    onlineServices: domains.length
+      ? Object.fromEntries(domains.map((domain, index) => [`d${index}`, { service: 'domain', uri: domain }]))
+      : undefined,
+    addresses: hasAddress ? { a0: addressValues } : undefined,
+    notes: notes ? { n0: { note: notes } } : undefined,
+    // The keyword is the fallback marker for hosts that do not keep `kind`.
+    keywords: { company: true, ...Object.fromEntries(tags.map((tag) => [tag, true])) },
+  };
+  const ids = draft.bookIds ?? [];
+  if (mode === 'create' || ids.length) card.addressBookIds = Object.fromEntries(ids.map((id) => [id, true]));
+  return card;
+}

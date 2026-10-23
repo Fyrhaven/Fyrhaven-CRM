@@ -3,6 +3,7 @@
 // the page in `profile-page.js` only loads data and renders.
 
 import { contactName, emailEntries, phoneEntries, text } from './contacts.js';
+import { normalizeName } from './duplicates.js';
 
 const lower = (value) => text(value).toLowerCase();
 
@@ -66,4 +67,127 @@ export function timelineForContact(messages, card) {
       .filter(Boolean).join(' ').toLowerCase();
     return [...terms].some((term) => haystack.includes(term));
   });
+}
+
+/** True for a company record: a JSContact card marked `kind: 'org'`. */
+export function isCompany(card) {
+  return card?.kind === 'org' || Boolean(card?.keywords?.company);
+}
+
+/** The organisation name of a contact or company ("" when there is none). */
+export function companyNameOf(card) {
+  if (!card) return '';
+  const own = Object.values(card.organizations ?? {})[0]?.name;
+  return text(own) || (isCompany(card) ? contactName(card) : '');
+}
+
+const companyKeyOf = (name) => normalizeName(name);
+
+/** Company cards among a list of contacts. */
+export function companiesAmong(cards) {
+  return (Array.isArray(cards) ? cards : []).filter(isCompany);
+}
+
+/**
+ * The people that belong to a company: their organisation name matches after
+ * normalisation, or their email domain is one of the company's domains.
+ * The company itself is never in its own list.
+ */
+export function peopleOfCompany(cards, company) {
+  const key = companyKeyOf(companyNameOf(company));
+  const domains = new Set(companyDomains(cards, company));
+  return (Array.isArray(cards) ? cards : []).filter((card) => {
+    if (!card || card.id === company?.id || isCompany(card)) return false;
+    if (key && companyKeyOf(companyNameOf(card)) === key) return true;
+    const domain = emailDomain(card);
+    return Boolean(domain && domains.has(domain));
+  });
+}
+
+/** The domain of a contact's first email address, lower-cased. */
+export function emailDomain(card) {
+  const address = emailEntries(card)[0]?.address;
+  if (!address || !address.includes('@')) return '';
+  return text(address.split('@').pop()).toLowerCase();
+}
+
+/**
+ * Domains that belong to a company: the ones listed in its `onlineServices`
+ * plus the most common domain of the people already linked by organisation
+ * name. Deriving them is what lets a colleague without an `organizations`
+ * field show up under the right company.
+ */
+export function companyDomains(cards, company) {
+  const explicit = Object.values(company?.onlineServices ?? {})
+    .map((entry) => text(entry?.uri || entry?.service).toLowerCase())
+    .filter((value) => value.includes('.'));
+  const key = companyKeyOf(companyNameOf(company));
+  const counts = new Map();
+  for (const card of Array.isArray(cards) ? cards : []) {
+    if (!card || isCompany(card)) continue;
+    if (!key || companyKeyOf(companyNameOf(card)) !== key) continue;
+    const domain = emailDomain(card);
+    if (domain) counts.set(domain, (counts.get(domain) ?? 0) + 1);
+  }
+  const derived = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([domain]) => domain);
+  return [...new Set([...explicit, ...derived])];
+}
+
+/** The company card a contact belongs to, or null. */
+export function companyOf(cards, card) {
+  if (!card || isCompany(card)) return null;
+  const key = companyKeyOf(companyNameOf(card));
+  const domain = emailDomain(card);
+  return companiesAmong(cards).find((company) => {
+    if (key && companyKeyOf(companyNameOf(company)) === key) return true;
+    return Boolean(domain && companyDomains(cards, company).includes(domain));
+  }) ?? null;
+}
+
+const participantEmails = (event) => [
+  event?.organizer?.email,
+  ...(Array.isArray(event?.participants) ? event.participants : [])
+    .flatMap((entry) => [entry?.email, entry?.name]),
+].filter(Boolean).map(lower);
+
+/** Calendar events the contact takes part in, newest first. */
+export function eventsForContact(events, card) {
+  const terms = new Set([...contactTerms(card), ...emailEntries(card).map((entry) => lower(entry.address))]);
+  if (!terms.size) return [];
+  return (Array.isArray(events) ? events : []).filter((event) => {
+    const people = participantEmails(event);
+    const subject = lower(event?.title ?? '');
+    return people.some((person) => terms.has(person))
+      || [...terms].some((term) => subject.includes(term));
+  });
+}
+
+/**
+ * Every attachment in a message list, flattened and de-duplicated by name and
+ * size, newest message first: `[{ emailId, subject, receivedAt, name, type,
+ * size, blobId }]`.
+ */
+export function attachmentsForMessages(messages) {
+  const out = [];
+  const seen = new Set();
+  for (const message of Array.isArray(messages) ? messages : []) {
+    for (const attachment of message?.attachments ?? []) {
+      const name = text(attachment?.name);
+      if (!name) continue;
+      const size = Number(attachment?.size) || 0;
+      const key = `${name}:${size}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        emailId: message.id,
+        subject: text(message.subject),
+        receivedAt: message.receivedAt,
+        name,
+        type: text(attachment.type),
+        size,
+        blobId: attachment.blobId,
+      });
+    }
+  }
+  return out;
 }

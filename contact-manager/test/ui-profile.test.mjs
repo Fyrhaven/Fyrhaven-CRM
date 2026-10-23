@@ -18,8 +18,13 @@ const CARDS = [
 ];
 
 const MESSAGES = [
-  { id: 'm1', from: { email: 'ada@example.org' }, to: [], subject: 'The engine notes', receivedAt: '2026-10-01T10:00:00Z' },
+  { id: 'm1', from: { email: 'ada@example.org' }, to: [], subject: 'The engine notes', receivedAt: '2026-10-01T10:00:00Z', attachments: [{ name: 'engine.pdf', size: 42 }] },
   { id: 'm2', from: { email: 'noise@x.de' }, to: [], subject: 'Unrelated' },
+];
+
+const EVENTS = [
+  { id: 'e1', title: 'Engine kickoff', start: '2026-09-20T09:00:00Z', participants: [{ email: 'ada@example.org' }] },
+  { id: 'e2', title: 'Unrelated meeting', start: '2026-09-21T09:00:00Z', participants: [{ email: 'x@y.de' }] },
 ];
 
 const TASKS = [
@@ -36,6 +41,7 @@ function profileApi(handlers = {}) {
       'contacts.search': async () => [],
       'email.search': async () => MESSAGES,
       'tasks.list': async () => TASKS,
+      'calendar.getEvents': async () => EVENTS,
       ...handlers,
     },
   });
@@ -56,7 +62,7 @@ describe('contacts page', () => {
     expect(screen.getByText('Engines Ltd')).toBeTruthy();
     expect(screen.getByText('maths')).toBeTruthy();
     expect(screen.getAllByText('ada@example.org').length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText('The engine notes')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('The engine notes').length).toBeGreaterThan(0));
     expect(screen.queryByText('Unrelated')).toBeNull();
   });
 
@@ -84,6 +90,15 @@ describe('contacts page', () => {
 
     await waitFor(() => expect(screen.getByText('grace@navy.mil')).toBeTruthy());
     expect(screen.queryByText('Engines Ltd')).toBeNull();
+  });
+
+  it('shows the meetings and files of the interaction history', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await waitFor(() => expect(screen.getByText('Engine kickoff')).toBeTruthy());
+    expect(screen.queryByText('Unrelated meeting')).toBeNull();
+    expect(screen.getByText('engine.pdf')).toBeTruthy();
   });
 
   it('shows the open tasks that mention the contact', async () => {
@@ -114,5 +129,54 @@ describe('contacts page', () => {
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Edit contact' })); });
     expect(api.calls('ui.openDialog')[1].args[0].extraProps).toMatchObject({ editor: true, mode: 'edit' });
+  });
+});
+
+describe('company profile', () => {
+  const COMPANY = {
+    id: 'co', kind: 'org', name: { full: 'Acme Ltd' }, keywords: { company: true, partner: true },
+    onlineServices: { d0: { service: 'domain', uri: 'acme.com' } }, addressBookIds: { b1: true },
+  };
+  const ANA = makeCard({ id: 'ana', name: 'Ana Diaz', emails: ['ana@acme.com'], organizations: { o: { name: 'Acme Ltd' } } });
+  const BEN = makeCard({ id: 'ben', name: 'Ben Ito', emails: ['ben@acme.com'] });
+
+  const companyApi = (handlers = {}) => profileApi({
+    'contacts.list': async () => [COMPANY, ANA, BEN],
+    'email.search': async () => [
+      { id: 'm1', from: { email: 'ana@acme.com' }, to: [], subject: 'Contract', receivedAt: '2026-10-02', attachments: [{ name: 'contract.pdf', size: 10 }] },
+    ],
+    'tasks.list': async () => [{ id: 't1', title: 'Send Acme Ltd the invoice' }],
+    'calendar.getEvents': async () => [{ id: 'e1', title: 'Acme Ltd kickoff', start: '2026-10-03T09:00:00Z', participants: [] }],
+    ...handlers,
+  });
+
+  it('shows a company card with its domains, people and rolled-up activity', async () => {
+    const api = companyApi();
+    const Page = makeProfilePage(React, api);
+    await act(async () => { render(React.createElement(Page)); });
+
+    await waitFor(() => expect(screen.getByText('Company')).toBeTruthy());
+    expect(screen.getByText('acme.com')).toBeTruthy();
+    expect(screen.getByText('partner')).toBeTruthy();
+    // both colleagues, one linked by organisation and one by domain
+    expect(screen.getAllByText('Ana Diaz').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Ben Ito').length).toBeGreaterThan(0);
+    expect(screen.getByText('2 linked people')).toBeTruthy();
+    // rolled-up activity across the company
+    await waitFor(() => expect(screen.getAllByText('Contract').length).toBeGreaterThan(0));
+    expect(screen.getByText('contract.pdf')).toBeTruthy();
+    expect(screen.getByText('Send Acme Ltd the invoice')).toBeTruthy();
+    expect(screen.getByText('Acme Ltd kickoff')).toBeTruthy();
+  });
+
+  it('opens a person from the company people list', async () => {
+    const api = companyApi();
+    const Page = makeProfilePage(React, api);
+    await act(async () => { render(React.createElement(Page)); });
+    await waitFor(() => expect(screen.getAllByText('Ana Diaz').length).toBeGreaterThan(1));
+
+    // the people list is the second occurrence; the first is the left contact list
+    await act(async () => { fireEvent.click(screen.getAllByText('Ana Diaz')[1]); });
+    await waitFor(() => expect(screen.getByText('Company: Acme Ltd · 2 people')).toBeTruthy());
   });
 });
