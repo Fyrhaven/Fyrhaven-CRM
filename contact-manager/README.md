@@ -712,7 +712,8 @@ npm run package          # 2. rebuild the installable ZIP
 
 Then commit the source and push. Merge the branch into `main` through a PR
 first; releases are cut from `main` with `npm run release`; there is no
-committed `build/` directory.
+committed `build/` directory. Delete the feature branch once its PR has landed
+— `main` and `contact-manager` are the only long-lived branches.
 
 ### 9.5 Test-writing conventions
 
