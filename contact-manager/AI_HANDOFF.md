@@ -269,6 +269,10 @@ because the editor is the prerequisite for every other "manager" feature.
    to run when `manifest.json`, `package.json` and the top `CHANGELOG.md` entry
    disagree
 
+`npm run ship` does steps 1, 5 and 6 in one command (merge the open PRs into
+`main`, sync the mirror, release); `npm run ship -- --dry-run` previews the plan
+and `--no-release` stops after the merge.
+
 ## Project Structure
 ```
 contact-manager/
@@ -373,5 +377,6 @@ scope.
   `contact-manager` in step, bump `manifest.json`/`package.json` + `CHANGELOG.md`
   on `main`, then run `npm run release` — it tags, pushes the tag and uploads
   the ZIP. The script refuses to run when the manifest, package and top
-  changelog versions disagree.
+  changelog versions disagree. `npm run ship` automates the merge, the mirror
+  sync and the release.
 - Ship a feature by closing its issue in the release commit/PR.

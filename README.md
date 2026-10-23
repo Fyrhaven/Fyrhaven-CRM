@@ -82,6 +82,12 @@ assistant must follow when changing the code.
    the tag and attaches the ZIP to the GitHub release. It refuses to run when
    `manifest.json`, `package.json` and the top `CHANGELOG.md` entry disagree.
 
+`cd contact-manager && npm run ship` does the whole thing in one command: it
+merges the open release pull requests into `main` (retargeting stacked ones),
+keeps the `contact-manager` mirror in step and then runs `npm run release`.
+`npm run ship -- --dry-run` prints the plan and changes nothing;
+`--no-release` stops after the merge.
+
 ### Roadmap, issues and releases
 
 - **Roadmap** — the [milestones](https://github.com/zyntrax/bulwark-plugins/milestones)
