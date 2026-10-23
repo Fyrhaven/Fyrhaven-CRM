@@ -220,6 +220,7 @@ The `name` of a card may also arrive as a flat `fullName` or as
 | `email:read` | The recent messages on the profile |
 | `tasks:read` | The open tasks on the profile |
 | `calendar:read` | The meetings on the profile |
+| `email:blob-read` | Saving an attachment from the profile's Files section |
 
 Every slot and action must be covered by a permission — `test/bundle.test.mjs`
 asserts this, so a new surface without a permission fails the test run.
@@ -494,14 +495,18 @@ right.
   three, filtered by `eventsForContact` (participants by email/name, or the
   title).
 * **Files** — `attachmentsForMessages` flattens and de-duplicates the
-  attachments of those messages (name + size), so the profile lists what was
-  exchanged without storing any bytes.
+  attachments of those messages (name + size) and `formatBytes` renders the
+  size. The profile shows each file's type, size and date next to the message
+  it came from, and a *Save* button streams it to the browser through
+  `api.email.getAttachment`. No bytes are stored on the server or in
+  `api.storage`.
 * **Company** — `companyNameOf` shows the organisation; `companyOf` finds the
   matching company record and `peopleOfCompany` counts its people. Companies
   are contacts with `kind: 'org'`; people link through their organisation name
   or email domain (#22).
 * **Degradation** — messages, tasks and meetings need the `email:read`,
-  `tasks:read` and `calendar:read` permissions. A missing permission or a failing call leaves the profile
+  `tasks:read` and `calendar:read` permissions, and saving a file needs
+  `email:blob-read`. A missing permission or a failing call leaves the profile
   readable and shows one muted line instead of an error.
 
 `profile.js` holds the pure matching rules (`filterCards`, `contactTerms`,

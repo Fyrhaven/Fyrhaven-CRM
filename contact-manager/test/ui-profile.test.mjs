@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The Contacts page: list, search, selection, profile context, degradation.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
@@ -12,13 +12,19 @@ import { makeCard } from './fixtures.mjs';
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
 afterEach(cleanup);
 
+// jsdom has no Blob URL support; the download shim in profile-page.js needs it.
+const createObjectURL = vi.fn(() => 'blob:test');
+const revokeObjectURL = vi.fn();
+URL.createObjectURL = createObjectURL;
+URL.revokeObjectURL = revokeObjectURL;
+
 const CARDS = [
   makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'], organizations: { o: { name: 'Engines Ltd' } }, keywords: { maths: true } }),
   makeCard({ id: 'g', name: 'Grace Hopper', emails: ['grace@navy.mil'] }),
 ];
 
 const MESSAGES = [
-  { id: 'm1', from: { email: 'ada@example.org' }, to: [], subject: 'The engine notes', receivedAt: '2026-10-01T10:00:00Z', attachments: [{ name: 'engine.pdf', size: 42 }] },
+  { id: 'm1', from: { email: 'ada@example.org' }, to: [], subject: 'The engine notes', receivedAt: '2026-10-01T10:00:00Z', attachments: [{ name: 'engine.pdf', size: 42, type: 'application/pdf', blobId: 'b-engine' }] },
   { id: 'm2', from: { email: 'noise@x.de' }, to: [], subject: 'Unrelated' },
 ];
 
@@ -99,6 +105,44 @@ describe('contacts page', () => {
     await waitFor(() => expect(screen.getByText('Engine kickoff')).toBeTruthy());
     expect(screen.queryByText('Unrelated meeting')).toBeNull();
     expect(screen.getByText('engine.pdf')).toBeTruthy();
+    // the file row carries its type and size
+    expect(screen.getByText('application/pdf · 42 B')).toBeTruthy();
+  });
+
+  it('saves a file of the interaction history through getAttachment', async () => {
+    const blob = { kind: 'blob' };
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const api = profileApi({ 'email.getAttachment': async () => blob });
+      await renderPage(api);
+      await waitFor(() => expect(screen.getByText('engine.pdf')).toBeTruthy());
+
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
+
+      await waitFor(() => expect(api.calls('email.getAttachment')).toHaveLength(1));
+      expect(api.calls('email.getAttachment')[0].args).toEqual(['m1', 'b-engine']);
+      expect(createObjectURL).toHaveBeenCalledWith(blob);
+      expect(click).toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+    }
+  });
+
+  it('reports a failed download and keeps the profile readable', async () => {
+    const api = profileApi({
+      'email.getAttachment': async () => { throw new Error('missing email:blob-read'); },
+    });
+    await renderPage(api);
+    await waitFor(() => expect(screen.getByText('engine.pdf')).toBeTruthy());
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
+
+    await waitFor(() => expect(api.calls('toast.error').length).toBeGreaterThan(0));
+    expect(api.calls('toast.error').at(-1).args[0])
+      .toBe('Could not save engine.pdf: missing email:blob-read');
+    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
   });
 
   it('shows the open tasks that mention the contact', async () => {

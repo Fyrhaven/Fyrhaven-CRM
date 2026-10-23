@@ -11,7 +11,7 @@ built on Stalwart. Each plugin is published here with its **source** and its
 
 | Plugin | Version | What it does | Install |
 |---|---|---|---|
-| [**Contact Manager**](contact-manager/) | 1.9.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details and while saving, a full contact editor with create/edit/delete, a Contacts page with a 360° profile (recent messages, meetings, files, open tasks, company rollup, duplicate check) and company profiles, nickname preservation, undo for merges, English and German. | [Latest release](https://github.com/zyntrax/bulwark-plugins/releases/latest) |
+| [**Contact Manager**](contact-manager/) | 1.10.0 | Find, review and merge duplicate contacts across all address books. Contact Manager page, command palette scan, duplicate hints in the contact details and while saving, a full contact editor with create/edit/delete, a Contacts page with a 360° profile (recent messages, meetings, files with downloads, open tasks, company rollup, duplicate check) and company profiles, nickname preservation, undo for merges, English and German. | [Latest release](https://github.com/zyntrax/bulwark-plugins/releases/latest) |
 
 ---
 

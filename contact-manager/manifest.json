@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan and duplicate hints in contact details.",
   "type": "ui-extension",
@@ -14,7 +14,8 @@
     "ui:observe",
     "email:read",
     "tasks:read",
-    "calendar:read"
+    "calendar:read",
+    "email:blob-read"
   ],
   "entrypoint": "index.js",
   "minAppVersion": "1.15.0",
@@ -262,6 +263,8 @@
       "profile.noMeetings": "No meeting with this contact in the last six months or the next three.",
       "profile.files": "Files",
       "profile.noFiles": "No attachments in the recent messages.",
+      "profile.download": "Save",
+      "profile.downloadFailed": "Could not save {name}: {reason}",
       "profile.noTitle": "(untitled)",
       "profile.companyLine": "Company: {name}",
       "profile.companyWithPeople": "Company: {name} · {count} people",
@@ -479,6 +482,8 @@
       "profile.noMeetings": "Kein Termin mit diesem Kontakt in den letzten sechs Monaten oder den nächsten drei.",
       "profile.files": "Dateien",
       "profile.noFiles": "Keine Anhänge in den letzten Nachrichten.",
+      "profile.download": "Speichern",
+      "profile.downloadFailed": "Konnte {name} nicht speichern: {reason}",
       "profile.noTitle": "(ohne Titel)",
       "profile.companyLine": "Firma: {name}",
       "profile.companyWithPeople": "Firma: {name} · {count} Personen",
