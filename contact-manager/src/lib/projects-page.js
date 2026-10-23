@@ -13,6 +13,7 @@ import {
 import { contactName, loadCards } from './contacts.js';
 import { openProject, toastProjectResult } from './open-project.js';
 import { downloadBlob } from './download.js';
+import { optionalCall } from './optional.js';
 import {
   billableExpenses, billableMinutes, deleteProject, emptyExpense, emptyMilestone,
   emptyTimeEntry, exportPayload, formatAmount, formatMinutes, importProjects,
@@ -55,9 +56,8 @@ export function makeProjectsPage(React, api) {
     // leave the page readable, so the call is optional.
     useEffect(() => {
       let live = true;
-      void api.tasks.list({ includeCompleted: false })
-        .then((list) => { if (live) setOpenTasks(Array.isArray(list) ? list : []); })
-        .catch(() => { if (live) setOpenTasks([]); });
+      void optionalCall(() => api.tasks.list({ includeCompleted: false }))
+        .then((list) => { if (live) setOpenTasks(Array.isArray(list) ? list : []); });
       return () => { live = false; };
     }, [projects]);
 

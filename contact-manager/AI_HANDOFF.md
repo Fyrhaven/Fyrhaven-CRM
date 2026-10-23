@@ -5,12 +5,14 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.13.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: Project time, expenses, billable totals and JSON export/import (v1.13.0) on top of one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), the activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.13.1 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: two reported bugs fixed (v1.13.1) — the *Contacts* sub-tab crashed when an optional API (`api.calendar` / `api.tasks` / `api.email`) was missing, and new/edited projects were never written to storage; on top of project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.13.0` is the newest GitHub release (v1.12.0,
   v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before
   it). `main` and `contact-manager` are in step at v1.13.0 (PRs #52, #53, #55,
-  #56, #59, #62, #63, #64, #65 and #66 merged).
+  #56, #59, #62, #63, #64, #65 and #66 merged). **v1.13.1 is staged on
+  `cline/vhdk14wt`** and still needs its PR, the merge into `main`, the
+  `contact-manager` mirror sync and `npm run release`.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -20,6 +22,36 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Optional host calls and project persistence (v1.13.1)
+
+Two reported bugs, both about code that only ran in the real host:
+
+- **The Contacts sub-tab crashed.** `profile-page.js` read `api.email`,
+  `api.tasks` and `api.calendar` and only handled a *rejected* promise with
+  `.catch(() => null)`. A namespace the host does not expose throws
+  **synchronously** when read (and a method that returns nothing is not a
+  promise), so the throw escaped the catch and, inside the React effect, took
+  the whole sub-tab down. `src/lib/optional.js` now holds `optionalCall(run)`,
+  which always resolves — the value, or `null` when the namespace, the method
+  or the promise is missing. `profile-page.js` and `projects-page.js` use it;
+  `degraded` is then set and the profile shows the unavailable notice. This is
+  a hard rule in the README now: never call an optional host API directly.
+- **New and edited projects were never saved.** `project-dialog.js` collected
+  the draft and returned `{ saved, project }`, and `openProject` passed that
+  straight back to `toastProjectResult` — nothing wrote it. `openProject` is
+  the single funnel (page header, empty state and the command palette), so it
+  now calls `saveProject` itself, reports a storage failure with the new
+  `projects.saveFailed` string and returns `null` so a failed write is never
+  toasted as “Project created.”.
+- **The UI-kit guard the stand-in promised now exists.**
+  `test-utils/ui-kit.mjs` says a `ui-kit.test.mjs` checks it against the real
+  kit, but no such file was ever committed. `test/ui-kit.test.mjs` now fails
+  when the source imports a `@plugin-host/ui` name the stand-in does not
+  export — an undefined component is the other way a sub-tab dies on open
+  (“Element type is invalid”). It cannot see the real kit (that lives in the
+  webmail repo), so it guards source-vs-stand-in drift; keep the stand-in in
+  step with the host.
 
 ### Meetings, files and company rollup (v1.8.0)
 
@@ -355,7 +387,7 @@ v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete),
 v1.7.0 Contacts page and 360° profile, v1.8.0 activity tracking (meetings,
 files, company rollup), v1.9.0 company profiles, v1.10.0 file downloads,
 v1.11.0 local projects, v1.12.0 one tab with sub-tabs, v1.13.0 project
-time/expenses and export.
+time/expenses and export, v1.13.1 optional-call crash and project saving fixes.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real

@@ -7,6 +7,30 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.13.1] — 2026-10-23
+
+### Fixed
+
+- **The *Contacts* tab no longer crashes when an optional API is missing.**
+  Recent messages, open tasks and meetings are optional context, but the page
+  read `api.email`, `api.tasks` and `api.calendar` directly and only handled a
+  *rejected* promise. A host without one of those namespaces (or one whose
+  method returns nothing) throws before a promise exists, which took the whole
+  sub-tab down. Optional calls now go through `optionalCall`, so the profile
+  stays readable and says what is unavailable.
+- **New and edited projects are saved.** The project dialog collected the
+  draft and returned it, but nothing ever wrote it to storage — the *Projects*
+  tab stayed empty and an edit was silently lost. `openProject` now stores the
+  result, so the page and the command palette both save, and a storage failure
+  is reported instead of a false “Project created.”.
+- The unavailable-context notice now names meetings as well, since a missing
+  `calendar:read` shows it too.
+- **The missing UI-kit guard is back.** `test-utils/ui-kit.mjs` claimed a
+  `ui-kit.test.mjs` checked that it exports the same names the source uses, but
+  the file did not exist. `test/ui-kit.test.mjs` now fails when the source
+  imports a `@plugin-host/ui` name the kit does not export — the other way a
+  sub-tab can crash on open.
+
 ## [1.13.0] — 2026-10-23
 
 ### Added
