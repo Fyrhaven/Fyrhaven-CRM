@@ -77,10 +77,22 @@ function baseLanded(base) {
   return git('merge-base', '--is-ancestor', ref, 'origin/main').status === 0;
 }
 
+const prState = (number) =>
+  gh('pr', 'view', String(number), '--json', 'state', '-q', '.state').stdout?.trim() || 'UNKNOWN';
+
+// Returns 'merged' when the PR is on main, or 'skipped' when it was merged or
+// closed underneath us (a race with someone else, or a stale listing).
 function mergePr(pr) {
   if (pr.retarget) {
     const edit = gh('pr', 'edit', String(pr.number), '--base', 'main');
-    if (edit.status !== 0) fail(`gh pr edit #${pr.number} --base main failed:\n${(edit.stderr || '').trim()}`);
+    if (edit.status !== 0) {
+      const state = prState(pr.number);
+      if (state === 'MERGED' || state === 'CLOSED') {
+        console.log(`  #${pr.number} is already ${state.toLowerCase()} — skipping.`);
+        return 'skipped';
+      }
+      fail(`gh pr edit #${pr.number} --base main failed:\n${(edit.stderr || '').trim()}`);
+    }
     for (let i = 0; i < MERGEABLE_TRIES; i++) {
       const state = gh('pr', 'view', String(pr.number), '--json', 'mergeable', '-q', '.mergeable').stdout?.trim();
       if (state && state !== 'UNKNOWN') break;
@@ -88,7 +100,19 @@ function mergePr(pr) {
     }
   }
   const merge = gh('pr', 'merge', String(pr.number), '--merge');
-  if (merge.status !== 0) fail(`gh pr merge #${pr.number} failed:\n${(merge.stderr || '').trim()}`);
+  if (merge.status !== 0) {
+    const state = prState(pr.number);
+    if (state === 'MERGED') {
+      console.log(`  #${pr.number} was merged underneath us — continuing.`);
+      return 'merged';
+    }
+    if (state === 'CLOSED') {
+      console.log(`  #${pr.number} was closed — skipping.`);
+      return 'skipped';
+    }
+    fail(`gh pr merge #${pr.number} failed:\n${(merge.stderr || '').trim()}`);
+  }
+  return 'merged';
 }
 
 const refreshMain = () => {
@@ -111,8 +135,7 @@ for (let round = 0; round < 50; round++) {
   for (const pr of ready) {
     console.log(`  ${DRY ? 'would merge' : 'merging'} #${pr.number} ${pr.head}${pr.retarget ? ' (retargeted to main)' : ''}`);
     if (DRY) { merged++; continue; }
-    mergePr(pr);
-    merged++;
+    if (mergePr(pr) === 'merged') merged++;
     refreshMain();
   }
   if (DRY) break;
