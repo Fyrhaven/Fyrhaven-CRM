@@ -44,6 +44,13 @@ export function sidePane(basis) {
   };
 }
 
+/** One saved search: its button and its remove button, side by side. */
+export const SAVED_ITEM = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.25rem',
+};
+
 /** The bar above a list when something is selected: wraps, whatever the kit does. */
 export const ACTION_BAR = {
   display: 'flex',
