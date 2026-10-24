@@ -7,6 +7,36 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.20.0] — 2026-10-23
+
+### Added
+
+- **The plugin now opens on a main page, not on *Duplicates*.** The *Overview*
+  tab answers *what needs attention* and *what can I do*:
+  - **A headline** — how many duplicate groups and how many contacts are in
+    them, or that the books are clean.
+  - **A menu** — *Find duplicate contacts*, *New contact*, *New company*, *New
+    project* and, while one is live, *Undo the last merge*. These are **the same
+    tasks as the command palette**, not a second set that can drift.
+  - **Section rows** — Duplicates, Contacts, Projects and Health, each with its
+    headline number, its state badge, and an *Open* button that lands on it.
+  - **When the last scan ran**, from the summary the Duplicates tab stores.
+- **`src/lib/actions.js`.** The action implementations moved out of `index.js`
+  into a module the page can import. They had to: the palette actions run in the
+  host's background frame and a page runs in its own frame, so a menu on the
+  page had nothing to call — and a second copy of the same logic is exactly what
+  drifts. `index.js` keeps only the wiring.
+
+### Notes
+
+The sub-tabs stay as they are, with *Overview* first and selected. The main page
+is what every navigation idea needs, so it is the part worth having first;
+whether the sections later move behind a menu or a sidebar is still open.
+
+The counts on the main page come from **one** load of the contacts, shared by the
+duplicate scan and the health rules — the same work the Duplicates tab does when
+you press its scan button, done once here instead of on every visit.
+
 ## [1.19.0] — 2026-10-23
 
 ### Added

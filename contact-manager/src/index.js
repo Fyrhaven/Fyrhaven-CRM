@@ -15,82 +15,33 @@
 const React = require('react');
 const api = require('@plugin-host');
 
-import { detectionOptions, loadCards } from './lib/contacts.js';
-import { findDuplicateGroups, readDismissed } from './lib/duplicates.js';
-import { toastMergeResult, undoWindowMinutes } from './lib/labels.js';
-import { undoLastMerge, readUndo } from './lib/undo.js';
+import { undoWindowMinutes } from './lib/labels.js';
+import { readUndo } from './lib/undo.js';
 import { warnAboutDuplicates } from './lib/watch.js';
 import { makeManagerPage } from './lib/manager-page.js';
 import { makeReviewDialog } from './lib/review-dialog.js';
 import { makeDuplicateSection } from './lib/detail-section.js';
 import { makeEditorDialog } from './lib/editor-dialog.js';
 import { makeAppShell } from './lib/app-shell.js';
+import { makeHomePage } from './lib/home-page.js';
 import { makeProfilePage } from './lib/profile-page.js';
 import { makeProjectsPage } from './lib/projects-page.js';
 import { makeHealthPage } from './lib/health-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
-import { openEditor, toastEditorResult } from './lib/open-editor.js';
-import { openProject, toastProjectResult } from './lib/open-project.js';
 import { detectCapabilities, describeCapabilities, unavailableNamespaces } from './lib/capabilities.js';
+import { findDuplicates, newCompany, newContact, newProject, undoMerge } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
-
-/** Duplicate groups over all contacts, or over `scopeIds` when given. */
-async function scanGroups(pluginApi, scopeIds = null) {
-  const cards = await loadCards(pluginApi);
-  const list = scopeIds
-    ? cards.filter((card) => scopeIds.has(card.id))
-    : cards;
-  const dismissed = scopeIds ? [] : await readDismissed(pluginApi);
-  return findDuplicateGroups(list, await detectionOptions(pluginApi), dismissed);
-}
-
-/** Scan, then open the review dialog; toast the outcome. */
-async function scanAndReview(pluginApi, scopeIds = null) {
-  let groups;
-  try {
-    groups = await scanGroups(pluginApi, scopeIds);
-  } catch (err) {
-    pluginApi.toast.error(pluginApi.i18n.t('scan.failed', { reason: String(err?.message ?? err) }));
-    return;
-  }
-  if (!groups.length) {
-    pluginApi.toast.info(pluginApi.i18n.t('toast.clean'));
-    return;
-  }
-  const result = await pluginApi.ui.openDialog({
-    title: pluginApi.i18n.t('dialog.title'),
-    slot: 'plugin-dialog',
-    extraProps: { groups },
-  });
-  toastMergeResult(pluginApi, result);
-}
-
-/** Undo the newest merge record; report how much was restored. */
-async function undoMerge(pluginApi) {
-  let result;
-  try {
-    result = await undoLastMerge(pluginApi);
-  } catch (err) {
-    pluginApi.toast.error(pluginApi.i18n.t('undo.failed', { reason: String(err?.message ?? err) }));
-    return;
-  }
-  if (!result.total) {
-    pluginApi.toast.info(pluginApi.i18n.t('undo.none'));
-    return;
-  }
-  const vars = { restored: result.restored, reverted: result.reverted, failed: result.failed };
-  if (result.failed) pluginApi.toast.warning(pluginApi.i18n.t('undo.partial', vars));
-  else pluginApi.toast.success(pluginApi.i18n.t('undo.done', vars));
-}
 
 // ─── Slots ─────────────────────────────────────────────────────
 
 // One app-page slot carries the whole plugin: a single navigation-rail entry
-// whose body is split into sub-tabs — Duplicates, Contacts, Projects and Health.
+// whose body is split into sub-tabs — Overview, Duplicates, Contacts, Projects
+// and Health.
 const AppShell = makeAppShell(React, api, {
+  home: makeHomePage(React, api),
   duplicates: makeManagerPage(React, api),
   contacts: makeProfilePage(React, api),
   projects: makeProjectsPage(React, api),
@@ -114,7 +65,7 @@ function DialogSlot(props) {
 }
 
 export const slots = {
-  // The Contact Manager page: Duplicates, Contacts, Projects and Health in sub-tabs.
+  // The Contact Manager page: Overview, Duplicates, Contacts, Projects and Health.
   'app-page': {
     component: AppShell,
     shouldShow: () => enabled(api),
@@ -134,35 +85,22 @@ export const slots = {
 
 export const hooks = {
   // Clicks on the buttons declared with api.ui.setActions — no own permission.
-  async onAction({ surface, actionId, context }) {
-    if (actionId === 'scan') {
-      await scanAndReview(api);
-      return;
-    }
+  async onAction({ actionId, context }) {
+    // The same functions the main page's menu runs — see lib/actions.js.
+    if (actionId === 'scan') return findDuplicates(api);
     if (actionId === 'scan-selection') {
       const ids = context?.contactIds;
       if (!Array.isArray(ids) || !ids.length) {
         api.toast.info(api.i18n.t('toast.needSelection'));
         return;
       }
-      await scanAndReview(api, new Set(ids));
-      return;
+      return findDuplicates(api, new Set(ids));
     }
-    if (actionId === 'undo-merge') {
-      await undoMerge(api);
-      return;
-    }
-    if (actionId === 'new-contact') {
-      toastEditorResult(api, await openEditor(api, { mode: 'create' }));
-      return;
-    }
-    if (actionId === 'new-company') {
-      toastEditorResult(api, await openEditor(api, { mode: 'create', company: true }));
-      return;
-    }
-    if (actionId === 'new-project') {
-      toastProjectResult(api, await openProject(api, { mode: 'create' }));
-    }
+    if (actionId === 'undo-merge') return undoMerge(api);
+    if (actionId === 'new-contact') return newContact(api);
+    if (actionId === 'new-company') return newCompany(api);
+    if (actionId === 'new-project') return newProject(api);
+    return undefined;
   },
 
   // Never block a save: both are observers. They only say what the new
