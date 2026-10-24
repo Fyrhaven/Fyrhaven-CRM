@@ -118,6 +118,41 @@ export function matchOptions(settings) {
   };
 }
 
+// ── Single-value fields ────────────────────────────────────────
+// JSContact keyed maps carry one entry per field here; these read the first
+// one. Shared by the profile and the vCard export so the two can never drift.
+
+/** The first organisation name, or ''. */
+export const orgName = (card) => Object.values(card?.organizations ?? {})[0]?.name ?? '';
+
+/** The first job title, or ''. */
+export const titleName = (card) => Object.values(card?.titles ?? {})[0]?.name ?? '';
+
+/** Every nickname, comma separated, or ''. */
+export const nicknameLine = (card) => Object.values(card?.nicknames ?? {})
+  .map((entry) => entry?.name).filter(Boolean).join(', ');
+
+/** Every note, joined with ' · ', or ''. */
+export const notesLine = (card) => Object.values(card?.notes ?? {})
+  .map((entry) => entry?.note).filter(Boolean).join(' · ');
+
+/** The first address as one line, or ''. */
+export function addressLine(card) {
+  const address = Object.values(card?.addresses ?? {})[0];
+  if (!address) return '';
+  return [
+    address.street,
+    [address.postcode, address.locality].filter(Boolean).join(' '),
+    address.region,
+    address.country,
+  ].filter(Boolean).join(', ');
+}
+
+/** Every online-service URI (a website, a profile), in map order. */
+export const linkUris = (card) => Object.values(card?.onlineServices ?? {})
+  .map((entry) => entry?.uri).filter(Boolean);
+
+
 /** All contacts of the account. Throws when the fetch fails. */
 export async function loadCards(api) {
   const cards = await api.contacts.list();

@@ -7,6 +7,32 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.15.0] — 2026-10-23
+
+### Added
+
+- **Bulk edit and export for a selection (#14).** The action bar for a selected
+  set of contacts gained two actions:
+  - **Edit selected** — one dialog for **tags** (add and remove) and **address
+    books** (add to, or remove from). Both are map fields the host replaces
+    wholesale, so every patch carries the complete new set and nothing else on a
+    contact is lost. Two rules are enforced rather than left to the caller: the
+    `company` marker is never removed — it is what makes a contact an
+    organisation, not a label — and a contact is **never** left in no address
+    book; that card is reported as failed instead. Tags and books go out in
+    **one update per contact**, so the reported counts stay honest.
+  - **Export** — the selection as a single `.vcf` (vCard 3.0), the format other
+    address books and phones import. Nothing is sent to the server.
+- `src/lib/vcard.js` — the vCard writer: RFC 2426 text escaping, and structured
+  `N`/`ADR` values escaped per component so the separators survive.
+- The single-value JSContact readers (`orgName`, `titleName`, `nicknameLine`,
+  `notesLine`, `addressLine`, `linkUris`) moved to `src/lib/contacts.js`, so the
+  profile and the export cannot drift apart.
+
+### Notes
+
+This completes #14 — tags, books, export and deletion are all covered now.
+
 ## [1.14.1] — 2026-10-23
 
 ### Fixed

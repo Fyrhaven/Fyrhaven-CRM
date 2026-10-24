@@ -60,7 +60,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list (the box stays put while the list scrolls) and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list (the box stays put while the list scrolls) and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | The review/merge dialog, the **contact editor** and the **project editor** — the only places that write |
@@ -88,7 +88,9 @@ contact-manager/
 │       ├── labels.js       # shared display helpers and toasts
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
 │       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
-│       ├── bulk.js        # bulk delete of a hand-picked selection, with one undo batch
+│       ├── bulk.js        # bulk edits and delete for a selection
+│       ├── bulk-dialog.js # the bulk editor: tags and address books
+│       ├── vcard.js       # contacts to vCard 3.0, for the bulk export
 │       ├── capabilities.js# which optional host APIs this instance really has
 │       ├── download.js    # hand bytes to the browser as a download (files, project export)
 │       ├── manager-page.js # the Duplicates sub-tab
@@ -125,7 +127,9 @@ contact-manager/
 │   ├── ui-projects.test.mjs # the Projects page and the project dialog
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
 │   ├── layout.test.mjs     # the plugin-owned page skeleton
-│   ├── bulk.test.mjs       # bulk delete: what it removes, refuses, and undoes
+│   ├── bulk.test.mjs       # bulk edits and delete: map rules, refusals, undo
+│   ├── ui-bulk.test.mjs    # the bulk editor dialog
+│   ├── vcard.test.mjs      # the vCard writer
 │   ├── capabilities.test.mjs # the optional-API probe
 │   ├── ui-kit.test.mjs     # every @plugin-host/ui name the source imports exists
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
@@ -615,7 +619,9 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
 | `test/layout.test.mjs` | The page skeleton: a wrapping flex row, a fixed-basis scrolling side pane, a shrinkable detail pane |
-| `test/bulk.test.mjs` | `deleteContacts`: one undo batch per run, a refusal counted not hidden, and the round trip back through `undoLastMerge` |
+| `test/bulk.test.mjs` | `applyBulkEdit` / `applyTags` / `applyBooks`: complete map patches, the company marker, a card that would be in no book, one write per contact; and `deleteContacts` with its undo batch |
+| `test/ui-bulk.test.mjs` | The bulk editor dialog: what it collects for tags and books, cancel, and an account with no books |
+| `test/vcard.test.mjs` | The vCard writer: one block per contact, CRLF, the importable fields, RFC 2426 escaping, structured N/ADR |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
@@ -832,9 +838,18 @@ Bulk actions (Contacts)
   groupFromSelection(cards) -> a 'manual' group: no evidence claimed, signed
     like a detected group, so it goes through the review dialog unchanged
   merging a selection needs two or more contacts
+  applyBulkEdit(api, cards, { tags, books }) -> { updated, skipped, failed }
+    one update per contact; keywords and addressBookIds are sent complete
+    the 'company' keyword is never removed by a tag edit
+    a card that would be left in no address book is refused, not skipped
   deleteContacts(api, cards) -> { deleted, failed }, always behind a confirm
     and always leaving one undo batch; undoLastMerge restores every card
   a delete-only undo entry reports no reverted kept contact
+
+vCard export
+  contactsToVCard(cards) -> one VCARD 3.0 block per contact, CRLF, escaped
+  N is family;given and ADR is structured, each component escaped separately
+  a contact with neither a name nor any field is left out
   a failing removal is reported, not swallowed
   nothing outside review-dialog.js calls contacts.remove
 ```

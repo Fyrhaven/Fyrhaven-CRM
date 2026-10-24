@@ -28,6 +28,7 @@ import { makeAppShell } from './lib/app-shell.js';
 import { makeProfilePage } from './lib/profile-page.js';
 import { makeProjectsPage } from './lib/projects-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
+import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { openEditor, toastEditorResult } from './lib/open-editor.js';
 import { openProject, toastProjectResult } from './lib/open-project.js';
 import { detectCapabilities, describeCapabilities, unavailableNamespaces } from './lib/capabilities.js';
@@ -93,15 +94,17 @@ const AppShell = makeAppShell(React, api, {
   projects: makeProjectsPage(React, api),
 });
 
-// One dialog slot serves three purposes: the review/merge dialog, the contact
-// editor and the project editor. `extraProps.editor` / `extraProps.projectEditor`
-// pick which component the host renders.
+// One dialog slot serves four purposes: the review/merge dialog, the contact
+// editor, the project editor and the bulk editor for a selection. The
+// `extraProps` marker picks which component the host renders.
 const ReviewDialog = makeReviewDialog(React, api);
 const EditorDialog = makeEditorDialog(React, api);
 const ProjectDialog = makeProjectDialog(React, api);
+const BulkDialog = makeBulkDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
+  if (props?.bulkEditor) return React.createElement(BulkDialog, props);
   return React.createElement(ReviewDialog, props);
 }
 
