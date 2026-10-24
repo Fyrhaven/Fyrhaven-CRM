@@ -21,6 +21,53 @@ describe('a hand-picked group', () => {
   });
 });
 
+describe('phone keys and the region', () => {
+  // set up above: makeCard, findDuplicateGroups
+  it('matches a national number against the same one written internationally', () => {
+    const cards = [
+      makeCard({ id: 'a', name: 'Ada Lovelace', phones: ['0176 1234567'] }),
+      makeCard({ id: 'b', name: 'A. Lovelace', phones: ['+49 176 1234567'] }),
+    ];
+
+    // without a region the two forms cannot be known to be the same number
+    expect(findDuplicateGroups(cards, {})).toEqual([]);
+
+    const groups = findDuplicateGroups(cards, { region: 'DE' });
+    expect(groups).toHaveLength(1);
+    expect(groups[0].strength).toBe('strong');
+    expect(groups[0].members.map((card) => card.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('still matches the international spellings with no region at all', () => {
+    const cards = [
+      makeCard({ id: 'a', name: 'Ada Lovelace', phones: ['+49 176 1234567'] }),
+      makeCard({ id: 'b', name: 'A. Lovelace', phones: ['0049 176 1234567'] }),
+    ];
+
+    expect(findDuplicateGroups(cards, {})).toHaveLength(1);
+  });
+
+  it('does not merge two different national numbers', () => {
+    // different people, different numbers: nothing may group them
+    const cards = [
+      makeCard({ id: 'a', name: 'Ada Lovelace', phones: ['0176 1234567'] }),
+      makeCard({ id: 'b', name: 'Grace Hopper', phones: ['0176 7654321'] }),
+    ];
+
+    expect(findDuplicateGroups(cards, { region: 'DE' })).toEqual([]);
+  });
+
+  it('leaves a number it cannot normalise as the digits it had', () => {
+    const cards = [
+      makeCard({ id: 'a', name: 'Ada Lovelace', phones: ['0176 1234567'] }),
+      makeCard({ id: 'b', name: 'Ada Lovelace', phones: ['01761234567'] }),
+    ];
+
+    // both fall back to the same digit string, so they still group
+    expect(findDuplicateGroups(cards, {})).toHaveLength(1);
+  });
+});
+
 describe('normalisation', () => {
   it('emails: trim + lowercase', () => {
     expect(normalizeEmail('  A@B.DE ')).toBe('a@b.de');

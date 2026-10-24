@@ -14,8 +14,7 @@ import {
 import { loadBooks, text } from './contacts.js';
 import {
   cardFromDraft, companyCardFromDraft, companyDraftFromCard, draftFromCard, emptyCompanyDraft,
-  emptyDraft, isDirty, validateCompanyDraft, validateDraft,
-} from './editor.js';
+  emptyDraft, isDirty, validateCompanyDraft, validateDraft, draftWarnings } from './editor.js';
 
 export function makeEditorDialog(React, api) {
   const { createElement: h, useEffect, useState } = React;
@@ -133,6 +132,13 @@ export function makeEditorDialog(React, api) {
     };
 
     const hasError = (field) => errors.some((error) => error.field === field);
+    // Non-blocking: the address is usable, it just may not be a person.
+    const warnings = draftWarnings(draft);
+    const warningHint = (index) => {
+      const found = warnings.find((warning) => warning.index === index);
+      return found ? t(found.key) : undefined;
+    };
+
     const errorText = (field) => {
       const error = errors.find((entry) => entry.field === field);
       return error ? t(error.key) : undefined;
@@ -234,6 +240,7 @@ export function makeEditorDialog(React, api) {
           h(Field, {
             label: t('editor.email', { count: index + 1 }),
             error: index === 0 && hasError('emails') ? errorText('emails') : undefined,
+            hint: warningHint(index),
           },
           h(Input, {
             type: 'email',

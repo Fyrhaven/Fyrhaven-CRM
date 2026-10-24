@@ -44,6 +44,12 @@ export function sidePane(basis) {
   };
 }
 
+/** A preview list inside a dialog: bounded, and it scrolls itself. */
+export const PREVIEW_AREA = {
+  maxHeight: '40vh',
+  overflowY: 'auto',
+};
+
 /** One saved search: its button and its remove button, side by side. */
 export const SAVED_ITEM = {
   display: 'inline-flex',

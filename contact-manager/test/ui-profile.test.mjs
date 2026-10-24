@@ -426,6 +426,48 @@ describe('contacts page', () => {
     }
   });
 
+  it('cleans up a selection: the dialog plans, the page applies, and it can be undone', async () => {
+    const api = profileApi({
+      'contacts.update': async () => {},
+      'ui.openDialog': async (options) => ({
+        plan: [{ id: 'a', patch: { phones: { p0: { number: '+491761234567' } } }, before: { phones: { p0: { number: '0176 1234567' } } } }],
+        region: options.extraProps.normalise.region,
+      }),
+    });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Clean up' })); });
+
+    // the dialog is handed the picked contacts and the stored region
+    const setup = api.calls('ui.openDialog')[0].args[0].extraProps.normalise;
+    expect(setup.cards.map((card) => card.id)).toEqual(['a']);
+    expect(setup.region).toBe('');
+
+    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Cleaned up 1 contact(s).');
+    // the batch is reversible, and the page says so
+    expect(api.storageSnapshot().lastCleanup.entries).toHaveLength(1);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo cleanup' })).toBeTruthy());
+  });
+
+  it('puts a cleaned-up batch back', async () => {
+    const api = profileApi({ 'contacts.update': async () => {} });
+    await api.storage.set('lastCleanup', {
+      at: Date.now(),
+      expiresAt: Date.now() + 60_000,
+      entries: [{ id: 'a', before: { phones: { p0: { number: '0176 1234567' } } } }],
+    });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Undo cleanup' })); });
+
+    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
+    expect(api.calls('contacts.update')[0].args).toEqual(['a', { phones: { p0: { number: '0176 1234567' } } }]);
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Put 1 contact(s) back.');
+    expect(api.storageSnapshot().lastCleanup).toBeUndefined();
+  });
+
   it('offers the editor from the profile and after creating a contact', async () => {
     const api = profileApi({ 'ui.openDialog': async () => ({ saved: 'created' }) });
     await renderPage(api);
