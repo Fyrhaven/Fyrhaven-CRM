@@ -11,6 +11,7 @@
 // the reasons list shows exactly which keys matched.
 
 import { contactName, emailEntries, isMergeable, phoneEntries, primaryEmail } from './contacts.js';
+import { phoneKey } from './phones.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -22,12 +23,13 @@ export function normalizeEmail(address) {
 }
 
 /**
- * Digits only for comparisons; `+49 …` and `0049 …` agree, because a leading
- * `00` is dropped. Under 7 digits counts as no number (extensions, years).
+ * The comparison key for a phone number. With a region it is the E.164 digits,
+ * so `0176 1234567` and `+49 176 1234567` agree; without one it is digits with
+ * a leading `00` dropped, so `+49 …` and `0049 …` still agree. Under 7 digits
+ * counts as no number (extensions, years).
  */
-export function normalizePhone(number) {
-  const digits = String(number ?? '').replace(/\D/g, '').replace(/^00/, '');
-  return digits.length >= 7 ? digits : '';
+export function normalizePhone(number, region = '') {
+  return phoneKey(number, region);
 }
 
 /**
@@ -74,7 +76,7 @@ export function cardKeys(card, opts = {}) {
     : [...new Set(emailEntries(card).map((e) => normalizeEmail(e.address)).filter(Boolean))];
   const phone = opts.matchByPhone === false
     ? []
-    : [...new Set(phoneEntries(card).map((p) => normalizePhone(p.number)).filter(Boolean))];
+    : [...new Set(phoneEntries(card).map((p) => normalizePhone(p.number, opts.region)).filter(Boolean))];
   let name = [];
   let core = [];
   if (opts.matchByName !== false) {

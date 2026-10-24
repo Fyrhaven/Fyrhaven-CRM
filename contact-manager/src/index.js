@@ -15,7 +15,7 @@
 const React = require('react');
 const api = require('@plugin-host');
 
-import { loadCards, matchOptions } from './lib/contacts.js';
+import { detectionOptions, loadCards } from './lib/contacts.js';
 import { findDuplicateGroups, readDismissed } from './lib/duplicates.js';
 import { toastMergeResult, undoWindowMinutes } from './lib/labels.js';
 import { undoLastMerge, readUndo } from './lib/undo.js';
@@ -29,6 +29,7 @@ import { makeProfilePage } from './lib/profile-page.js';
 import { makeProjectsPage } from './lib/projects-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { makeBulkDialog } from './lib/bulk-dialog.js';
+import { makeNormaliseDialog } from './lib/normalise-dialog.js';
 import { openEditor, toastEditorResult } from './lib/open-editor.js';
 import { openProject, toastProjectResult } from './lib/open-project.js';
 import { detectCapabilities, describeCapabilities, unavailableNamespaces } from './lib/capabilities.js';
@@ -42,7 +43,7 @@ async function scanGroups(pluginApi, scopeIds = null) {
     ? cards.filter((card) => scopeIds.has(card.id))
     : cards;
   const dismissed = scopeIds ? [] : await readDismissed(pluginApi);
-  return findDuplicateGroups(list, matchOptions(pluginApi.plugin.settings), dismissed);
+  return findDuplicateGroups(list, await detectionOptions(pluginApi), dismissed);
 }
 
 /** Scan, then open the review dialog; toast the outcome. */
@@ -94,17 +95,19 @@ const AppShell = makeAppShell(React, api, {
   projects: makeProjectsPage(React, api),
 });
 
-// One dialog slot serves four purposes: the review/merge dialog, the contact
-// editor, the project editor and the bulk editor for a selection. The
-// `extraProps` marker picks which component the host renders.
+// One dialog slot serves five purposes: the review/merge dialog, the contact
+// editor, the project editor, the bulk editor for a selection and the cleanup
+// preview. The `extraProps` marker picks which component the host renders.
 const ReviewDialog = makeReviewDialog(React, api);
 const EditorDialog = makeEditorDialog(React, api);
 const ProjectDialog = makeProjectDialog(React, api);
 const BulkDialog = makeBulkDialog(React, api);
+const NormaliseDialog = makeNormaliseDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
   if (props?.bulkEditor) return React.createElement(BulkDialog, props);
+  if (props?.normalise) return React.createElement(NormaliseDialog, props);
   return React.createElement(ReviewDialog, props);
 }
 

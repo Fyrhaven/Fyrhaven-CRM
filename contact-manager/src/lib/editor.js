@@ -3,6 +3,7 @@
 // rules (what a valid draft is, what the patch looks like) are unit-testable
 // without a browser. `editor-dialog.js` renders it, `index.js` opens it.
 
+import { isDisposableAddress, isEmailSyntax, isRoleAddress } from './emails.js';
 import { bookIds, emailEntries, phoneEntries, text } from './contacts.js';
 
 /** A blank draft, geared for the create form. */
@@ -81,7 +82,9 @@ export function draftFromCard(card, books = []) {
   return draft;
 }
 
-const emailOk = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+// The email check is shared with the cleanup flow, so the editor and a bulk
+// normalisation never disagree about what a usable address looks like.
+const emailOk = (value) => isEmailSyntax(value);
 const phoneOk = (value) => value.replace(/\D/g, '').length >= 5;
 
 const normalize = (draft) => ({
@@ -111,6 +114,25 @@ export function validateDraft(draft, mode = 'create') {
   }
   const seen = new Set();
   return errors.filter((error) => (seen.has(error.field) ? false : seen.add(error.field)));
+}
+
+/**
+ * Non-blocking warnings for a draft: an address that belongs to a function
+ * rather than a person, or a throwaway domain. These never stop a save — plenty
+ * of legitimate contacts are `info@` — they just say why the contact may be a
+ * poor anchor for duplicate detection.
+ *
+ * @returns {Array<{field: string, index: number, key: string}>}
+ */
+export function draftWarnings(draft) {
+  const warnings = [];
+  (draft?.emails ?? []).forEach((entry, index) => {
+    const address = text(entry?.address);
+    if (!address) return;
+    if (isRoleAddress(address)) warnings.push({ field: 'emails', index, key: 'editor.warn.role' });
+    else if (isDisposableAddress(address)) warnings.push({ field: 'emails', index, key: 'editor.warn.disposable' });
+  });
+  return warnings;
 }
 
 /** True when the draft differs from the one it started as. */

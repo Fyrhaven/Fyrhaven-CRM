@@ -5,13 +5,16 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.16.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0); on top of bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.17.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0); on top of smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.16.0` is the newest GitHub release (v1.15.0,
   v1.14.1, v1.14.0, v1.13.2, v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0,
   v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
-  #71, #72, #73, #76 and #78 merged).
+  #71, #72, #73, #76 and #78 merged). **v1.17.0 is prepared on
+  `feat/contact-manager-normalise`** and still needs its PR, the merge, the
+  mirror sync and `npm run release` — then a handoff commit saying it is
+  released, as the releases before it were closed out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -21,6 +24,41 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### E.164 cleanup, and phone matching that works (v1.17.0) — #17
+
+`phones.js` normalises to E.164 and `normalise.js` plans, applies and reverses a
+batch. Three rules exist to stop a **wrong** value being written onto a contact:
+
+- **No country, no national normalisation.** `0176…` cannot become E.164 without
+  knowing the country, so it is left alone rather than guessed at.
+- **An ambiguous number is refused.** German `0491…` (Leer) and `+49 491…` both
+  exist, so a national number that already starts with the dial code is left
+  alone instead of being double-prefixed.
+- **A refusal is never recorded as a change.** A contact the host declines is
+  counted in `failed` and left out of the undo record, so undoing can never
+  revert something that never happened.
+
+The real payoff is **detection**, not tidying: `normalizePhone(number, region)`
+now returns the E.164 digits, so `0176 1234567` and `+49 176 1234567` finally
+produce the same key and group as one contact. Without a region the old
+digits-only behaviour stands, so nothing changes for an existing install.
+Because the region is needed in four places (`index.js`, `manager-page.js`,
+`detail-section.js`, `watch.js`), they all go through one async helper,
+`detectionOptions(api)` in `contacts.js` — four call sites that each remembered
+to read the region would eventually be three.
+
+**Where the region lives is a deliberate choice.** It is *not* a manifest
+setting: `settingsSchema` in this plugin only uses boolean and number fields,
+and inventing a string type would be assuming host behaviour — the mistake #75
+is about. It sits in `api.storage`, set from the cleanup dialog, and
+`region.js` holds it so both `contacts.js` and `normalise.js` can read it
+without an import cycle.
+
+A bug the tests caught: `planCard` first compared the *trimmed* value against
+the normalised one, so a number that differed only by surrounding spaces was
+never seen as a change — which is exactly what trimming is for. It compares the
+stored value now, and a test pins it.
 
 ### Smart search and saved searches (v1.16.0) — the page half of #13
 
@@ -563,7 +601,8 @@ time/expenses and export, v1.13.1 optional-call crash and project saving fixes,
 v1.13.2 the plugin-owned two-pane page skeleton, v1.14.0 bulk merge and delete
 on a hand-picked selection plus the fixed search box, v1.14.1 the capability
 probe and precise unavailable notice, v1.15.0 bulk tag/book edits and vCard
-export for a selection, v1.16.0 smart search and saved searches.
+export for a selection, v1.16.0 smart search and saved searches, v1.17.0 E.164
+cleanup with preview and undo.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real
