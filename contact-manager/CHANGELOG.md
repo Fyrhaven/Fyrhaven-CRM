@@ -7,6 +7,46 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.19.0] — 2026-10-23
+
+### Added
+
+- **A *Health* sub-tab: what is missing or broken, and what it costs (#16).** A
+  fourth tab beside *Duplicates*, *Contacts* and *Projects*, with the average
+  score over the whole address book, a **per-address-book** breakdown (worst
+  first), the totals for each rule, and a drill-down list of the contacts,
+  worst first.
+- **Every deduction is named.** Eleven rules, each with its own weight and its
+  own line: no name, no email, no phone, a malformed address, an unusable phone
+  number, a duplicate, a throwaway domain, a function address, a phone that is
+  not E.164, an address that only needs tidying, and a contact nobody has
+  touched in two years. The score is deductions from 100, so the list of issues
+  *is* the explanation — and a contact with more than 100 points of problems
+  floors at 0 rather than going negative.
+- **Every total is a filter.** `No phone number (18)` leads to those eighteen.
+- **One-click fixes, reusing what is already reversible.** A phone that only
+  needs normalising goes through the cleanup dialog (preview, then undo); a
+  duplicate goes through the review dialog (preview, then undo); anything else
+  opens the editor. A *Clean up N* button in the header handles every
+  normalisation problem at once.
+
+### Fixed
+
+- **`rawEmailAddresses` for the health check.** `emailEntries` drops an address
+  that does not look like one — it requires an `@` and no spaces — so a
+  *malformed* address was invisible to exactly the check written to find it.
+  The health rules read the raw map, which is also what lets them tell
+  `Ada@Example.ORG` from `  Ada@Example.ORG `.
+
+### Notes
+
+The band cutoffs live in one place (`BANDS`), including for the per-book
+breakdown, so the dashboard and the rules can never disagree about what "good"
+means.
+
+#16's "stale data" rule uses `updated` when the host provides it; a contact the
+host never stamped is not counted as stale, because the plugin cannot know.
+
 ## [1.18.0] — 2026-10-23
 
 ### Added
