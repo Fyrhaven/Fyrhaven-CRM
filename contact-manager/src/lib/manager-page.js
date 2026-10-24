@@ -4,7 +4,7 @@
 // nothing is cached (api.storage holds only the settings and hidden groups).
 
 import { List, ListRow, Page, PageHeader, InfoBar, Alert, EmptyState, Card, Badge, Checkbox, Button, Row, Stack, Text, Heading } from '@plugin-host/ui';
-import { bookIds, bookNamesById, contactName, loadBooks, loadCards, matchOptions } from './contacts.js';
+import { bookIds, bookNamesById, contactName, detectionOptions, loadBooks, loadCards } from './contacts.js';
 import { LAST_SCAN_KEY, findDuplicateGroups, planMerge, readDismissed, writeDismissed } from './duplicates.js';
 import { memberLabel, mergeLabel, reasonLine, strengthKey, toastMergeResult, undoWindowMinutes } from './labels.js';
 import { readUndo, undoLastMerge, clearUndo } from './undo.js';
@@ -38,7 +38,7 @@ export function makeManagerPage(React, api) {
           loadCards(api), loadBooks(api), readDismissed(api), readUndo(api),
         ]);
         const hiddenSet = new Set(dismissed);
-        const found = findDuplicateGroups(cards, matchOptions(api.plugin.settings), []);
+        const found = findDuplicateGroups(cards, await detectionOptions(api), []);
         const when = new Date().toISOString();
         setUndo(batches.at(-1) ?? null);
         setBookNames(bookNamesById(books));

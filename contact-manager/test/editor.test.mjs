@@ -2,8 +2,8 @@
 // writes, validation and the dirty check.
 import { describe, expect, it } from 'vitest';
 import {
-  cardFromDraft, companyCardFromDraft, companyDraftFromCard, draftFromCard, emptyCompanyDraft,
-  emptyDraft, isDirty, validateCompanyDraft, validateDraft,
+  cardFromDraft, companyCardFromDraft, companyDraftFromCard, draftFromCard, draftWarnings,
+  emptyCompanyDraft, emptyDraft, isDirty, validateCompanyDraft, validateDraft,
 } from '../src/lib/editor.js';
 import { makeCard } from './fixtures.mjs';
 
@@ -127,6 +127,26 @@ describe('validateDraft', () => {
     expect(validateDraft({ ...draft, phones: [{ number: '12' }] }))
       .toEqual([{ field: 'phones', key: 'editor.error.phone' }]);
     expect(validateDraft({ ...draft, phones: [{ number: '+49 176 1234567' }] })).toEqual([]);
+  });
+
+  it('warns about a function address and a throwaway domain, without blocking', () => {
+    const draft = { ...emptyDraft(), given: 'Ada', bookIds: ['b1'] };
+
+    expect(draftWarnings({ ...draft, emails: [{ address: 'info@example.org' }] }))
+      .toEqual([{ field: 'emails', index: 0, key: 'editor.warn.role' }]);
+    expect(draftWarnings({ ...draft, emails: [{ address: 'x@mailinator.com' }] }))
+      .toEqual([{ field: 'emails', index: 0, key: 'editor.warn.disposable' }]);
+    expect(draftWarnings({ ...draft, emails: [{ address: 'ada@example.org' }] })).toEqual([]);
+    // a warning is not an error: the draft still validates
+    expect(validateDraft({ ...draft, emails: [{ address: 'info@example.org' }] })).toEqual([]);
+  });
+
+  it('says nothing about an address that is empty or unusable', () => {
+    const draft = { ...emptyDraft(), given: 'Ada', bookIds: ['b1'] };
+
+    expect(draftWarnings({ ...draft, emails: [{ address: '  ' }] })).toEqual([]);
+    expect(draftWarnings({ ...draft, emails: [{ address: 'nope' }] })).toEqual([]);
+    expect(draftWarnings({})).toEqual([]);
   });
 
   it('requires an address book only when creating', () => {

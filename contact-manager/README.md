@@ -60,7 +60,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Export* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | The review/merge dialog, the **contact editor** and the **project editor** — the only places that write |
@@ -88,6 +88,11 @@ contact-manager/
 │       ├── labels.js       # shared display helpers and toasts
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
 │       ├── search.js      # the query language and the matcher behind the search box
+│       ├── phones.js      # E.164 normalisation and the region table
+│       ├── emails.js      # email syntax, role addresses, throwaway domains
+│       ├── region.js      # the stored country for national numbers
+│       ├── normalise.js   # the cleanup plan, its application and its undo record
+│       ├── normalise-dialog.js # the cleanup preview
 │       ├── saved-searches.js # the queries a user keeps, in api.storage
 │       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
 │       ├── bulk.js        # bulk edits and delete for a selection
@@ -133,6 +138,9 @@ contact-manager/
 │   ├── ui-bulk.test.mjs    # the bulk editor dialog
 │   ├── vcard.test.mjs      # the vCard writer
 │   ├── search.test.mjs     # parsing, matching, and the 10k budget
+│   ├── phones.test.mjs     # E.164 across the ways a number is written
+│   ├── emails.test.mjs     # syntax, role addresses, throwaway domains
+│   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
 │   ├── ui-kit.test.mjs     # every @plugin-host/ui name the source imports exists
@@ -628,6 +636,9 @@ plugin host are **not** bundled, the host provides them.
 | `test/vcard.test.mjs` | The vCard writer: one block per contact, CRLF, the importable fields, RFC 2426 escaping, structured N/ADR |
 | `test/search.test.mjs` | `parseQuery` (operators, unknown fields, values), matching per field, the fuzzy floor, and 10k contacts inside the 100 ms budget |
 | `test/saved-searches.test.mjs` | The saved-search store: names, replacement, the cap, and the repairs it makes on the way in |
+| `test/phones.test.mjs` | `toE164` across international and national formats, the refusals (no country, ambiguous, not a number), the length bounds, and `phoneKey` agreeing across spellings |
+| `test/emails.test.mjs` | Email syntax, role addresses and throwaway domains, and that a role address is a warning rather than a rejection |
+| `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
@@ -870,6 +881,21 @@ Smart search
 Saved searches
   readSaved / saveSearch / deleteSaved, key 'savedSearches', cap 20
   named by their own query, so no prompt API is needed; per browser only
+
+Phone numbers
+  toE164(number, region) -> '+491761234567' or '' — never a guess
+    international (+…, 00…) needs no region; a national number does
+    a national number already starting with the dial code is ambiguous -> ''
+  phoneKey(number, region) is what detection compares
+  isValidE164 requires the '+' and 7..15 digits with no leading zero
+
+Cleanup (#17)
+  planNormalisation(cards, { region }) -> the cards that would change, each
+    with the complete new map and the maps it replaces
+  applyNormalisation writes one update per contact, then one undo record
+    a contact the host refuses is counted and left out of the record
+  undoCleanup restores every contact; entries that fail stay for a retry
+  the region lives in api.storage, not the settings schema (see #75)
   a failing removal is reported, not swallowed
   nothing outside review-dialog.js calls contacts.remove
 ```

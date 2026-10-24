@@ -9,7 +9,7 @@
 // `contact-detail-section` slot, which offers *Review duplicates* for the
 // open contact.
 
-import { contactName, matchOptions } from './contacts.js';
+import { contactName, detectionOptions } from './contacts.js';
 import { findGroupFor } from './duplicates.js';
 import { reasonLine } from './labels.js';
 
@@ -35,9 +35,9 @@ export function isSameCard(a, b) {
  * Uses api.contacts.search (email, then name), so it stays cheap on large
  * address books.
  */
-export async function findDuplicatesOf(api, contact, opts = matchOptions(api.plugin?.settings)) {
+export async function findDuplicatesOf(api, contact, opts = null) {
   if (!contact || typeof contact !== 'object') return null;
-  const group = await findGroupFor(api, contact, opts);
+  const group = await findGroupFor(api, contact, opts ?? await detectionOptions(api));
   if (!group) return null;
   const others = (group.members ?? []).filter((member) => !isSameCard(member, contact));
   if (!others.length) return null;

@@ -7,6 +7,51 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.17.0] — 2026-10-23
+
+### Added
+
+- **Clean up a selection: phone numbers to E.164, addresses trimmed and
+  lower-cased (#17).** The selection bar gained *Clean up*, which opens a
+  **preview** — every change, per contact, before anything is written — and
+  applies only what you approve. The batch is **reversible**: the dialog keeps
+  what it replaced, and the page then offers *Undo cleanup* for as long as the
+  undo window lasts (`undoMinutes`, the same setting the merge undo uses).
+- **A country for national numbers.** `0176 1234567` and `+49 176 1234567` are
+  the same number, but only once the country is known. The choice is remembered
+  in this browser.
+- **Phone matching across spellings.** Duplicate detection now keys phone
+  numbers by their E.164 digits, so a contact saved as `0176…` and the same one
+  saved as `+49 176…` finally group — the gap that made a whole class of
+  duplicates invisible. Without a country set, behaviour is unchanged.
+- **Role and throwaway warnings in the editor.** `info@…` and known disposable
+  domains are flagged as *warnings* while editing. They never block a save —
+  plenty of legitimate contacts are `info@` — they just say why the contact may
+  be a weak anchor for duplicate detection.
+- The email check is now shared between the editor and the cleanup flow, so the
+  two can never disagree about what a usable address is.
+
+### Notes
+
+Three rules the implementation holds to, because each one prevents writing a
+wrong value onto a contact:
+
+- **No country, no national normalisation.** A bare `0176…` is left alone rather
+  than guessed at.
+- **An ambiguous number is refused.** German `0491…` (Leer) and `+49 491…` both
+  exist, so a national number that already begins with the country's dial code
+  is left alone instead of being double-prefixed.
+- **A refusal is never recorded as a change.** A contact the host declines to
+  update is counted and left out of the undo record, so undoing never reverts
+  something that never happened.
+
+The country is **not** a manifest setting: the settings schema in use here only
+has boolean and number fields, and inventing a string type would be assuming
+host behaviour this repo has already been burnt by (#75). It lives in
+`api.storage`, set from the dialog.
+
+#17 also mentions a *health report* — that is #16, a separate issue.
+
 ## [1.16.0] — 2026-10-23
 
 ### Added
