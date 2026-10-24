@@ -119,14 +119,23 @@ describe('search performance', () => {
       keywords: { vip: i % 3 === 0 },
     }));
 
-    // warm up, then measure the query the issue cares about
-    searchCards(many, 'tag:vip has:phone', { books: BOOKS });
-    const started = performance.now();
-    const { results } = searchCards(many, 'tag:vip has:phone person9', { books: BOOKS });
-    const elapsed = performance.now() - started;
+    // Best of three, after a warm-up. The suite runs its files in parallel, so
+    // a single measurement picks up scheduler noise — one run of this test
+    // measured 103 ms purely because the other workers were busy, which failed
+    // a release. Noise only ever makes a run *slower*, so the minimum is the
+    // closest to the real cost, while a genuine regression raises every run.
+    const query = 'tag:vip has:phone person9';
+    searchCards(many, query, { books: BOOKS });
+    const runs = [];
+    let results = [];
+    for (let i = 0; i < 3; i += 1) {
+      const started = performance.now();
+      results = searchCards(many, query, { books: BOOKS }).results;
+      runs.push(performance.now() - started);
+    }
 
     expect(results.length).toBeGreaterThan(0);
-    expect(elapsed).toBeLessThan(100);
+    expect(Math.min(...runs)).toBeLessThan(100);
   });
 });
 
