@@ -27,6 +27,7 @@ import { makeEditorDialog } from './lib/editor-dialog.js';
 import { makeAppShell } from './lib/app-shell.js';
 import { makeProfilePage } from './lib/profile-page.js';
 import { makeProjectsPage } from './lib/projects-page.js';
+import { makeHealthPage } from './lib/health-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
@@ -88,11 +89,12 @@ async function undoMerge(pluginApi) {
 // ─── Slots ─────────────────────────────────────────────────────
 
 // One app-page slot carries the whole plugin: a single navigation-rail entry
-// whose body is split into sub-tabs — Duplicates, Contacts and Projects.
+// whose body is split into sub-tabs — Duplicates, Contacts, Projects and Health.
 const AppShell = makeAppShell(React, api, {
   duplicates: makeManagerPage(React, api),
   contacts: makeProfilePage(React, api),
   projects: makeProjectsPage(React, api),
+  health: makeHealthPage(React, api),
 });
 
 // One dialog slot serves five purposes: the review/merge dialog, the contact
@@ -112,7 +114,7 @@ function DialogSlot(props) {
 }
 
 export const slots = {
-  // The Contact Manager page: Duplicates, Contacts and Projects in sub-tabs.
+  // The Contact Manager page: Duplicates, Contacts, Projects and Health in sub-tabs.
   'app-page': {
     component: AppShell,
     shouldShow: () => enabled(api),

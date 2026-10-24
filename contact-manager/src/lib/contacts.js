@@ -75,6 +75,23 @@ export function phoneEntries(card) {
     .filter((entry) => text(entry.number));
 }
 
+/**
+ * Every email address on a card **as written**, including the ones
+ * `emailEntries` drops for not looking like an address at all.
+ *
+ * The health check needs those: a malformed address is exactly what it is
+ * looking for, and `emailEntries` filters on "has an @ and no spaces", so
+ * `nope` would otherwise be invisible. Values are untrimmed, so a check can
+ * tell `Ada@Example.ORG` from `  Ada@Example.ORG `.
+ */
+export function rawEmailAddresses(card) {
+  const source = card?.emails;
+  const values = Array.isArray(source) ? source : Object.values(source ?? {});
+  return values
+    .map((entry) => (typeof entry === 'string' ? entry : entry?.address))
+    .filter((value) => typeof value === 'string' && value.trim());
+}
+
 /** The preferred email address of a contact, or null. */
 export function primaryEmail(card) {
   const entries = emailEntries(card).sort((a, b) => (a.pref ?? 101) - (b.pref ?? 101));
