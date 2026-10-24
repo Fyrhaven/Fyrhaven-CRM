@@ -50,7 +50,7 @@ signatures, the last scan summary).
 
 | Surface | Where it appears | What it does |
 |---|---|---|
-| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Projects* and *Health* |
+| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Projects* and *Health* |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
@@ -91,6 +91,8 @@ contact-manager/
 │       ├── avatar-view.js # the avatar element, which hides itself on failure
 │       ├── health.js      # the health rules, their weights and the bands
 │       ├── health-page.js # the Health dashboard
+│       ├── home-page.js  # the main page: state, the menu and the section rows
+│       ├── actions.js    # the tasks the palette and the main page both run
 │       ├── search.js      # the query language and the matcher behind the search box
 │       ├── phones.js      # E.164 normalisation and the region table
 │       ├── emails.js      # email syntax, role addresses, throwaway domains
@@ -98,7 +100,7 @@ contact-manager/
 │       ├── normalise.js   # the cleanup plan, its application and its undo record
 │       ├── normalise-dialog.js # the cleanup preview
 │       ├── saved-searches.js # the queries a user keeps, in api.storage
-│       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects/Health sub-tabs
+│       ├── app-shell.js   # the single app page: the Overview/Duplicates/Contacts/Projects/Health sub-tabs
 │       ├── bulk.js        # bulk edits and delete for a selection
 │       ├── bulk-dialog.js # the bulk editor: tags and address books
 │       ├── vcard.js       # contacts to vCard 3.0, for the bulk export
@@ -148,6 +150,7 @@ contact-manager/
 │   ├── ui-avatar.test.mjs  # the avatar element, including its failure
 │   ├── health.test.mjs     # the rules, the weights and the bands
 │   ├── ui-health.test.mjs  # the Health dashboard
+│   ├── ui-home.test.mjs    # the main page
 │   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
@@ -650,6 +653,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-avatar.test.mjs` | The avatar element: lazy, no referrer, and gone the moment the image fails |
 | `test/health.test.mjs` | Every rule and its weight, the score floor, the band cutoffs, the per-book breakdown, and the drill-downs |
 | `test/ui-health.test.mjs` | The dashboard: the average, the book rows, filtering by a rule, the scores on the rows, and the fixes it offers |
+| `test/ui-home.test.mjs` | The main page: the headline numbers, the last-scan line, each row leading into its section, and that the menu runs the same actions as the palette |
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
@@ -900,6 +904,15 @@ Phone numbers
     a national number already starting with the dial code is ambiguous -> ''
   phoneKey(number, region) is what detection compares
   isValidE164 requires the '+' and 7..15 digits with no leading zero
+
+Main page (Overview)
+  makeHomePage(React, api) renders the landing tab; every sub-page is handed
+    onNavigate(tabId), which is how its rows lead into a section
+  the menu and the command palette both call lib/actions.js — one implementation
+    findDuplicates(api, scopeIds)  newContact  newCompany  newProject  undoMerge
+  the counts come from one load of the cards, shared with the duplicate scan
+    and the health rules
+  the plugin lands on Overview, not on Duplicates
 
 Health (#16)
   RULES maps a rule key to { weight, fix }; RULE_KEYS is the order shown
