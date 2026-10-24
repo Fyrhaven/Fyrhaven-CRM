@@ -122,6 +122,72 @@ describe('contacts page', () => {
     expect(search.parentElement).toBe(scroll.parentElement);
   });
 
+  it('filters by an operator and says how many matched', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'tag:maths' } });
+    });
+
+    // only Ada carries the 'maths' tag, so Grace is gone from the list entirely
+    expect(screen.queryByText('Grace Hopper')).toBeNull();
+    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+    expect(screen.getByText('1 of 2 contacts')).toBeTruthy();
+  });
+
+  it('explains an operator it cannot use, and still searches for the text', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'has:fax' } });
+    });
+
+    expect(screen.getByText(/has:fax is not supported/)).toBeTruthy();
+    // the token stays a free-text term, so the search runs instead of silently failing
+    expect(screen.getByText('No contact matches that search.')).toBeTruthy();
+  });
+
+  it('shows the operators while the box is empty', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    expect(screen.getByText('Operators: tag: has: company: book: is:')).toBeTruthy();
+  });
+
+  it('saves a search, counts it, applies it from its button and removes it', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'tag:maths' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save this search' })); });
+
+    expect(api.storageSnapshot().savedSearches).toEqual([{ name: 'tag:maths', query: 'tag:maths' }]);
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Saved tag:maths.');
+    // the saved button carries the query and its live count
+    expect(screen.getByRole('button', { name: 'tag:maths · 1' })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: '' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'tag:maths · 1' })); });
+    expect(screen.getByLabelText('Search contacts').value).toBe('tag:maths');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Remove tag:maths' })); });
+    expect(api.storageSnapshot().savedSearches).toBeUndefined();
+  });
+
+  it('loads the saved searches it finds in storage', async () => {
+    const api = profileApi();
+    await api.storage.set('savedSearches', [{ name: 'Has email', query: 'has:email' }]);
+    await renderPage(api);
+
+    expect(screen.getByRole('button', { name: 'Has email · 2' })).toBeTruthy();
+  });
+
   it('switches the profile when another contact is chosen', async () => {
     const api = profileApi();
     await renderPage(api);
