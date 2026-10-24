@@ -17,6 +17,7 @@ const Stub = (label) => () => React.createElement('p', null, label);
 function renderShell() {
   const api = fakeApi({ translations: manifest.locales });
   const Shell = makeAppShell(React, api, {
+    home: Stub('Overview body'),
     duplicates: Stub('Duplicates body'),
     contacts: Stub('Contacts body'),
     projects: Stub('Projects body'),
@@ -27,11 +28,13 @@ function renderShell() {
 }
 
 describe('app shell', () => {
-  it('shows the four sub-tabs, Duplicates first, and mounts only that one', () => {
+  it('shows the five sub-tabs, the overview first, and mounts only that one', () => {
     renderShell();
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-      .toEqual(['Duplicates', 'Contacts', 'Projects', 'Health']);
-    expect(screen.getByText('Duplicates body')).toBeTruthy();
+      .toEqual(['Overview', 'Duplicates', 'Contacts', 'Projects', 'Health']);
+    // the plugin lands on its main page, not on Duplicates
+    expect(screen.getByText('Overview body')).toBeTruthy();
+    expect(screen.queryByText('Duplicates body')).toBeNull();
     expect(screen.queryByText('Contacts body')).toBeNull();
     expect(screen.queryByText('Projects body')).toBeNull();
     expect(screen.queryByText('Health body')).toBeNull();
@@ -40,12 +43,16 @@ describe('app shell', () => {
   it('marks the active tab and keeps an opened tab mounted', async () => {
     renderShell();
 
+    expect(screen.getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true');
+
     await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Contacts' })); });
     expect(screen.getByRole('tab', { name: 'Contacts' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Duplicates' }).getAttribute('aria-selected')).toBe('false');
     // hidden but still mounted, so a scan result survives a tab switch
-    expect(screen.getByText('Duplicates body')).toBeTruthy();
+    expect(screen.getByText('Overview body')).toBeTruthy();
     expect(screen.getByText('Contacts body')).toBeTruthy();
+    // a tab nobody opened is still not mounted
+    expect(screen.queryByText('Duplicates body')).toBeNull();
 
     await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Projects' })); });
     expect(screen.getByText('Projects body')).toBeTruthy();
@@ -53,7 +60,9 @@ describe('app shell', () => {
 
     await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Health' })); });
     expect(screen.getByText('Health body')).toBeTruthy();
-    // every tab opened stays mounted
-    expect(screen.getByText('Duplicates body')).toBeTruthy();
+    // every tab that was opened stays mounted
+    expect(screen.getByText('Overview body')).toBeTruthy();
+    expect(screen.getByText('Contacts body')).toBeTruthy();
+    expect(screen.getByText('Projects body')).toBeTruthy();
   });
 });

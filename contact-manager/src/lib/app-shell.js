@@ -1,14 +1,18 @@
 // The single app page: one navigation-rail entry — *Contact Manager* — whose
-// body is split into sub-tabs (Duplicates, Contacts, Projects) with the host's
-// own `Tabs` kit component. Each sub-page mounts the first time it is opened
-// and then stays mounted but hidden, so switching tabs keeps a scan result or
-// a selected contact instead of throwing the work away.
+// body is split into sub-tabs (Overview, Duplicates, Contacts, Projects, Health)
+// with the host's own `Tabs` kit component. Each sub-page mounts the first time
+// it is opened and then stays mounted but hidden, so switching tabs keeps a scan
+// result or a selected contact instead of throwing the work away.
+//
+// Every sub-page is handed `onNavigate(tabId)`, which is how the Overview's rows
+// lead into the section they summarise.
 import { Tabs } from '@plugin-host/ui';
 
-export function makeAppShell(React, api, { duplicates, contacts, projects, health }) {
+export function makeAppShell(React, api, { home, duplicates, contacts, projects, health }) {
   const { createElement: h, useEffect, useState } = React;
   const t = (key) => api.i18n.t(key);
   const tabs = [
+    { id: 'home', label: t('home.tab'), component: home },
     { id: 'duplicates', label: t('tab.duplicates'), component: duplicates },
     { id: 'contacts', label: t('page.contactsTitle'), component: contacts },
     { id: 'projects', label: t('page.projectsTitle'), component: projects },
@@ -16,7 +20,7 @@ export function makeAppShell(React, api, { duplicates, contacts, projects, healt
   ];
 
   return function AppShell() {
-    const [active, setActive] = useState('duplicates');
+    const [active, setActive] = useState('home');
     const [visited, setVisited] = useState([active]);
 
     useEffect(() => {
@@ -35,6 +39,6 @@ export function makeAppShell(React, api, { duplicates, contacts, projects, healt
         .map((tab) => h('div', {
           key: tab.id,
           style: tab.id === active ? undefined : { display: 'none' },
-        }, h(tab.component))));
+        }, h(tab.component, { onNavigate: setActive }))));
   };
 }
