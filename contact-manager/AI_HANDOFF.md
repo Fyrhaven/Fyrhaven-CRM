@@ -5,13 +5,16 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.15.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0); on top of the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.16.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0); on top of bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.15.0` is the newest GitHub release (v1.14.1,
   v1.14.0, v1.13.2, v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0,
   v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
-  #71, #72, #73 and #76 merged).
+  #71, #72, #73 and #76 merged). **v1.16.0 is prepared on
+  `feat/contact-manager-smart-search`** and still needs its PR, the merge, the
+  mirror sync and `npm run release` — then a handoff commit saying it is
+  released, as the releases before it were closed out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -21,6 +24,44 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Smart search and saved searches (v1.16.0) — the page half of #13
+
+The *Contacts* box went from a `includes()` filter to a small query language in
+`src/lib/search.js` (pure, so all of it is unit-testable):
+
+`name:` `email:` `phone:` `company:` `note:` `tag:` `book:` `has:` `is:`, plus
+free text over name, nickname, email, phone, company, note, tag and
+address-book name. Three details that only showed up while testing:
+
+- `company:` has to match **a company record's own name**, not just
+  `organizations` — a company card has no `organizations` entry, so
+  `company:acme` missed *Acme Ltd* until `companyTerms` included it.
+- `book:` takes an **id as well as a name**: the card only stores ids and the
+  page only knows names, so both are indexed.
+- `phone:` compares digits with leading zeros dropped, so a number typed in
+  local format (`0176…`) still finds the stored international one.
+
+Matching is strict — every term must match — except for a **subsequence fallback
+on names, from three characters up**, which is what makes `grce` find *Grace
+Hopper*. Below three characters a subsequence would match half the address book.
+
+**Performance drove the shape of the module.** The issue asks for under 100 ms
+on 10k contacts, but the page also needs a *count per saved search*, and running
+`searchCards` once per chip would re-read every card each time. So
+`buildIndex(cards, { books })` derives the searchable strings **once** and
+`matchIndexed` / `countsForIndex` reuse it: N saved searches cost N cheap passes
+over pre-built strings. Measured **~30 ms** for 10k contacts, asserted by a test.
+
+An unknown operator is reported **and** kept as a free-text term, so a typo
+returns something and the line under the box says what was wrong. The saved
+searches (`saved-searches.js`, key `savedSearches`, cap 20) are **named by their
+own query** — `tag:vip · 3` — deliberately: the plugin has no verified prompt
+API, and inventing one is the mistake #75 is about.
+
+**Still open on #13:** the command-palette entry point. There is no verified host
+API for the palette to switch the page to a query (cross-frame messaging or page
+navigation), so it is not implemented rather than guessed at.
 
 ### Bulk edit and vCard export (v1.15.0) — completes #14
 
@@ -525,14 +566,15 @@ time/expenses and export, v1.13.1 optional-call crash and project saving fixes,
 v1.13.2 the plugin-owned two-pane page skeleton, v1.14.0 bulk merge and delete
 on a hand-picked selection plus the fixed search box, v1.14.1 the capability
 probe and precise unavailable notice, v1.15.0 bulk tag/book edits and vCard
-export for a selection.
+export for a selection, v1.16.0 smart search and saved searches.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real
 tasks; time and expense entries are still open). What is left on the near
 roadmap is the rest of the v1.3.0 milestone: #13 (smart search and saved
-searches), #12 (contact groups) and #15 (avatars) — #14 (bulk actions) is
-done as of v1.15.0. #11
+searches — the operators and saved searches shipped in v1.16.0, the command
+palette half is still open), #12 (contact groups) and #15 (avatars) — #14 (bulk
+actions) is done as of v1.15.0. #11
 (custom fields) needs a host change and stays parked; deals/pipeline stay out
 of scope.
 
