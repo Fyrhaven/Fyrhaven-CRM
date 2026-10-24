@@ -167,6 +167,15 @@ export function addressLine(card) {
 export const linkUris = (card) => Object.values(card?.onlineServices ?? {})
   .map((entry) => entry?.uri).filter(Boolean);
 
+/** Every photo URI on a contact (`media`), photos first. */
+export function mediaUris(card) {
+  const entries = Object.values(card?.media ?? {}).filter((entry) => entry?.uri);
+  return [
+    ...entries.filter((entry) => entry.kind === 'photo'),
+    ...entries.filter((entry) => entry.kind !== 'photo'),
+  ].map((entry) => entry.uri);
+}
+
 
 /** All contacts of the account. Throws when the fetch fails. */
 export async function loadCards(api) {

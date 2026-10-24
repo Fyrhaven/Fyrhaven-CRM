@@ -468,6 +468,55 @@ describe('contacts page', () => {
     expect(api.storageSnapshot().lastCleanup).toBeUndefined();
   });
 
+  it('shows a Gravatar avatar only when the user turned it on', async () => {
+    const off = profileApi();
+    await renderPage(off);
+    expect(document.querySelectorAll('img[data-avatar="gravatar"]')).toHaveLength(0);
+
+    cleanup();
+    const on = fakeApi({
+      settings: { gravatar: true },
+      translations: manifest.locales,
+      handlers: {
+        'contacts.list': async () => CARDS,
+        'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
+      },
+    });
+    await renderPage(on);
+
+    // one per contact in the list, plus the open profile
+    const images = document.querySelectorAll('img[data-avatar="gravatar"]');
+    expect(images.length).toBeGreaterThan(1);
+    // the URL is the hash of the address, and a 404 means "no picture"
+    expect(images[0].getAttribute('src'))
+      .toBe('https://www.gravatar.com/avatar/5bfcf2d8e394674550332640d72db509?s=24&d=404&r=g');
+  });
+
+  it('prefers a photo stored on the contact, with Gravatar on or off', async () => {
+    const withPhoto = makeCard({
+      id: 'p', name: 'Photo Person', emails: ['photo@example.org'], media: { m: { kind: 'photo', uri: 'https://x/me.jpg' } },
+    });
+    const api = fakeApi({
+      settings: { gravatar: true },
+      translations: manifest.locales,
+      handlers: {
+        'contacts.list': async () => [withPhoto],
+        'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
+      },
+    });
+    // this card set has its own name, so the shared helper's wait does not apply
+    const Page = makeProfilePage(React, api);
+    await act(async () => { render(React.createElement(Page)); });
+    await waitFor(() => expect(screen.getAllByText('Photo Person').length).toBeGreaterThan(0));
+
+    const images = document.querySelectorAll('img');
+    expect(images.length).toBeGreaterThan(0);
+    for (const img of images) {
+      expect(img.getAttribute('src')).toBe('https://x/me.jpg');
+      expect(img.getAttribute('data-avatar')).toBe('card');
+    }
+  });
+
   it('offers the editor from the profile and after creating a contact', async () => {
     const api = profileApi({ 'ui.openDialog': async () => ({ saved: 'created' }) });
     await renderPage(api);

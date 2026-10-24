@@ -18,7 +18,9 @@ import {
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { downloadBlob } from './download.js';
 import { optionalCall } from './optional.js';
-import { ACTION_BAR, CONTENT_PANE, SAVED_ITEM, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
+import { ACTION_BAR, CONTENT_PANE, ROW_WITH_AVATAR, SAVED_ITEM, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
+import { avatarFor } from './avatar.js';
+import { makeAvatar } from './avatar-view.js';
 import { groupFromSelection } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
 import { applyBulkEdit, deleteContacts } from './bulk.js';
@@ -31,6 +33,7 @@ export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
   const Duplicates = makeDuplicateSection(React, api);
+  const Avatar = makeAvatar(React);
 
   return function ProfilePage() {
     const [cards, setCards] = useState([]);
@@ -67,6 +70,11 @@ export function makeProfilePage(React, api) {
 
     useEffect(() => { void load(); }, [load]);
 
+    // Off unless the user turned it on: Gravatar learns a hash of the address.
+    const gravatarOn = api.plugin?.settings?.gravatar === true;
+    const avatarOf = (card, size) => avatarFor(card, { gravatar: gravatarOn, size });
+    const avatarTitle = (card, size) => h('span', { style: ROW_WITH_AVATAR },
+      h(Avatar, { avatar: avatarOf(card, size), size }), contactName(card) || card.id);
     const books = useMemo(() => bookNamesById(bookList), [bookList]);
     // One read of the cards serves the list and every saved-search count.
     const searchIndex = useMemo(() => buildIndex(cards, { books }), [cards, books]);
@@ -335,6 +343,7 @@ export function makeProfilePage(React, api) {
     const companyCard = () => h(Card, null,
       h(Stack, { gap: 2 },
         h(Row, { gap: 2, wrap: true },
+          h(Avatar, { avatar: avatarOf(company, 48), size: 48 }),
           h(Heading, { level: 2 }, contactName(company) || company.id),
           h(Badge, { tone: 'primary' }, t('profile.companyBadge'))),
         domains.length
@@ -357,7 +366,7 @@ export function makeProfilePage(React, api) {
       people.length
         ? h(List, { label: t('profile.people') }, ...people.map((person) => h(ListRow, {
           key: person.id,
-          title: contactName(person) || person.id,
+          title: avatarTitle(person, 24),
           subtitle: emailEntries(person)[0]?.address ?? '',
           onClick: () => setSelectedId(person.id),
         })))
@@ -432,7 +441,7 @@ export function makeProfilePage(React, api) {
                 visible.length
                   ? h(List, { label: t('page.contactsTitle') }, ...visible.map((card) => h(ListRow, {
                     key: card.id,
-                    title: contactName(card) || card.id,
+                    title: avatarTitle(card, 24),
                     subtitle: bookLabel(card),
                     selected: card.id === selectedId,
                     checked: picked.has(card.id),
@@ -445,7 +454,9 @@ export function makeProfilePage(React, api) {
               ? h('div', { 'data-pane': 'detail', style: CONTENT_PANE },
                   company ? companyCard() : h(Card, null,
                     h(Stack, { gap: 2 },
-                      h(Heading, { level: 2 }, contactName(selected) || selected.id),
+                      h(Row, { gap: 2 },
+                        h(Avatar, { avatar: avatarOf(selected, 48), size: 48 }),
+                        h(Heading, { level: 2 }, contactName(selected) || selected.id)),
                       orgName(selected) || titleName(selected)
                         ? h(Text, { tone: 'muted' }, [titleName(selected), orgName(selected)].filter(Boolean).join(' · '))
                         : null,
