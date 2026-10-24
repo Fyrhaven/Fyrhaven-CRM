@@ -5,13 +5,14 @@
 // a selected contact instead of throwing the work away.
 import { Tabs } from '@plugin-host/ui';
 
-export function makeAppShell(React, api, { duplicates, contacts, projects }) {
+export function makeAppShell(React, api, { duplicates, contacts, projects, health }) {
   const { createElement: h, useEffect, useState } = React;
   const t = (key) => api.i18n.t(key);
   const tabs = [
     { id: 'duplicates', label: t('tab.duplicates'), component: duplicates },
     { id: 'contacts', label: t('page.contactsTitle'), component: contacts },
     { id: 'projects', label: t('page.projectsTitle'), component: projects },
+    { id: 'health', label: t('health.title'), component: health },
   ];
 
   return function AppShell() {

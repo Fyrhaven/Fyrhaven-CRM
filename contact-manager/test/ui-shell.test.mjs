@@ -20,19 +20,21 @@ function renderShell() {
     duplicates: Stub('Duplicates body'),
     contacts: Stub('Contacts body'),
     projects: Stub('Projects body'),
+    health: Stub('Health body'),
   });
   render(React.createElement(Shell));
   return api;
 }
 
 describe('app shell', () => {
-  it('shows the three sub-tabs, Duplicates first, and mounts only that one', () => {
+  it('shows the four sub-tabs, Duplicates first, and mounts only that one', () => {
     renderShell();
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-      .toEqual(['Duplicates', 'Contacts', 'Projects']);
+      .toEqual(['Duplicates', 'Contacts', 'Projects', 'Health']);
     expect(screen.getByText('Duplicates body')).toBeTruthy();
     expect(screen.queryByText('Contacts body')).toBeNull();
     expect(screen.queryByText('Projects body')).toBeNull();
+    expect(screen.queryByText('Health body')).toBeNull();
   });
 
   it('marks the active tab and keeps an opened tab mounted', async () => {
@@ -48,5 +50,10 @@ describe('app shell', () => {
     await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Projects' })); });
     expect(screen.getByText('Projects body')).toBeTruthy();
     expect(screen.getByText('Contacts body')).toBeTruthy();
+
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Health' })); });
+    expect(screen.getByText('Health body')).toBeTruthy();
+    // every tab opened stays mounted
+    expect(screen.getByText('Duplicates body')).toBeTruthy();
   });
 });

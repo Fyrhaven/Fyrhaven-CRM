@@ -50,7 +50,7 @@ signatures, the last scan summary).
 
 | Surface | Where it appears | What it does |
 |---|---|---|
-| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts* and *Projects* |
+| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Projects* and *Health* |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
@@ -89,6 +89,8 @@ contact-manager/
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
 │       ├── avatar.js      # MD5, the Gravatar URL, and whose picture wins
 │       ├── avatar-view.js # the avatar element, which hides itself on failure
+│       ├── health.js      # the health rules, their weights and the bands
+│       ├── health-page.js # the Health dashboard
 │       ├── search.js      # the query language and the matcher behind the search box
 │       ├── phones.js      # E.164 normalisation and the region table
 │       ├── emails.js      # email syntax, role addresses, throwaway domains
@@ -96,7 +98,7 @@ contact-manager/
 │       ├── normalise.js   # the cleanup plan, its application and its undo record
 │       ├── normalise-dialog.js # the cleanup preview
 │       ├── saved-searches.js # the queries a user keeps, in api.storage
-│       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
+│       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects/Health sub-tabs
 │       ├── bulk.js        # bulk edits and delete for a selection
 │       ├── bulk-dialog.js # the bulk editor: tags and address books
 │       ├── vcard.js       # contacts to vCard 3.0, for the bulk export
@@ -144,6 +146,8 @@ contact-manager/
 │   ├── emails.test.mjs     # syntax, role addresses, throwaway domains
 │   ├── avatar.test.mjs     # MD5 vectors, the Gravatar URL, the precedence
 │   ├── ui-avatar.test.mjs  # the avatar element, including its failure
+│   ├── health.test.mjs     # the rules, the weights and the bands
+│   ├── ui-health.test.mjs  # the Health dashboard
 │   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
@@ -644,6 +648,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/emails.test.mjs` | Email syntax, role addresses and throwaway domains, and that a role address is a warning rather than a rejection |
 | `test/avatar.test.mjs` | MD5 against the published vectors, the Gravatar URL shape, `mediaUris`, and that a stored photo wins over Gravatar while Gravatar needs the setting |
 | `test/ui-avatar.test.mjs` | The avatar element: lazy, no referrer, and gone the moment the image fails |
+| `test/health.test.mjs` | Every rule and its weight, the score floor, the band cutoffs, the per-book breakdown, and the drill-downs |
+| `test/ui-health.test.mjs` | The dashboard: the average, the book rows, filtering by a rule, the scores on the rows, and the fixes it offers |
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
@@ -894,6 +900,16 @@ Phone numbers
     a national number already starting with the dial code is ambiguous -> ''
   phoneKey(number, region) is what detection compares
   isValidE164 requires the '+' and 7..15 digits with no leading zero
+
+Health (#16)
+  RULES maps a rule key to { weight, fix }; RULE_KEYS is the order shown
+  contactIssues(card, ctx) -> [{ key, weight, fix, value }]   value = the text
+  healthScore(issues) = 100 - the deductions, floored at 0
+  healthBand(score) uses BANDS.good / BANDS.fair, defined once
+  healthSummary(cards, { books, region, duplicates }) -> contacts, byRule, byBook
+  a duplicate is either "in the set" (duplicates) or "is one" (duplicate: true)
+  the email rules read rawEmailAddresses, not emailEntries, so a malformed
+    address is visible
 
 Avatars (#15, avatar half)
   md5(text) -> lowercase hex, checked against the published vectors
