@@ -10,6 +10,8 @@
 //     addressBookIds: { id: true }, created?, updated? }
 // Maps may also arrive as arrays from imports; both are handled.
 
+import { readRegion } from './region.js';
+
 export const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
 function isAddress(value) {
@@ -109,13 +111,26 @@ export function bookNamesById(books) {
   return map;
 }
 
-/** The match strategies from the plugin settings; a missing setting is on. */
+/**
+ * The match strategies from the plugin settings; a missing setting is on. The
+ * region is *not* here — it lives in storage, so use `detectionOptions(api)`
+ * when the caller has the api.
+ */
 export function matchOptions(settings) {
   return {
     matchByEmail: settings?.matchByEmail !== false,
     matchByPhone: settings?.matchByPhone !== false,
     matchByName: settings?.matchByName !== false,
   };
+}
+
+/**
+ * `matchOptions` plus the stored region, so a phone number written nationally
+ * (`0176…`) and the same one written internationally (`+49 176…`) produce the
+ * same comparison key. Async because the region is read from storage.
+ */
+export async function detectionOptions(api) {
+  return { ...matchOptions(api?.plugin?.settings), region: await readRegion(api) };
 }
 
 // ── Single-value fields ────────────────────────────────────────

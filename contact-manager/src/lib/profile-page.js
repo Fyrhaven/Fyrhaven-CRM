@@ -25,6 +25,7 @@ import { applyBulkEdit, deleteContacts } from './bulk.js';
 import { contactsToVCard } from './vcard.js';
 import { buildIndex, countsForIndex, matchIndexed, parseQuery } from './search.js';
 import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
+import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
@@ -40,14 +41,18 @@ export function makeProfilePage(React, api) {
     const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: [] });
     const [picked, setPicked] = useState(() => new Set());
     const [saved, setSaved] = useState([]);
+    const [cleanup, setCleanup] = useState(null);
 
     const load = useCallback(async () => {
       setStatus('loading');
       try {
-        const [list, addressBooks, savedList] = await Promise.all([loadCards(api), loadBooks(api), readSaved(api)]);
+        const [list, addressBooks, savedList, cleanupRecord] = await Promise.all([
+          loadCards(api), loadBooks(api), readSaved(api), readCleanup(api),
+        ]);
         setCards(list);
         setBookList(addressBooks);
         setSaved(savedList);
+        setCleanup(cleanupRecord);
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : list[0]?.id ?? ''));
         // A deleted or no-longer-matching contact must not stay selected.
         setPicked((current) => {
@@ -294,6 +299,32 @@ export function makeProfilePage(React, api) {
           : null);
     };
 
+    // Normalising is a bulk edit, so it takes the selection and shows what it
+    // would change first — the dialog plans, this applies.
+    const cleanPicked = async () => {
+      if (!pickedCards.length) return;
+      const result = await api.ui.openDialog({
+        title: t('cleanup.title'),
+        slot: 'plugin-dialog',
+        extraProps: { normalise: { cards: pickedCards, region: await readRegion(api) } },
+      });
+      if (!result) return;
+      const outcome = await applyNormalisation(api, result.plan);
+      if (outcome.failed) api.toast.warning(t('cleanup.partial', { updated: outcome.updated, failed: outcome.failed }));
+      else api.toast.success(t('cleanup.done', { updated: outcome.updated }));
+      setPicked(new Set());
+      setCleanup(await readCleanup(api));
+      void load();
+    };
+
+    const undoSingleCleanup = async () => {
+      const outcome = await undoCleanup(api);
+      if (outcome.failed) api.toast.warning(t('cleanup.undoPartial', { restored: outcome.restored, failed: outcome.failed }));
+      else api.toast.success(t('cleanup.undone', { restored: outcome.restored }));
+      setCleanup(await readCleanup(api));
+      void load();
+    };
+
     const company = selected && isCompany(selected) ? selected : null;
     const people = company ? peopleOfCompany(cards, company) : [];
     const domains = company ? companyDomains(cards, company) : [];
@@ -370,6 +401,12 @@ export function makeProfilePage(React, api) {
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
+                      icon: 'wand',
+                      onClick: () => void cleanPicked(),
+                    }, t('cleanup.action')),
+                    h(Button, {
+                      size: 'sm',
+                      variant: 'secondary',
                       onClick: () => void deletePicked(),
                     }, t('contacts.deleteSelected')),
                     h(Button, {
@@ -386,6 +423,11 @@ export function makeProfilePage(React, api) {
               }),
               searchNote(),
               savedRow(),
+              cleanup ? h('div', { 'data-pane': 'cleanup', style: ACTION_BAR },
+                h(Text, { tone: 'muted' }, t('cleanup.available')),
+                h(Button, {
+                  size: 'sm', variant: 'secondary', icon: 'undo', onClick: () => void undoSingleCleanup(),
+                }, t('cleanup.undo'))) : null,
               h('div', { 'data-pane': 'list-scroll', style: SCROLL_AREA },
                 visible.length
                   ? h(List, { label: t('page.contactsTitle') }, ...visible.map((card) => h(ListRow, {
