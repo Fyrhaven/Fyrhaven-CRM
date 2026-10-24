@@ -44,6 +44,14 @@ export function sidePane(basis) {
   };
 }
 
+/** The bar above a list when something is selected: wraps, whatever the kit does. */
+export const ACTION_BAR = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.5rem',
+  alignItems: 'center',
+};
+
 /**
  * The list inside a side pane: this is what scrolls, so everything above it
  * stays visible however long the list is. `minHeight: 0` is what lets a flex

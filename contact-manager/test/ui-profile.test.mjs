@@ -295,6 +295,71 @@ describe('contacts page', () => {
     expect(screen.queryByRole('button', { name: 'Delete selected' })).toBeNull();
   });
 
+  it('offers the full set of bulk actions for a selection', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    expect(screen.queryByRole('button', { name: 'Edit selected' })).toBeNull();
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+
+    for (const name of ['Merge selected', 'Edit selected', 'Export', 'Delete selected', 'Clear selection']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
+  });
+
+  it('edits tags and books through the bulk dialog and writes the result', async () => {
+    const api = profileApi({
+      'contacts.update': async () => {},
+      'ui.openDialog': async () => ({ tags: { add: ['vip'], remove: [] }, books: { add: [], remove: [] } }),
+    });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Edit selected' })); });
+
+    const editor = api.calls('ui.openDialog')[0].args[0].extraProps.bulkEditor;
+    expect(editor.cards.map((card) => card.id).sort()).toEqual(['a', 'g']);
+    expect(editor.books).toEqual([{ id: 'b1', name: 'Personal' }]);
+
+    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(2));
+    // the complete keyword map: the card's existing 'maths' tag survives
+    expect(api.calls('contacts.update')[0].args[1]).toEqual({ keywords: { maths: true, vip: true } });
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Updated 2 contact(s).');
+  });
+
+  it('keeps the selection when the bulk dialog is cancelled', async () => {
+    const api = profileApi({ 'ui.openDialog': async () => null });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Edit selected' })); });
+
+    expect(api.calls('contacts.update')).toHaveLength(0);
+    expect(screen.getByText('1 selected')).toBeTruthy();
+  });
+
+  it('exports the selection as one vCard download', async () => {
+    createObjectURL.mockClear();
+    const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const api = profileApi();
+      await renderPage(api);
+
+      await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace' })); });
+      await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
+      expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported 2 contact(s) as vCard.');
+      expect(click).toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+    }
+  });
+
   it('offers the editor from the profile and after creating a contact', async () => {
     const api = profileApi({ 'ui.openDialog': async () => ({ saved: 'created' }) });
     await renderPage(api);

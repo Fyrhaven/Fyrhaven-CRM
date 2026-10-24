@@ -6,7 +6,10 @@ import {
   Badge, Button, Card, EmptyState, Heading, List, ListRow, Page, PageHeader,
   Row, SearchInput, Section, Stack, Text,
 } from '@plugin-host/ui';
-import { bookNamesById, contactName, emailEntries, loadBooks, loadCards, phoneEntries } from './contacts.js';
+import {
+  addressLine, bookNamesById, contactName, emailEntries, loadBooks, loadCards, nicknameLine,
+  notesLine, orgName, phoneEntries, titleName,
+} from './contacts.js';
 import { makeDuplicateSection } from './detail-section.js';
 import {
   attachmentsForMessages, companyDomains, companyNameOf, companyOf, eventsForContact, filterCards,
@@ -15,10 +18,11 @@ import {
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { downloadBlob } from './download.js';
 import { optionalCall } from './optional.js';
-import { CONTENT_PANE, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
+import { ACTION_BAR, CONTENT_PANE, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
 import { groupFromSelection } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
-import { deleteContacts } from './bulk.js';
+import { applyBulkEdit, deleteContacts } from './bulk.js';
+import { contactsToVCard } from './vcard.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
@@ -27,7 +31,7 @@ export function makeProfilePage(React, api) {
 
   return function ProfilePage() {
     const [cards, setCards] = useState([]);
-    const [books, setBooks] = useState(new Map());
+    const [bookList, setBookList] = useState([]);
     const [status, setStatus] = useState('loading'); // loading | ready | error
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState('');
@@ -39,7 +43,7 @@ export function makeProfilePage(React, api) {
       try {
         const [list, addressBooks] = await Promise.all([loadCards(api), loadBooks(api)]);
         setCards(list);
-        setBooks(bookNamesById(addressBooks));
+        setBookList(addressBooks);
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : list[0]?.id ?? ''));
         // A deleted or no-longer-matching contact must not stay selected.
         setPicked((current) => {
@@ -54,6 +58,7 @@ export function makeProfilePage(React, api) {
 
     useEffect(() => { void load(); }, [load]);
 
+    const books = useMemo(() => bookNamesById(bookList), [bookList]);
     const visible = useMemo(() => filterCards(cards, query), [cards, query]);
     const selected = useMemo(
       () => cards.find((card) => card.id === selectedId) ?? null,
@@ -190,6 +195,38 @@ export function makeProfilePage(React, api) {
       void load();
     };
 
+    // Tags and address books are edited through one dialog and written in one
+    // update per contact, because both are map fields the host replaces
+    // wholesale — src/lib/bulk.js owns those rules.
+    const editPicked = async () => {
+      if (!pickedCards.length) return;
+      const result = await api.ui.openDialog({
+        title: t('bulk.title', { count: pickedCards.length }),
+        slot: 'plugin-dialog',
+        extraProps: { bulkEditor: { cards: pickedCards, books: bookList } },
+      });
+      if (!result) return;
+      const outcome = await applyBulkEdit(api, pickedCards, result);
+      if (outcome.failed) api.toast.warning(t('bulk.partial', { updated: outcome.updated, failed: outcome.failed }));
+      else if (outcome.updated) api.toast.success(t('bulk.done', { updated: outcome.updated }));
+      else api.toast.info(t('bulk.nothing'));
+      setPicked(new Set());
+      void load();
+    };
+
+    // The selection as one vCard file: the interop format, so the export is
+    // useful outside this plugin. Nothing is sent to the server.
+    const exportPicked = () => {
+      if (!pickedCards.length) return;
+      const body = contactsToVCard(pickedCards);
+      if (!body) {
+        api.toast.warning(t('contacts.exportEmpty'));
+        return;
+      }
+      downloadBlob(new Blob([body], { type: 'text/vcard' }), 'contacts.vcf');
+      api.toast.success(t('contacts.exported', { count: pickedCards.length }));
+    };
+
     const company = selected && isCompany(selected) ? selected : null;
     const people = company ? peopleOfCompany(cards, company) : [];
     const domains = company ? companyDomains(cards, company) : [];
@@ -243,7 +280,7 @@ export function makeProfilePage(React, api) {
         ? h('div', { 'data-pane': 'split', style: SPLIT },
             h('div', { 'data-pane': 'list', style: sidePane(320) },
               picked.size
-                ? h(Row, { gap: 2, wrap: true },
+                ? h('div', { 'data-pane': 'actions', style: ACTION_BAR },
                     h(Text, { tone: 'muted' }, t('contacts.selected', { count: picked.size })),
                     h(Button, {
                       size: 'sm',
@@ -251,6 +288,18 @@ export function makeProfilePage(React, api) {
                       disabled: picked.size < 2,
                       onClick: () => void mergePicked(),
                     }, t('contacts.mergeSelected')),
+                    h(Button, {
+                      size: 'sm',
+                      variant: 'secondary',
+                      icon: 'edit',
+                      onClick: () => void editPicked(),
+                    }, t('contacts.editSelected')),
+                    h(Button, {
+                      size: 'sm',
+                      variant: 'secondary',
+                      icon: 'download',
+                      onClick: exportPicked,
+                    }, t('contacts.exportSelected')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
@@ -365,25 +414,8 @@ function companyLine(card, cards, t) {
 
 const fileMeta = (file) => [file.type, formatBytes(file.size)].filter(Boolean).join(' · ');
 
-const orgName = (card) => Object.values(card.organizations ?? {})[0]?.name ?? '';
-const titleName = (card) => Object.values(card.titles ?? {})[0]?.name ?? '';
 
-const nicknameLine = (card) => Object.values(card.nicknames ?? {})
-  .map((entry) => entry?.name).filter(Boolean).join(', ');
 
-const notesLine = (card) => Object.values(card.notes ?? {})
-  .map((entry) => entry?.note).filter(Boolean).join(' · ');
-
-function addressLine(card) {
-  const address = Object.values(card.addresses ?? {})[0];
-  if (!address) return '';
-  return [
-    address.street,
-    [address.postcode, address.locality].filter(Boolean).join(' '),
-    address.region,
-    address.country,
-  ].filter(Boolean).join(', ');
-}
 
 function formatDate(value, locale) {
   if (!value) return '';
