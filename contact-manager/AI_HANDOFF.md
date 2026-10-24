@@ -5,14 +5,17 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.17.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0); on top of smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.18.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.17.0` is the newest GitHub release (v1.16.0,
   v1.15.0,
   v1.14.1, v1.14.0, v1.13.2, v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0,
   v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
-  #71, #72, #73, #76, #78, #80 and #81 merged).
+  #71, #72, #73, #76, #78, #80 and #81 merged). **v1.18.0 is prepared on
+  `feat/contact-manager-avatars`** and still needs its PR, the merge, the
+  mirror sync and `npm run release` — then a handoff commit saying it is
+  released, as the releases before it were closed out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -22,6 +25,35 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Avatars, and a picture that will not load (v1.18.0) — #15, the avatar half
+
+A contact's own photo (`media`) is shown when it has one — server-stored, no
+third-party request. Otherwise Gravatar, **only when the user turns it on**,
+because Gravatar identifies a person by a hash of their address.
+
+Two decisions worth keeping:
+
+- **MD5 is implemented here** (`avatar.js`). `crypto.subtle` has no MD5, and
+  using it for SHA-256 would be a platform dependency the sandbox does not
+  promise — the mistake #75 is about. It is checked against the published
+  vectors, including the canonical Gravatar example (`myemailaddress@example.com`
+  → `0bc83cb571cd1c50ba6f3e8a78ef1346`), and against node's `crypto` for the
+  multi-byte and multi-block cases.
+- **A failed image is not an error state.** A blocked request, an offline
+  browser and "no picture" are indistinguishable from inside the plugin, so the
+  element hides itself on `onError` and all three end as nothing. `d=404` makes
+  "no picture" the same code path rather than a placeholder silhouette, and
+  `loading="lazy"` keeps a long address book from firing one request per row on
+  open.
+
+**Not verified from here:** whether the sandbox's content policy allows the
+request. If it does not, avatars are absent and nothing else changes. The
+instance this was built for already runs a `gravatar` plugin with
+`default=404, cached=358`, which suggests the host does allow it.
+
+**Still open on #15:** universal contact hover cards. They need host surface the
+plugin does not have, so the issue stays open.
 
 ### E.164 cleanup, and phone matching that works (v1.17.0) — #17
 
@@ -400,6 +432,7 @@ An *How to read this* legend above the groups explains every indicator.
 - `matchByEmail`, `matchByPhone`, `matchByName` - one switch per matching rule
 - `undoMinutes` - the undo window in minutes (default 15, `0` = off) (v1.3.0)
 - `warnOnSave` - turn the save-time duplicate warning off (v1.4.0)
+- `gravatar` - show Gravatar avatars, **off by default**: it sends a hash of the contact's address to gravatar.com (v1.18.0)
 
 ### Testing
 - `test/preview.test.mjs` - complete details, added/changed values, conflicts, counts (7 tests)
@@ -617,7 +650,7 @@ v1.13.2 the plugin-owned two-pane page skeleton, v1.14.0 bulk merge and delete
 on a hand-picked selection plus the fixed search box, v1.14.1 the capability
 probe and precise unavailable notice, v1.15.0 bulk tag/book edits and vCard
 export for a selection, v1.16.0 smart search and saved searches, v1.17.0 E.164
-cleanup with preview and undo.
+cleanup with preview and undo, v1.18.0 avatars.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real

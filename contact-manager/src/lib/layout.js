@@ -44,7 +44,22 @@ export function sidePane(basis) {
   };
 }
 
-/** A preview list inside a dialog: bounded, and it scrolls itself. */
+/** An avatar image: a fixed square, cropped rather than squashed. */
+export const AVATAR = {
+  display: 'block',
+  flex: '0 0 auto',
+  objectFit: 'cover',
+  borderRadius: '50%',
+};
+
+/** A list row's title when it carries an avatar. */
+export const ROW_WITH_AVATAR = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+};
+
+/** A dialog's preview list: bounded, and it scrolls itself. */
 export const PREVIEW_AREA = {
   maxHeight: '40vh',
   overflowY: 'auto',
