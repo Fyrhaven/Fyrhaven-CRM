@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan and duplicate hints in contact details.",
   "type": "ui-extension",
@@ -56,6 +56,12 @@
       "label": "settings.warnOnSave.label",
       "description": "settings.warnOnSave.description",
       "default": true
+    },
+    "gravatar": {
+      "type": "boolean",
+      "label": "settings.gravatar.label",
+      "description": "settings.gravatar.description",
+      "default": false
     },
     "undoMinutes": {
       "type": "number",
@@ -177,6 +183,8 @@
       "settings.matchByName.description": "Contacts with the same name are possible duplicates. Review them before merging.",
       "settings.warnOnSave.label": "Warn about duplicates when saving",
       "settings.warnOnSave.description": "After you create or change a contact, compare it with your address books and warn when it looks like an existing contact. Saving is never blocked.",
+      "settings.gravatar.label": "Show Gravatar avatars",
+      "settings.gravatar.description": "Fetches a picture from gravatar.com using a hash of the contact’s email address. Off by default, because turning it on sends that hash to a third party. A photo stored on the contact always wins.",
       "settings.undoMinutes.label": "Undo window",
       "settings.undoMinutes.description": "How many minutes a merge can be undone. The removed contacts and their data are kept in local plugin storage for that long. 0 turns undo off.",
       "watch.toast": "This looks like an existing contact: {name} ({reason}). Open the contact or the Contact Manager page to review and merge.",
@@ -527,6 +535,8 @@
       "settings.matchByName.description": "Kontakte mit gleichem Namen sind mögliche Duplikate. Prüfen Sie sie vor dem Zusammenführen.",
       "settings.warnOnSave.label": "Beim Speichern vor Duplikaten warnen",
       "settings.warnOnSave.description": "Vergleicht einen neu erstellten oder geänderten Kontakt mit Ihren Adressbüchern und warnt, wenn er wie ein vorhandener Kontakt aussieht. Das Speichern wird nie blockiert.",
+      "settings.gravatar.label": "Gravatar-Bilder anzeigen",
+      "settings.gravatar.description": "Holt ein Bild von gravatar.com über einen Hash der E-Mail-Adresse des Kontakts. Standardmäßig aus, denn beim Einschalten wird dieser Hash an Dritte gesendet. Ein beim Kontakt gespeichertes Foto hat immer Vorrang.",
       "settings.undoMinutes.label": "Zeitfenster für Rückgängig",
       "settings.undoMinutes.description": "Wie viele Minuten sich ein Zusammenführen rückgängig machen lässt. Die entfernten Kontakte und ihre Daten bleiben so lange im lokalen Plugin-Speicher. 0 schaltet Rückgängig ab.",
       "watch.toast": "Das sieht nach einem vorhandenen Kontakt aus: {name} ({reason}). Öffnen Sie den Kontakt oder die Kontakt-Manager-Seite, um zu prüfen und zusammenzuführen.",
