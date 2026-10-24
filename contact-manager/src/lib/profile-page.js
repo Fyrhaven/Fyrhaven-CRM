@@ -12,17 +12,19 @@ import {
 } from './contacts.js';
 import { makeDuplicateSection } from './detail-section.js';
 import {
-  attachmentsForMessages, companyDomains, companyNameOf, companyOf, eventsForContact, filterCards,
+  attachmentsForMessages, companyDomains, companyNameOf, companyOf, eventsForContact,
   formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { downloadBlob } from './download.js';
 import { optionalCall } from './optional.js';
-import { ACTION_BAR, CONTENT_PANE, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
+import { ACTION_BAR, CONTENT_PANE, SAVED_ITEM, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
 import { groupFromSelection } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
 import { applyBulkEdit, deleteContacts } from './bulk.js';
 import { contactsToVCard } from './vcard.js';
+import { buildIndex, countsForIndex, matchIndexed, parseQuery } from './search.js';
+import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
@@ -37,13 +39,15 @@ export function makeProfilePage(React, api) {
     const [selectedId, setSelectedId] = useState('');
     const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: [] });
     const [picked, setPicked] = useState(() => new Set());
+    const [saved, setSaved] = useState([]);
 
     const load = useCallback(async () => {
       setStatus('loading');
       try {
-        const [list, addressBooks] = await Promise.all([loadCards(api), loadBooks(api)]);
+        const [list, addressBooks, savedList] = await Promise.all([loadCards(api), loadBooks(api), readSaved(api)]);
         setCards(list);
         setBookList(addressBooks);
+        setSaved(savedList);
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : list[0]?.id ?? ''));
         // A deleted or no-longer-matching contact must not stay selected.
         setPicked((current) => {
@@ -59,7 +63,19 @@ export function makeProfilePage(React, api) {
     useEffect(() => { void load(); }, [load]);
 
     const books = useMemo(() => bookNamesById(bookList), [bookList]);
-    const visible = useMemo(() => filterCards(cards, query), [cards, query]);
+    // One read of the cards serves the list and every saved-search count.
+    const searchIndex = useMemo(() => buildIndex(cards, { books }), [cards, books]);
+    const parsed = useMemo(() => parseQuery(query), [query]);
+    const visible = useMemo(
+      () => (parsed.terms.length || parsed.filters.length
+        ? searchIndex.filter((entry) => matchIndexed(entry, parsed)).map((entry) => entry.card)
+        : cards),
+      [searchIndex, parsed, cards],
+    );
+    const chipCounts = useMemo(
+      () => countsForIndex(searchIndex, saved.map((entry) => entry.query)),
+      [searchIndex, saved],
+    );
     const selected = useMemo(
       () => cards.find((card) => card.id === selectedId) ?? null,
       [cards, selectedId],
@@ -227,6 +243,57 @@ export function makeProfilePage(React, api) {
       api.toast.success(t('contacts.exported', { count: pickedCards.length }));
     };
 
+    const removeSavedSearch = async (name) => {
+      setSaved(await deleteSaved(api, name));
+    };
+
+    const saveCurrent = async () => {
+      const name = query.trim();
+      if (!name) return;
+      setSaved(await saveSearch(api, name, name));
+      api.toast.success(t('search.savedToast', { name }));
+    };
+
+    // The one line under the box: what is wrong with the query, how many
+    // matched, or what the operators are.
+    const searchNote = () => {
+      if (parsed.errors.length) {
+        return h(Text, { tone: 'warning' }, parsed.errors
+          .map((error) => t(`search.error.${error.reason}`, { field: error.field, value: error.value ?? '' }))
+          .join(' '));
+      }
+      if (query.trim()) {
+        return h(Text, { tone: 'muted' }, t('search.count', { shown: visible.length, total: cards.length }));
+      }
+      return h(Text, { tone: 'muted' }, t('search.hint'));
+    };
+
+    // Saved searches are named by their own query, so no prompt API is needed:
+    // the button reads as the query it runs, with its live count beside it.
+    // Two plain buttons rather than a kit Chip — the kit's Chip drops its
+    // onClick when it also has a remove button, which is exactly this case.
+    const savedRow = () => {
+      const current = query.trim();
+      const alreadySaved = saved.some((entry) => entry.query === current);
+      if (!saved.length && !current) return null;
+      return h('div', { 'data-pane': 'saved', style: ACTION_BAR },
+        ...saved.map((entry, i) => h('span', { key: entry.name, style: SAVED_ITEM },
+          h(Button, {
+            size: 'sm',
+            variant: 'secondary',
+            onClick: () => setQuery(entry.query),
+          }, `${entry.name} · ${chipCounts[i] ?? 0}`),
+          h(Button, {
+            size: 'sm',
+            variant: 'secondary',
+            'aria-label': t('search.removeSaved', { name: entry.name }),
+            onClick: () => void removeSavedSearch(entry.name),
+          }, '×'))),
+        current && !alreadySaved
+          ? h(Button, { size: 'sm', variant: 'secondary', onClick: () => void saveCurrent() }, t('search.save'))
+          : null);
+    };
+
     const company = selected && isCompany(selected) ? selected : null;
     const people = company ? peopleOfCompany(cards, company) : [];
     const domains = company ? companyDomains(cards, company) : [];
@@ -317,6 +384,8 @@ export function makeProfilePage(React, api) {
                 placeholder: t('profile.searchPlaceholder'),
                 onChange: setQuery,
               }),
+              searchNote(),
+              savedRow(),
               h('div', { 'data-pane': 'list-scroll', style: SCROLL_AREA },
                 visible.length
                   ? h(List, { label: t('page.contactsTitle') }, ...visible.map((card) => h(ListRow, {

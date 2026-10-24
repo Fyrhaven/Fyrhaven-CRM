@@ -60,7 +60,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list (the box stays put while the list scrolls) and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Export* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | The review/merge dialog, the **contact editor** and the **project editor** — the only places that write |
@@ -87,6 +87,8 @@ contact-manager/
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
 │       ├── labels.js       # shared display helpers and toasts
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
+│       ├── search.js      # the query language and the matcher behind the search box
+│       ├── saved-searches.js # the queries a user keeps, in api.storage
 │       ├── app-shell.js   # the single app page: the Duplicates/Contacts/Projects sub-tabs
 │       ├── bulk.js        # bulk edits and delete for a selection
 │       ├── bulk-dialog.js # the bulk editor: tags and address books
@@ -130,6 +132,8 @@ contact-manager/
 │   ├── bulk.test.mjs       # bulk edits and delete: map rules, refusals, undo
 │   ├── ui-bulk.test.mjs    # the bulk editor dialog
 │   ├── vcard.test.mjs      # the vCard writer
+│   ├── search.test.mjs     # parsing, matching, and the 10k budget
+│   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
 │   ├── ui-kit.test.mjs     # every @plugin-host/ui name the source imports exists
 │   ├── watch.test.mjs      # save-time duplicate warning (create and edit)
@@ -622,6 +626,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/bulk.test.mjs` | `applyBulkEdit` / `applyTags` / `applyBooks`: complete map patches, the company marker, a card that would be in no book, one write per contact; and `deleteContacts` with its undo batch |
 | `test/ui-bulk.test.mjs` | The bulk editor dialog: what it collects for tags and books, cancel, and an account with no books |
 | `test/vcard.test.mjs` | The vCard writer: one block per contact, CRLF, the importable fields, RFC 2426 escaping, structured N/ADR |
+| `test/search.test.mjs` | `parseQuery` (operators, unknown fields, values), matching per field, the fuzzy floor, and 10k contacts inside the 100 ms budget |
+| `test/saved-searches.test.mjs` | The saved-search store: names, replacement, the cap, and the repairs it makes on the way in |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
@@ -850,6 +856,20 @@ vCard export
   contactsToVCard(cards) -> one VCARD 3.0 block per contact, CRLF, escaped
   N is family;given and ADR is structured, each component escaped separately
   a contact with neither a name nor any field is left out
+
+Smart search
+  parseQuery(text) -> { terms, filters, errors }
+    errors name the token and the reason; the token is also kept as a term
+  buildIndex(cards, { books }) derives the searchable strings once;
+    matchIndexed(entry, parsed) and countsForIndex(index, queries) reuse it
+  fields: name email phone company note tag book has is
+  every term must match; tag: is whole, book: takes a name or an id
+  a name also matches as a subsequence from three characters up
+  10k contacts stay inside 100 ms
+
+Saved searches
+  readSaved / saveSearch / deleteSaved, key 'savedSearches', cap 20
+  named by their own query, so no prompt API is needed; per browser only
   a failing removal is reported, not swallowed
   nothing outside review-dialog.js calls contacts.remove
 ```

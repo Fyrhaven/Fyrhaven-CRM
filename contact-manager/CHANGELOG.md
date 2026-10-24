@@ -7,6 +7,49 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.16.0] — 2026-10-23
+
+### Added
+
+- **Smart search with operators (#13, the page half).** The *Contacts* search
+  box understands a small query language on top of free text:
+
+  | Query | Finds |
+  |---|---|
+  | `ada` | free text over name, nickname, email, phone, company, note, tag and address-book name |
+  | `name:ada` · `email:x.de` | one field only |
+  | `phone:0176` | digits compared, so `+49 176` and `0176` agree |
+  | `company:acme` | an organisation name, the email domain, or a company record's own name |
+  | `tag:vip` | a keyword, matched whole |
+  | `book:Work` | an address-book name **or** id |
+  | `has:phone` · `has:email` · `has:note` · `has:tag` | presence |
+  | `is:company` · `is:person` | what kind of contact it is |
+
+  Every term must match, so `is:person tag:vip` narrows rather than widens. A
+  name also matches fuzzily from three characters up, so `grce` finds *Grace
+  Hopper*; below three, a subsequence would match half the address book.
+- **Helpful feedback for a bad operator.** An unknown field, an unknown `has:`
+  or `is:` value, and an operator with no value are each named in the line under
+  the box — and the token is *still* searched as free text, so a typo never
+  returns nothing by silence.
+- **Saved searches with live counts.** A query can be saved and comes back as a
+  button carrying its own count (`tag:vip · 3`). One click re-runs it; `×`
+  removes it. They live in this browser only, like the projects.
+- The line under the box also shows `{shown} of {total} contacts`, and the
+  operator list while the box is empty.
+
+### Notes
+
+Built for the scale the issue asks for: one pass derives the searchable strings
+per contact, and every query — the list plus each saved-search count — reuses
+that index. 10k contacts search in **~30 ms** against the issue's 100 ms budget,
+and a test asserts it.
+
+#13's other half, the **command palette** entry point, stays open. The plugin has
+no verified host API to make the palette switch the page to a query (cross-frame
+messaging, or page navigation), and this repo has already been burnt once by
+assuming an API that was not there — see #75.
+
 ## [1.15.0] — 2026-10-23
 
 ### Added
