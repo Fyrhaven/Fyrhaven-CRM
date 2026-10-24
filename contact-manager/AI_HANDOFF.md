@@ -60,6 +60,23 @@ the normalised one, so a number that differed only by surrounding spaces was
 never seen as a change — which is exactly what trimming is for. It compares the
 stored value now, and a test pins it.
 
+### A flaky budget test, caught by a failed release (v1.17.0)
+
+The first attempt to release v1.17.0 **failed its own test run**: the 10k-contact
+budget test in `test/search.test.mjs` measured 103 ms against its 100 ms bound.
+It was not a regression. Vitest runs the files in parallel, and the single
+measurement was picking up scheduler noise — the same test measures ~30 ms when
+it runs alone, and a 4x genuine slowdown fails it at ~172 ms.
+
+It now takes the **best of three** after a warm-up: noise only ever makes a run
+slower, so the minimum is closest to the real cost, while a real regression
+raises every run. Ten consecutive full-suite runs pass; before the change, one
+of eight failed.
+
+Worth knowing for next time: `npm run ship` merges the pull request **before** it
+runs the release, so a failed release leaves `main` merged but untagged — the fix
+is to re-run `npm run release` once the cause is dealt with.
+
 ### Smart search and saved searches (v1.16.0) — the page half of #13
 
 The *Contacts* box went from a `includes()` filter to a small query language in
