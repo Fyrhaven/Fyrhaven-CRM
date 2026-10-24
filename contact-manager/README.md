@@ -60,7 +60,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Export* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | The review/merge dialog, the **contact editor** and the **project editor** — the only places that write |
@@ -87,6 +87,8 @@ contact-manager/
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
 │       ├── labels.js       # shared display helpers and toasts
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
+│       ├── avatar.js      # MD5, the Gravatar URL, and whose picture wins
+│       ├── avatar-view.js # the avatar element, which hides itself on failure
 │       ├── search.js      # the query language and the matcher behind the search box
 │       ├── phones.js      # E.164 normalisation and the region table
 │       ├── emails.js      # email syntax, role addresses, throwaway domains
@@ -140,6 +142,8 @@ contact-manager/
 │   ├── search.test.mjs     # parsing, matching, and the 10k budget
 │   ├── phones.test.mjs     # E.164 across the ways a number is written
 │   ├── emails.test.mjs     # syntax, role addresses, throwaway domains
+│   ├── avatar.test.mjs     # MD5 vectors, the Gravatar URL, the precedence
+│   ├── ui-avatar.test.mjs  # the avatar element, including its failure
 │   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
@@ -638,6 +642,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/saved-searches.test.mjs` | The saved-search store: names, replacement, the cap, and the repairs it makes on the way in |
 | `test/phones.test.mjs` | `toE164` across international and national formats, the refusals (no country, ambiguous, not a number), the length bounds, and `phoneKey` agreeing across spellings |
 | `test/emails.test.mjs` | Email syntax, role addresses and throwaway domains, and that a role address is a warning rather than a rejection |
+| `test/avatar.test.mjs` | MD5 against the published vectors, the Gravatar URL shape, `mediaUris`, and that a stored photo wins over Gravatar while Gravatar needs the setting |
+| `test/ui-avatar.test.mjs` | The avatar element: lazy, no referrer, and gone the moment the image fails |
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
@@ -888,6 +894,14 @@ Phone numbers
     a national number already starting with the dial code is ambiguous -> ''
   phoneKey(number, region) is what detection compares
   isValidE164 requires the '+' and 7..15 digits with no leading zero
+
+Avatars (#15, avatar half)
+  md5(text) -> lowercase hex, checked against the published vectors
+  gravatarUrl(email, { size, fallback, rating }) -> '' when there is no address
+    d=404 so "no picture" is a failed image, not a stranger's silhouette
+  avatarFor(card, { gravatar, size }) -> { url, source: 'card'|'gravatar' } | null
+    a photo stored on the contact always wins; Gravatar needs the setting on
+  the element hides itself on error, so a blocked request is simply absent
 
 Cleanup (#17)
   planNormalisation(cards, { region }) -> the cards that would change, each

@@ -7,6 +7,40 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.18.0] — 2026-10-23
+
+### Added
+
+- **Avatars on the *Contacts* list and the profile (#15, the avatar half).** A
+  contact's **own photo** (`media`) is shown when it has one — it lives on the
+  server, so it costs no third-party request. Otherwise **Gravatar** fills in,
+  when the user has turned it on.
+- **A new setting, *Show Gravatar avatars*, off by default.** Gravatar
+  identifies a person by a hash of their email address, so turning this on sends
+  that hash to gravatar.com. That is the user's decision, not a default, and the
+  setting says so.
+- `src/lib/avatar.js` — the MD5 the Gravatar URL needs, the URL itself, and
+  whose picture wins. `crypto.subtle` has no MD5 and using it for SHA-256 would
+  be a platform dependency the sandbox does not promise, so the algorithm is
+  implemented here and checked against published vectors, including the canonical
+  Gravatar example.
+
+### Notes
+
+**A picture that will not load simply is not there.** A blocked request (the
+sandbox's content policy), an offline browser and "this contact has no picture"
+are indistinguishable from inside the plugin, and all three end as nothing at
+all rather than a broken-image icon. `d=404` asks Gravatar for a 404 instead of a
+placeholder, which makes that the same code path. The image also sends **no
+referrer** and is **lazy**, so a long address book does not fire one request per
+row the moment the page opens.
+
+The plugin cannot verify that the sandbox allows the request; if the content
+policy refuses it, avatars are absent and nothing else changes.
+
+#15's other half — universal contact hover cards — is not here; it needs host
+surface this plugin does not have, and the issue stays open for it.
+
 ## [1.17.0] — 2026-10-23
 
 ### Added
