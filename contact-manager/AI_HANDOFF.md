@@ -5,13 +5,16 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.14.1 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: the capability probe and a precise unavailable notice (v1.14.1) — the plugin's documented host contract does **not** match a current host: `api.email` exists but has no `search`, so the profile's messages, files, meetings and tasks are inert on a current install, and the probe now reports the method names the host really uses; on top of multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.15.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0); on top of the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.14.1` is the newest GitHub release (v1.14.0,
   v1.13.2, v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0, v1.8.0,
   v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are in step
   (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70, #71, #72
-  and #73 merged).
+  and #73 merged). **v1.15.0 is prepared on
+  `feat/contact-manager-bulk-edit-export`** and still needs its PR, the merge,
+  the mirror sync and `npm run release` — then a handoff commit saying it is
+  released, as the releases before it were closed out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -21,6 +24,41 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Bulk edit and vCard export (v1.15.0) — completes #14
+
+The selection bar gained *Edit selected* and *Export* beside the merge and
+delete actions from v1.14.0.
+
+**Tags and address books are map fields the host replaces wholesale**, which
+drives the whole design. `applyBulkEdit(api, cards, { tags, books })` computes
+one patch per contact containing the **complete** new `keywords` and
+`addressBookIds` maps — sending only the added entries would silently drop every
+other tag and book membership. Two rules are enforced in the module rather than
+left to the dialog:
+
+- the `company` keyword is **never** removed by a tag edit. It is what marks a
+  contact as an organisation (`isCompany`, company profiles, `companyLine`), not
+  a label the user chose;
+- a card that would be left in **no** address book is **refused**, and counted in
+  `failed`. That is the same guard the editor applies when it declines to write
+  an empty book set.
+
+Tags and books go out in **one update per contact**, so `{ updated, skipped,
+failed }` counts contacts, not calls. `skipped` means "nothing would change" and
+is deliberately distinct from `failed`.
+
+The dialog (`bulk-dialog.js`) only *collects* the change; the writing lives in
+`bulk.js`, so those rules have one home. It offers add-tags, remove-tags, a book
+action (add to / remove from) and a checkbox per book.
+
+**Export** writes the selection as one `.vcf` of vCard **3.0** — the version
+address books, phones and desktop clients import without complaint, and nothing
+here needs a 4.0-only feature. `vcard.js` escapes RFC 2426 TEXT values, and
+escapes structured `N` and `ADR` **per component**, because escaping the joined
+string would escape the `;` separators and destroy the structure. The
+single-value JSContact readers moved from `profile-page.js` into `contacts.js`
+so the profile and the export cannot drift.
 
 ### The optional-API contract is not what the docs said (v1.14.1)
 
@@ -488,15 +526,16 @@ files, company rollup), v1.9.0 company profiles, v1.10.0 file downloads,
 v1.11.0 local projects, v1.12.0 one tab with sub-tabs, v1.13.0 project
 time/expenses and export, v1.13.1 optional-call crash and project saving fixes,
 v1.13.2 the plugin-owned two-pane page skeleton, v1.14.0 bulk merge and delete
-on a hand-picked selection plus the fixed search box.
+on a hand-picked selection plus the fixed search box, v1.14.1 the capability
+probe and precise unavailable notice, v1.15.0 bulk tag/book edits and vCard
+export for a selection.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real
 tasks; time and expense entries are still open). What is left on the near
 roadmap is the rest of the v1.3.0 milestone: #13 (smart search and saved
-searches), #14 (bulk actions — the merge and delete halves shipped in v1.14.0;
-bulk tag and address-book edits and bulk export are still open), #12 (contact
-groups) and #15 (avatars). #11
+searches), #12 (contact groups) and #15 (avatars) — #14 (bulk actions) is
+done as of v1.15.0. #11
 (custom fields) needs a host change and stays parked; deals/pipeline stay out
 of scope.
 
