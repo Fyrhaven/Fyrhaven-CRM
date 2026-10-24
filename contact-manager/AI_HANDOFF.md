@@ -5,15 +5,18 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.18.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.19.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.18.0` is the newest GitHub release (v1.17.0,
   v1.16.0,
   v1.15.0,
   v1.14.1, v1.14.0, v1.13.2, v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0,
   v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
-  #71, #72, #73, #76, #78, #80, #81 and #83 merged).
+  #71, #72, #73, #76, #78, #80, #81 and #83 merged). **v1.19.0 is prepared on
+  `feat/contact-manager-health`** and still needs its PR, the merge, the
+  mirror sync and `npm run release` — then a handoff commit saying it is
+  released, as the releases before it were closed out.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -23,6 +26,35 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### A Health dashboard, and a reader that hid the bug it looks for (v1.19.0) — #16
+
+A fourth sub-tab: the average score over the address book, a per-address-book
+breakdown worst-first, the totals for each rule, and a drill-down list worst
+first. Every total is a filter, and every deduction is named — the score is
+deductions from 100, so the list of issues *is* the explanation.
+
+**A real bug the tests caught, in an existing reader.** `contactIssues` first
+read addresses through `emailEntries`, which filters on "has an `@` and no
+spaces" — so a **malformed** address was invisible to the check written to find
+it. `rawEmailAddresses` in `contacts.js` now returns every address as written
+(untrimmed, so the rules can also tell `Ada@Example.ORG` from
+`  Ada@Example.ORG `). The phone side had no equivalent gap: `phoneEntries` only
+drops empties.
+
+**The fixes reuse machinery that is already reversible**, rather than inventing
+a second kind of change: `cleanup` issues open the normalisation dialog
+(preview, then undo) and `duplicate` issues open the review dialog (preview,
+then undo). Everything else opens the editor. That is what makes #16's "fixes
+are previewable and reversible" true without new safety work.
+
+**The band cutoffs live in `BANDS` and nowhere else.** The page's per-book badge
+originally recomputed `>= 80 / >= 50` inline; it calls `healthBand` now, so the
+dashboard and the rules cannot drift apart.
+
+A duplicate is expressed two ways on purpose: `duplicates` (a Set of ids) for the
+dashboard, which has the whole picture, and `duplicate: true` for a single
+contact, which is what the profile has. Both are tested.
 
 ### Avatars, and a picture that will not load (v1.18.0) — #15, the avatar half
 
@@ -648,7 +680,7 @@ v1.13.2 the plugin-owned two-pane page skeleton, v1.14.0 bulk merge and delete
 on a hand-picked selection plus the fixed search box, v1.14.1 the capability
 probe and precise unavailable notice, v1.15.0 bulk tag/book edits and vCard
 export for a selection, v1.16.0 smart search and saved searches, v1.17.0 E.164
-cleanup with preview and undo, v1.18.0 avatars.
+cleanup with preview and undo, v1.18.0 avatars, v1.19.0 the Health dashboard.
 
 **Next: the v1.3.0 milestone.** The #54 CRM direction now has companies (#22,
 v1.9.0), files (#58, v1.10.0) and projects (#57, v1.11.0 — milestones are real
