@@ -12,7 +12,11 @@
 //   tag:vip                a keyword, matched whole
 //   book:Work              an address-book name or id
 //   has:phone  has:email   presence — also has:note, has:tag
+//   -tag:vip  -ada         a leading minus excludes
 //   is:company is:person   what kind of contact it is
+//
+// A leading `-` excludes instead of requiring: `-tag:vip`, `-has:phone`,
+// `-ada`. Everything else is unchanged.
 //
 // An unknown operator is reported *and* treated as free text, so a typo never
 // silently returns nothing.
@@ -53,20 +57,28 @@ const isSubsequence = (needle, haystack) => {
  */
 export function parseQuery(input) {
   const terms = [];
+  const notTerms = [];
   const filters = [];
+  const notFilters = [];
   const errors = [];
 
-  for (const token of String(input ?? '').trim().split(/\s+/).filter(Boolean)) {
+  for (const raw of String(input ?? '').trim().split(/\s+/).filter(Boolean)) {
+    // a leading `-` excludes; a lone `-` is just a character
+    const not = raw.length > 1 && raw.startsWith('-');
+    const token = not ? raw.slice(1) : raw;
+    const pushTerm = (value) => (not ? notTerms : terms).push(value);
+    const pushFilter = (value) => (not ? notFilters : filters).push(value);
+
     const at = token.indexOf(':');
     if (at <= 0) {
-      terms.push(lower(token));
+      pushTerm(lower(token));
       continue;
     }
     const field = token.slice(0, at).toLowerCase();
     const value = token.slice(at + 1);
     const fail = (reason) => {
       errors.push({ token, field, value, reason });
-      terms.push(lower(token));
+      pushTerm(lower(token));
     };
 
     if (!FIELDS.includes(field)) {
@@ -85,10 +97,10 @@ export function parseQuery(input) {
       fail('unknown-is');
       continue;
     }
-    filters.push({ field, value: lower(value) });
+    pushFilter({ field, value: lower(value) });
   }
 
-  return { terms, filters, errors };
+  return { terms, notTerms, filters, notFilters, errors };
 }
 
 /** Organisation names, the email domain, and a company record's own name. */
@@ -168,39 +180,45 @@ export function buildIndex(cards, { books } = {}) {
   return (Array.isArray(cards) ? cards : []).map((card) => indexEntry(card, books));
 }
 
+/** Does one indexed card carry this filter? */
+function filterMatches(entry, { field, value }) {
+  if (field === 'name') return hasTerm(entry.names, value) || hasFuzzyName(entry.names, value);
+  if (field === 'email') return hasTerm(entry.emails, value);
+  if (field === 'phone') {
+    const wanted = digits(value).replace(/^0+/, '');
+    return Boolean(wanted) && entry.phones.some((number) => number.includes(wanted));
+  }
+  if (field === 'company') return hasTerm(entry.companies, value);
+  if (field === 'note') return hasTerm(entry.notes, value);
+  if (field === 'tag') return entry.tags.includes(value);
+  if (field === 'book') return entry.books.includes(value);
+  if (field === 'has') {
+    return Boolean({
+      email: entry.emails.length,
+      phone: entry.phones.length,
+      note: entry.notes.length,
+      tag: entry.tags.length,
+    }[value]);
+  }
+  if (field === 'is') return (value === 'company') === entry.company;
+  // an unknown field never filters anything out
+  return true;
+}
+
 /** Does one indexed card satisfy every term and every filter? */
 export function matchIndexed(entry, parsed) {
-  for (const term of parsed.terms) {
-    if (!hasTerm(entry.free, term) && !hasFuzzyName(entry.names, term)) return false;
-  }
+  const hasText = (term) => hasTerm(entry.free, term) || hasFuzzyName(entry.names, term);
+  for (const term of parsed.terms) if (!hasText(term)) return false;
+  for (const term of parsed.notTerms ?? []) if (hasText(term)) return false;
 
-  for (const { field, value } of parsed.filters) {
-    if (field === 'name' && !(hasTerm(entry.names, value) || hasFuzzyName(entry.names, value))) return false;
-    if (field === 'email' && !hasTerm(entry.emails, value)) return false;
-    if (field === 'phone') {
-      const wanted = digits(value).replace(/^0+/, '');
-      if (!wanted || !entry.phones.some((number) => number.includes(wanted))) return false;
-    }
-    if (field === 'company' && !hasTerm(entry.companies, value)) return false;
-    if (field === 'note' && !hasTerm(entry.notes, value)) return false;
-    if (field === 'tag' && !entry.tags.includes(value)) return false;
-    if (field === 'book' && !entry.books.includes(value)) return false;
-    if (field === 'has') {
-      const present = {
-        email: entry.emails.length,
-        phone: entry.phones.length,
-        note: entry.notes.length,
-        tag: entry.tags.length,
-      }[value];
-      if (!present) return false;
-    }
-    if (field === 'is' && (value === 'company') !== entry.company) return false;
-  }
+  for (const filter of parsed.filters ?? []) if (!filterMatches(entry, filter)) return false;
+  for (const filter of parsed.notFilters ?? []) if (filterMatches(entry, filter)) return false;
 
   return true;
 }
 
-const isBlank = (parsed) => !parsed.terms.length && !parsed.filters.length;
+const isBlank = (parsed) => !parsed.terms.length && !parsed.filters.length
+  && !(parsed.notTerms ?? []).length && !(parsed.notFilters ?? []).length;
 
 /** Does one card satisfy a parsed query? Convenience for a single card. */
 export function matchCard(card, parsed, { books } = {}) {
