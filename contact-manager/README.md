@@ -93,6 +93,12 @@ contact-manager/
 │       ├── health-page.js # the Health dashboard
 │       ├── home-page.js  # the main page: state, the menu and the section rows
 │       ├── actions.js    # the tasks the palette and the main page both run
+│       ├── csv.js        # the RFC 4180 reader
+│       ├── vcard-parse.js# reading vCard 3.0 and 4.0 back in
+│       ├── import-fields.js # the column fields and the header guesses
+│       ├── import.js     # rows to drafts to cards, and the duplicate plan
+│       ├── import-templates.js # remembered column mappings
+│       ├── import-dialog.js # the import wizard
 │       ├── search.js      # the query language and the matcher behind the search box
 │       ├── phones.js      # E.164 normalisation and the region table
 │       ├── emails.js      # email syntax, role addresses, throwaway domains
@@ -151,6 +157,11 @@ contact-manager/
 │   ├── health.test.mjs     # the rules, the weights and the bands
 │   ├── ui-health.test.mjs  # the Health dashboard
 │   ├── ui-home.test.mjs    # the main page
+│   ├── csv.test.mjs        # the RFC 4180 edge cases
+│   ├── vcard-parse.test.mjs # reading vCard 3.0 and 4.0
+│   ├── import.test.mjs     # mapping, the duplicate plan, the write
+│   ├── import-templates.test.mjs # remembered mappings
+│   ├── ui-import.test.mjs  # the import wizard
 │   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
@@ -654,6 +665,11 @@ plugin host are **not** bundled, the host provides them.
 | `test/health.test.mjs` | Every rule and its weight, the score floor, the band cutoffs, the per-book breakdown, and the drill-downs |
 | `test/ui-health.test.mjs` | The dashboard: the average, the book rows, filtering by a rule, the scores on the rows, and the fixes it offers |
 | `test/ui-home.test.mjs` | The main page: the headline numbers, the last-scan line, each row leading into its section, and that the menu runs the same actions as the palette |
+| `test/csv.test.mjs` | The RFC 4180 cases: quoted commas and newlines, doubled quotes, CRLF, a BOM, empty fields |
+| `test/vcard-parse.test.mjs` | vCard 3.0 and 4.0, folded lines, grouped properties, the escapes, and junk |
+| `test/import.test.mjs` | Header guessing for Google and Apple exports, row to draft, and the duplicate plan by email, phone and name |
+| `test/import-templates.test.mjs` | Remembered mappings: found by header row, replaced, capped, repaired |
+| `test/ui-import.test.mjs` | The wizard: guessing, previewing, holding back a duplicate, remembering a mapping, vCard, and cancel |
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
@@ -904,6 +920,17 @@ Phone numbers
     a national number already starting with the dial code is ambiguous -> ''
   phoneKey(number, region) is what detection compares
   isValidE164 requires the '+' and 7..15 digits with no leading zero
+
+Import (#19, import half)
+  parseCsv(text) -> { delimiter, headers, rows }   RFC 4180, BOM, CRLF
+  parseVCards(text) -> draft-shaped records; 3.0 and 4.0, folded, grouped
+  guessMapping(headers) -> a field per column; guessField is the one-header form
+  rowToDraft(row, mapping, { bookIds }) -> the editor's draft shape
+  planImport(drafts, existing, { region }) -> { fresh, duplicates }
+    matched on the same keys detection uses, so an import cannot create duplicates
+  applyImport(api, drafts) -> { created, failed }, one create per draft
+  remembered mappings in 'importMappings', keyed by the header row
+  NOT imported: photos, URLs, custom fields (see the CHANGELOG)
 
 Main page (Overview)
   makeHomePage(React, api) renders the landing tab; every sub-page is handed

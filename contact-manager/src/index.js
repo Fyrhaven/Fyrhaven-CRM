@@ -30,8 +30,9 @@ import { makeHealthPage } from './lib/health-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
+import { makeImportDialog } from './lib/import-dialog.js';
 import { detectCapabilities, describeCapabilities, unavailableNamespaces } from './lib/capabilities.js';
-import { findDuplicates, newCompany, newContact, newProject, undoMerge } from './lib/actions.js';
+import { findDuplicates, importContacts, newCompany, newContact, newProject, undoMerge } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
 
@@ -48,19 +49,22 @@ const AppShell = makeAppShell(React, api, {
   health: makeHealthPage(React, api),
 });
 
-// One dialog slot serves five purposes: the review/merge dialog, the contact
-// editor, the project editor, the bulk editor for a selection and the cleanup
-// preview. The `extraProps` marker picks which component the host renders.
+// One dialog slot serves six purposes: the review/merge dialog, the contact
+// editor, the project editor, the bulk editor for a selection, the cleanup
+// preview and the import wizard. The `extraProps` marker picks which component
+// the host renders.
 const ReviewDialog = makeReviewDialog(React, api);
 const EditorDialog = makeEditorDialog(React, api);
 const ProjectDialog = makeProjectDialog(React, api);
 const BulkDialog = makeBulkDialog(React, api);
 const NormaliseDialog = makeNormaliseDialog(React, api);
+const ImportDialog = makeImportDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
   if (props?.bulkEditor) return React.createElement(BulkDialog, props);
   if (props?.normalise) return React.createElement(NormaliseDialog, props);
+  if (props?.importWizard) return React.createElement(ImportDialog, props);
   return React.createElement(ReviewDialog, props);
 }
 
@@ -100,6 +104,7 @@ export const hooks = {
     if (actionId === 'new-contact') return newContact(api);
     if (actionId === 'new-company') return newCompany(api);
     if (actionId === 'new-project') return newProject(api);
+    if (actionId === 'import-contacts') return importContacts(api);
     return undefined;
   },
 
@@ -135,6 +140,7 @@ async function publish(pluginApi) {
     { id: 'new-contact', label: t('action.newContact'), icon: 'user-plus' },
     { id: 'new-company', label: t('action.newCompany'), icon: 'building' },
     { id: 'new-project', label: t('action.newProject'), icon: 'folder' },
+    { id: 'import-contacts', label: t('action.importContacts'), icon: 'upload' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
   await pluginApi.ui.setActions('contact-list-actions', [
