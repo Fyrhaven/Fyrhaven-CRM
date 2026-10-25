@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.23.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: retention — the untouched contacts by age bucket, with an export that is written as part of any delete (#21, v1.23.0); on top of exporting the selection or the shown list as vCard or CSV, with the round trip asserted (#19, export half, v1.22.0); on top of importing contacts from CSV or vCard, with column mapping, a preview, duplicate protection and remembered mappings (#19, import half, v1.21.0); on top of the plugin opening on a main page — headline state, a menu of the palette tasks and a row into every section (v1.20.0); on top of a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.23.1 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: four reported bugs fixed (v1.23.1) — the profile crashed on a JMAP-shaped message sender, exporting downloaded nothing, the contact list did not refresh after an import, and the side pane was too short; on top of retention — the untouched contacts by age bucket, with an export that is written as part of any delete (#21, v1.23.0); on top of exporting the selection or the shown list as vCard or CSV, with the round trip asserted (#19, export half, v1.22.0); on top of importing contacts from CSV or vCard, with column mapping, a preview, duplicate protection and remembered mappings (#19, import half, v1.21.0); on top of the plugin opening on a main page — headline state, a menu of the palette tasks and a row into every section (v1.20.0); on top of a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.23.0` is the newest GitHub release (v1.22.0,
   v1.21.0,
   v1.20.0,
@@ -19,6 +19,9 @@
   v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
   #71, #72, #73, #76, #78, #80, #81, #83, #85, #87, #89, #91 and #93 merged).
+  **v1.23.1 is prepared on `fix/contact-manager-jmap-sender`** and still needs its
+  PR, the merge, the mirror sync and `npm run release` — then a handoff commit
+  saying it is released.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -28,6 +31,44 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### The webmail is JMAP-shaped, and two bugs came from forgetting it (v1.23.1)
+
+A message’s `from`, `to` and `cc` arrive as an **array** of `{ name, email }`, not
+as one object — `eventsForContact` already handled that for calendar
+participants, but the profile did not for mail. Two consequences, both reported
+from a live install:
+
+- **A crash.** `message.from?.email ?? message.from` fell through to the array
+  and React refused to render it: *“Objects are not valid as a React child
+  (found: object with keys {name, email})”*.
+- **Silent nothing.** `timelineForContact` matched on `message.from.email`, which
+  is `undefined` for an array, so a message was only ever found by its `to` or
+  its subject. “Recent messages” looked empty for contacts you had mail from.
+
+`addressList` and `addressLabel` in `contacts.js` read every shape the host uses
+— the array, a single entry, `{ address }`, a bare string — and the tests pin all
+of them plus “never returns an object”. **Treat every address-ish field as a
+list.**
+
+Two more, from the same report:
+
+- **Downloads were cancelled by the plugin itself.** `downloadBlob` revoked the
+  object URL on the same turn as the click; the browser had not read the blob
+  yet. It revokes on the next turn now. This affected the contact export, the
+  project export and the profile’s attachments.
+- **The list did not refresh after an import.** Sub-tabs mount once and stay
+  mounted by design, so the Contacts tab kept its first read of the address book.
+  The app page now owns a `revision` counter and every sub-page reloads when it
+  moves; a ref stops a page that mounts late from reading everything twice.
+
+**The capability probe was too shallow**, and that is worth remembering: it
+checked that a namespace and its methods *exist*, but a present method can still
+refuse a call — which is what a missing permission looks like from inside a
+plugin. `activate()` now makes one cheap read per optional namespace and logs the
+reason (`optional API calls failed — calendar: …`). On this instance the
+existence probe was silent while the profile said *“Unavailable: Meetings”*, which
+is exactly that gap.
 
 ### Retention, and an export that cannot be skipped (v1.23.0) — #21
 

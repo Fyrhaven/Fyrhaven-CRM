@@ -74,3 +74,35 @@ export function describeCapabilities(capabilities) {
     })
     .join(' | ');
 }
+
+/**
+ * One cheap read per optional namespace.
+ *
+ * Existence is not the same as working: a namespace can be present with the
+ * method attached and the **call** still refused, which is what a missing
+ * permission looks like from inside a plugin. The Contacts page said "Meetings
+ * are unavailable" while the existence probe found nothing missing — this tells
+ * those two apart, and the error message names the reason.
+ *
+ * @returns {Promise<string[]>} one `"name: message"` per call that failed
+ */
+export async function probeOptionalApis(api, now = Date.now()) {
+  const day = 24 * 3600 * 1000;
+  const checks = [
+    ['email', () => api.email.search({ text: 'a', limit: 1 })],
+    ['tasks', () => api.tasks.list({ includeCompleted: true, limit: 1 })],
+    ['calendar', () => api.calendar.getEvents({
+      from: new Date(now).toISOString(),
+      to: new Date(now + day).toISOString(),
+    })],
+  ];
+  const failures = [];
+  for (const [name, run] of checks) {
+    try {
+      await run();
+    } catch (err) {
+      failures.push(`${name}: ${String(err?.message ?? err)}`);
+    }
+  }
+  return failures;
+}

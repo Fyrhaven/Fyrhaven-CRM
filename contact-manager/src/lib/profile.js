@@ -2,7 +2,7 @@
 // and deciding which tasks and messages belong to a contact. No api, no DOM —
 // the page in `profile-page.js` only loads data and renders.
 
-import { contactName, emailEntries, phoneEntries, text } from './contacts.js';
+import { addressList, contactName, emailEntries, phoneEntries, text } from './contacts.js';
 import { normalizeName } from './duplicates.js';
 
 const lower = (value) => text(value).toLowerCase();
@@ -62,9 +62,11 @@ export function timelineForContact(messages, card) {
   const terms = new Set(contactTerms(card));
   if (!terms.size) return [];
   return (Array.isArray(messages) ? messages : []).filter((message) => {
-    const haystack = [message?.from?.email, message?.to?.map?.((entry) => entry.email)?.join(' '),
-      message?.subject]
-      .filter(Boolean).join(' ').toLowerCase();
+    // JMAP gives `from` and `to` as arrays of { name, email }, not as objects
+    const haystack = [
+      ...addressList(message?.from), ...addressList(message?.to), ...addressList(message?.cc),
+      message?.subject,
+    ].filter(Boolean).join(' ').toLowerCase();
     return [...terms].some((term) => haystack.includes(term));
   });
 }

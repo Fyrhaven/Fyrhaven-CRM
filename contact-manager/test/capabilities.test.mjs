@@ -2,7 +2,7 @@
 // missing API.
 import { describe, expect, it } from 'vitest';
 import {
-  detectCapabilities, describeCapabilities, unavailableNamespaces,
+  detectCapabilities, describeCapabilities, probeOptionalApis, unavailableNamespaces,
 } from '../src/lib/capabilities.js';
 
 describe('detectCapabilities', () => {
@@ -49,5 +49,37 @@ describe('detectCapabilities', () => {
     });
 
     expect(unavailableNamespaces(caps)).toEqual([]);
+  });
+});
+
+describe('probeOptionalApis', () => {
+  it('reports nothing when every call answers', async () => {
+    const api = {
+      email: { search: async () => [] },
+      tasks: { list: async () => [] },
+      calendar: { getEvents: async () => [] },
+    };
+
+    expect(await probeOptionalApis(api)).toEqual([]);
+  });
+
+  it('names the namespace and the reason when a call is refused', async () => {
+    const api = {
+      email: { search: async () => [] },
+      tasks: { list: async () => [] },
+      calendar: { getEvents: async () => { throw new Error('missing calendar:read'); } },
+    };
+
+    // this is the difference between "the API is not there" and "the call failed"
+    expect(await probeOptionalApis(api)).toEqual(['calendar: missing calendar:read']);
+  });
+
+  it('reports a namespace that is not there at all, without throwing', async () => {
+    const failures = await probeOptionalApis({});
+
+    // one per namespace, each naming the namespace and what went wrong
+    expect(failures).toHaveLength(3);
+    expect(failures.map((entry) => entry.split(':')[0])).toEqual(['email', 'tasks', 'calendar']);
+    for (const failure of failures) expect(failure).toContain('undefined');
   });
 });

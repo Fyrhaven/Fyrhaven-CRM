@@ -23,10 +23,10 @@ import { readUndo } from './undo.js';
 import { ACTION_BAR } from './layout.js';
 
 export function makeHomePage(React, api) {
-  const { createElement: h, useCallback, useEffect, useState } = React;
+  const { createElement: h, useRef, useCallback, useEffect, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
 
-  return function HomePage({ onNavigate } = {}) {
+  return function HomePage({ onNavigate, revision, onDataChanged } = {}) {
     const [state, setState] = useState({ status: 'loading' });
     const go = (tab) => { if (typeof onNavigate === 'function') onNavigate(tab); };
 
@@ -63,6 +63,14 @@ export function makeHomePage(React, api) {
     }, []);
 
     useEffect(() => { void load(); }, [load]);
+    // Reload when another page reports a change. A ref remembers the revision
+    // this instance started at, so mounting does not read everything twice.
+    const seenRevision = useRef(revision ?? 0);
+    useEffect(() => {
+      if ((revision ?? 0) === seenRevision.current) return;
+      seenRevision.current = revision ?? 0;
+      void load();
+    }, [revision]);
 
     const duplicateLine = () => t('home.duplicatesLine', {
       groups: state.groups?.length ?? 0,
@@ -70,13 +78,13 @@ export function makeHomePage(React, api) {
     });
 
     const menu = () => h('div', { 'data-pane': 'menu', style: ACTION_BAR },
-      h(Button, { icon: 'search', onClick: () => void findDuplicates(api).then(load) }, t('action.scanCommand')),
-      h(Button, { variant: 'secondary', icon: 'user-plus', onClick: () => void newContact(api).then(load) }, t('action.newContact')),
-      h(Button, { variant: 'secondary', icon: 'building', onClick: () => void newCompany(api).then(load) }, t('action.newCompany')),
-      h(Button, { variant: 'secondary', icon: 'folder', onClick: () => void newProject(api).then(load) }, t('action.newProject')),
-      h(Button, { variant: 'secondary', icon: 'upload', onClick: () => void importContacts(api).then(load) }, t('action.importContacts')),
+      h(Button, { icon: 'search', onClick: () => void findDuplicates(api).then(() => onDataChanged?.()) }, t('action.scanCommand')),
+      h(Button, { variant: 'secondary', icon: 'user-plus', onClick: () => void newContact(api).then(() => onDataChanged?.()) }, t('action.newContact')),
+      h(Button, { variant: 'secondary', icon: 'building', onClick: () => void newCompany(api).then(() => onDataChanged?.()) }, t('action.newCompany')),
+      h(Button, { variant: 'secondary', icon: 'folder', onClick: () => void newProject(api).then(() => onDataChanged?.()) }, t('action.newProject')),
+      h(Button, { variant: 'secondary', icon: 'upload', onClick: () => void importContacts(api).then(() => onDataChanged?.()) }, t('action.importContacts')),
       undoWindowMinutes(api.plugin?.settings) > 0 && state.undoable
-        ? h(Button, { variant: 'secondary', icon: 'undo', onClick: () => void undoMerge(api).then(load) }, t('action.undoCommand'))
+        ? h(Button, { variant: 'secondary', icon: 'undo', onClick: () => void undoMerge(api).then(() => onDataChanged?.()) }, t('action.undoCommand'))
         : null);
 
     const row = (key, title, line, badge, tab) => h(ListRow, {
