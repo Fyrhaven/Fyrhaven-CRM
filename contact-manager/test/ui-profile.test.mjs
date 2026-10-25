@@ -153,7 +153,7 @@ describe('contacts page', () => {
     const api = profileApi();
     await renderPage(api);
 
-    expect(screen.getByText('Operators: tag: has: company: book: is:')).toBeTruthy();
+    expect(screen.getByText('Operators: tag: has: company: is: · a leading - excludes')).toBeTruthy();
   });
 
   it('saves a search, counts it, applies it from its button and removes it', async () => {
