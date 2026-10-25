@@ -7,6 +7,49 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.21.0] — 2026-10-23
+
+### Added
+
+- **Import contacts from CSV or vCard (#19, the import half).** A new *Import
+  contacts* task on the main page's menu and in the command palette opens a
+  wizard that:
+  - **reads the file** and works out what it is — a vCard needs no column
+    questions, a CSV gets its delimiter guessed from the first line;
+  - **maps the columns**, guessing from the header names (Google's `Given Name`,
+    `E-mail 1 - Value`, `Address 1 - City`… and Apple's `First Name`,
+    `E-mail Address`… are both recognised) and letting every column be changed;
+  - **previews** the first few contacts exactly as they would be imported;
+  - **holds back contacts that already exist**, matched on the same email,
+    phone and name keys duplicate detection uses, so an import can never create
+    the duplicates the rest of the plugin spends its time finding;
+  - **remembers the column mapping** for the next file from the same service.
+- `src/lib/csv.js` — an RFC 4180 parser as a character scanner rather than a
+  `split`, because the two things that break a naive CSV reader are quoted
+  commas and quoted newlines, and "Smith, John" in a name column is the common
+  case. Handles doubled quotes, CRLF and a byte-order mark.
+- `src/lib/vcard-parse.js` — reads vCard 3.0 **and** 4.0, folded lines, grouped
+  properties (`item1.EMAIL`), and the RFC 2426 escapes.
+- `src/lib/import.js` — rows to drafts to cards, the duplicate plan, and the
+  write. Cards are built by the **editor's own `cardFromDraft`**, so an imported
+  contact is shaped exactly like a hand-created one.
+- `src/lib/import-templates.js` — remembered mappings, keyed by the header row
+  rather than the file name.
+
+### Notes
+
+Three things are deliberately **not** imported yet, rather than imported badly:
+
+- **Photos** (`PHOTO`) and **URLs** — the card builder does not write `media` or
+  `onlineServices` yet, and a field the import cannot store is worse than one it
+  admits it cannot. A `Website` column is therefore offered as *Ignore*.
+- **Custom fields** — the host has no custom field support (#11).
+- **Encoding detection** beyond UTF-8, which is what the webmail's own APIs
+  hand back.
+
+The other half of #19 — exporting the current selection as CSV or vCard, with a
+round-trip fixture — is the next release, so the issue stays open.
+
 ## [1.20.0] — 2026-10-23
 
 ### Added
