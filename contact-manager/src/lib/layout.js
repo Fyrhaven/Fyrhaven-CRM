@@ -36,7 +36,7 @@ export function sidePane(basis) {
   return {
     flex: `0 0 ${basis}px`,
     minWidth: '220px',
-    maxHeight: '60vh',
+    maxHeight: '72vh',
     display: 'flex',
     flexDirection: 'column',
     gap: '0.5rem',

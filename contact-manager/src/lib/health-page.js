@@ -21,10 +21,10 @@ import { deleteContacts } from './bulk.js';
 import { ACTION_BAR } from './layout.js';
 
 export function makeHealthPage(React, api) {
-  const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
+  const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
 
-  return function HealthPage() {
+  return function HealthPage({ revision } = {}) {
     const [cards, setCards] = useState([]);
     const [bookList, setBookList] = useState([]);
     const [groups, setGroups] = useState([]);
@@ -48,6 +48,14 @@ export function makeHealthPage(React, api) {
     }, []);
 
     useEffect(() => { void load(); }, [load]);
+    // Reload when another page reports a change. A ref remembers the revision
+    // this instance started at, so mounting does not read everything twice.
+    const seenRevision = useRef(revision ?? 0);
+    useEffect(() => {
+      if ((revision ?? 0) === seenRevision.current) return;
+      seenRevision.current = revision ?? 0;
+      void load();
+    }, [revision]);
 
     const books = useMemo(() => bookNamesById(bookList), [bookList]);
     const byId = useMemo(() => new Map(cards.map((card) => [card.id, card])), [cards]);

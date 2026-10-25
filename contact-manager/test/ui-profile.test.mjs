@@ -520,3 +520,29 @@ describe('company profile', () => {
     await waitFor(() => expect(screen.getByText('Company: Acme Ltd · 2 people')).toBeTruthy());
   });
 });
+
+describe('the webmail message shape', () => {
+  // JMAP sends `from` and `to` as arrays of { name, email }. Rendering that
+  // array is what crashed the page with React error #31, and matching against
+  // `from.email` silently found nothing.
+  const JMAP_MESSAGES = [
+    { id: 'm1', from: [{ name: 'Ada Lovelace', email: 'ada@example.org' }], to: [{ name: 'Me', email: 'me@example.org' }], subject: 'The engine notes', receivedAt: '2026-10-01T10:00:00Z' },
+  ];
+
+  it('renders a message whose sender is an array, instead of crashing', async () => {
+    const api = profileApi({ 'email.search': async () => JMAP_MESSAGES });
+    await renderPage(api);
+
+    await waitFor(() => expect(screen.getByText('The engine notes')).toBeTruthy());
+    // the sender is shown as text, not as an object
+    expect(screen.getByText('Ada Lovelace <ada@example.org>')).toBeTruthy();
+  });
+
+  it('still matches the contact through the array shape', async () => {
+    // the message is only listed if the timeline recognised the sender
+    const api = profileApi({ 'email.search': async () => JMAP_MESSAGES });
+    await renderPage(api);
+
+    await waitFor(() => expect(screen.getByText('The engine notes')).toBeTruthy());
+  });
+});

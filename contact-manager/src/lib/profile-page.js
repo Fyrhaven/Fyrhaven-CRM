@@ -7,7 +7,7 @@ import {
   Row, SearchInput, Section, Stack, Text,
 } from '@plugin-host/ui';
 import {
-  addressLine, bookNamesById, contactName, emailEntries, loadBooks, loadCards, nicknameLine,
+  addressLabel, addressLine, bookNamesById, contactName, emailEntries, loadBooks, loadCards, nicknameLine,
   notesLine, orgName, phoneEntries, titleName,
 } from './contacts.js';
 import { makeDuplicateSection } from './detail-section.js';
@@ -30,12 +30,12 @@ import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
 
 export function makeProfilePage(React, api) {
-  const { createElement: h, useCallback, useEffect, useMemo, useState } = React;
+  const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
   const Duplicates = makeDuplicateSection(React, api);
   const Avatar = makeAvatar(React);
 
-  return function ProfilePage() {
+  return function ProfilePage({ revision } = {}) {
     const [cards, setCards] = useState([]);
     const [bookList, setBookList] = useState([]);
     const [status, setStatus] = useState('loading'); // loading | ready | error
@@ -69,6 +69,14 @@ export function makeProfilePage(React, api) {
     }, []);
 
     useEffect(() => { void load(); }, [load]);
+    // Reload when another page reports a change. A ref remembers the revision
+    // this instance started at, so mounting does not read everything twice.
+    const seenRevision = useRef(revision ?? 0);
+    useEffect(() => {
+      if ((revision ?? 0) === seenRevision.current) return;
+      seenRevision.current = revision ?? 0;
+      void load();
+    }, [revision]);
 
     // Off unless the user turned it on: Gravatar learns a hash of the address.
     const gravatarOn = api.plugin?.settings?.gravatar === true;
@@ -508,7 +516,7 @@ export function makeProfilePage(React, api) {
                     ...context.messages.map((message) => h(Row, { key: message.id, gap: 2, wrap: true },
                       h(Text, { tone: 'muted' }, formatDate(message.receivedAt, api.i18n.getLocale())),
                       h(Text, null, message.subject || t('profile.noSubject')),
-                      h(Text, { tone: 'muted' }, message.from?.email ?? message.from ?? '')))),
+                      h(Text, { tone: 'muted' }, addressLabel(message.from))))),
                   h(Section, { title: t('profile.tasks') },
                     context.status === 'ready' && !context.tasks.length
                       ? h(Text, { tone: 'muted' }, t('profile.noTasks'))

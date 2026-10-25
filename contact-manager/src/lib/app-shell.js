@@ -4,8 +4,9 @@
 // it is opened and then stays mounted but hidden, so switching tabs keeps a scan
 // result or a selected contact instead of throwing the work away.
 //
-// Every sub-page is handed `onNavigate(tabId)`, which is how the Overview's rows
-// lead into the section they summarise.
+// Every sub-page is handed `onNavigate(tabId)` (how the Overview's rows lead into
+// the section they summarise), `revision` (reload when it changes) and
+// `onDataChanged()` (bump it after a task that wrote something).
 import { Tabs } from '@plugin-host/ui';
 
 export function makeAppShell(React, api, { home, duplicates, contacts, projects, health }) {
@@ -22,6 +23,10 @@ export function makeAppShell(React, api, { home, duplicates, contacts, projects,
   return function AppShell() {
     const [active, setActive] = useState('home');
     const [visited, setVisited] = useState([active]);
+    // Bumped when a task changes the data, so every sub-page reloads. Without
+    // it, importing from the main page left the Contacts list showing the
+    // address book as it was when that tab was first opened.
+    const [revision, setRevision] = useState(0);
 
     useEffect(() => {
       setVisited((current) => (current.includes(active) ? current : [...current, active]));
@@ -39,6 +44,10 @@ export function makeAppShell(React, api, { home, duplicates, contacts, projects,
         .map((tab) => h('div', {
           key: tab.id,
           style: tab.id === active ? undefined : { display: 'none' },
-        }, h(tab.component, { onNavigate: setActive }))));
+        }, h(tab.component, {
+          onNavigate: setActive,
+          revision,
+          onDataChanged: () => setRevision((n) => n + 1),
+        }))));
   };
 }
