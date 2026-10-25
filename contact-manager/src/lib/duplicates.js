@@ -12,6 +12,7 @@
 
 import { contactName, emailEntries, isMergeable, phoneEntries, primaryEmail } from './contacts.js';
 import { phoneKey } from './phones.js';
+import { filterForScan } from './book-policies.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -127,7 +128,12 @@ export function groupFromSelection(cards) {
  * `dismissed` are left out. Sorted strong first, then biggest, then by name.
  */
 export function findDuplicateGroups(cards, opts = {}, dismissed = []) {
-  const list = (Array.isArray(cards) ? cards : []).filter(isMergeable);
+  // Extract per-book policies and ignore rules from opts; the rest are the
+  // global match strategies.
+  const { policies, ignore, ...globalOpts } = opts;
+  const mergeable = (Array.isArray(cards) ? cards : []).filter(isMergeable);
+  // Apply per-book and ignore filters; per-card opts override the globals.
+  const { cards: list, perCardOpts } = filterForScan(mergeable, { policies, ignore, globalOpts });
   const parent = list.map((_, i) => i);
   const find = (i) => {
     while (parent[i] !== i) {
@@ -142,7 +148,7 @@ export function findDuplicateGroups(cards, opts = {}, dismissed = []) {
     if (ra !== rb) parent[rb] = ra;
   };
 
-  const keysByCard = list.map((card) => prefixedKeys(card, opts));
+  const keysByCard = list.map((card, i) => prefixedKeys(card, perCardOpts ? perCardOpts[i] : globalOpts));
   const owner = new Map(); // 'e:a@b.c' → first card index
   keysByCard.forEach((keys, i) => {
     for (const [prefix, value] of keys) {

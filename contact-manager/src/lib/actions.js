@@ -14,13 +14,17 @@ import { toastMergeResult } from './labels.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { openProject, toastProjectResult } from './open-project.js';
 import { undoLastMerge } from './undo.js';
+import { readPolicies, readIgnore } from './book-policies.js';
 
 /** Duplicate groups over all contacts, or over `scopeIds` when given. */
 export async function scanGroups(api, scopeIds = null) {
   const cards = await loadCards(api);
   const list = scopeIds ? cards.filter((card) => scopeIds.has(card.id)) : cards;
   const dismissed = scopeIds ? [] : await readDismissed(api);
-  return findDuplicateGroups(list, await detectionOptions(api), dismissed);
+  const [globalOpts, policies, ignore] = await Promise.all([
+    detectionOptions(api), readPolicies(api), readIgnore(api),
+  ]);
+  return findDuplicateGroups(list, { ...globalOpts, policies, ignore }, dismissed);
 }
 
 /** Scan, then open the review dialog; toast the outcome. */

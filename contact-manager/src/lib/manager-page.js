@@ -9,6 +9,7 @@ import { LAST_SCAN_KEY, findDuplicateGroups, planMerge, readDismissed, writeDism
 import { memberLabel, mergeLabel, reasonLine, strengthKey, toastMergeResult, undoWindowMinutes } from './labels.js';
 import { readUndo, undoLastMerge, clearUndo } from './undo.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
+import { readPolicies, readIgnore } from './book-policies.js';
 
 const FOCUS_COOLDOWN_MS = 5000;
 
@@ -34,11 +35,14 @@ export function makeManagerPage(React, api) {
       setStatus('scanning');
       setError('');
       try {
-        const [cards, books, dismissed, batches] = await Promise.all([
+        const [cards, books, dismissed, batches, policies, ignore] = await Promise.all([
           loadCards(api), loadBooks(api), readDismissed(api), readUndo(api),
+          readPolicies(api), readIgnore(api),
         ]);
         const hiddenSet = new Set(dismissed);
-        const found = findDuplicateGroups(cards, await detectionOptions(api), []);
+        const globalOpts = await detectionOptions(api);
+        const opts = { ...globalOpts, policies, ignore };
+        const found = findDuplicateGroups(cards, opts, []);
         const when = new Date().toISOString();
         setUndo(batches.at(-1) ?? null);
         setBookNames(bookNamesById(books));
