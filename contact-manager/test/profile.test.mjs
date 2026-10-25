@@ -2,8 +2,8 @@
 // rules for tasks and messages.
 import { describe, expect, it } from 'vitest';
 import {
-  attachmentsForMessages, companiesAmong, companyDomains, companyNameOf, companyOf,
-  contactTerms, eventsForContact, filterCards, formatBytes, isCompany, peopleOfCompany,
+  attachmentsForMessages, calendarRange, companiesAmong, companyDomains, companyNameOf, companyOf,
+  contactTerms, eventsForContact, filterCards, formatBytes, hostDate, isCompany, peopleOfCompany,
   tasksForContact, timelineForContact,
 } from '../src/lib/profile.js';
 import { makeCard } from './fixtures.mjs';
@@ -147,3 +147,21 @@ describe('formatBytes', () => {
   });
 });
 
+
+describe('the calendar window', () => {
+  it('drops the milliseconds the host refuses', () => {
+    // the host wants 2026-05-01, 2026-05-01T09:30 or 2026-05-01T07:30:00Z —
+    // `.123Z` is rejected, which is why Meetings looked unavailable
+    expect(hostDate(Date.UTC(2026, 4, 1, 7, 30, 0, 123))).toBe('2026-05-01T07:30:00Z');
+    expect(hostDate(Date.UTC(2026, 4, 1, 7, 30, 0))).toBe('2026-05-01T07:30:00Z');
+  });
+
+  it('asks for six months back and three ahead, in that shape', () => {
+    const now = Date.UTC(2026, 4, 1, 12, 0, 0, 500);
+    const { from, to } = calendarRange(now);
+
+    expect(from).toBe('2025-11-02T12:00:00Z');
+    expect(to).toBe('2026-07-30T12:00:00Z');
+    for (const value of [from, to]) expect(value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  });
+});

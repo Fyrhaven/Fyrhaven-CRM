@@ -4,13 +4,43 @@
 // file. That keeps this dialog from having to carry a whole address book
 // through the host.
 
-import { DialogButtons, Field, InfoBar, Select, Stack } from '@plugin-host/ui';
+import { Button, DialogButtons, Field, InfoBar, Row, Select, Stack, Text, Textarea } from '@plugin-host/ui';
 
 export function makeExportDialog(React, api) {
   const { createElement: h, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
 
+  // The result: a sandbox without `allow-downloads` refuses the file, so the
+  // text is shown to copy instead of reported as a success that never happened.
+  const Result = ({ name, body }) => {
+    const [state, setState] = useState('');
+    const copy = async () => {
+      try {
+        await navigator.clipboard.writeText(body);
+        api.toast.success(t('export.copied'));
+      } catch {
+        setState(t('export.copyFailed'));
+      }
+    };
+    return h(Stack, { gap: 3 },
+      h(InfoBar, { tone: 'warning' }, t('export.blocked', { name })),
+      h(Textarea, { readOnly: true, rows: 12, value: body, 'aria-label': t('export.resultTitle') }),
+      state ? h(Text, { tone: 'danger' }, state) : null,
+      h(Row, { gap: 2 },
+        h(Button, { icon: 'copy', onClick: () => void copy() }, t('export.copy')),
+        h(Button, {
+          variant: 'secondary',
+          icon: 'download',
+          onClick: () => downloadBlob(new Blob([body], { type: 'text/plain' }), name),
+        }, t('export.tryDownload'))),
+      h(DialogButtons, {
+        buttons: [{ id: 'close', label: t('dialog.cancel'), variant: 'secondary' }],
+        onClick: () => props.onResult?.(null),
+      }));
+  };
+
   return function ExportDialog(props) {
+    if (props.exportResult) return h(Result, props.exportResult);
     const setup = props.exportSelection ?? {};
     const selected = Number(setup.selected) || 0;
     const shown = Number(setup.shown) || 0;

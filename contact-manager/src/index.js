@@ -32,7 +32,9 @@ import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
 import { makeImportDialog } from './lib/import-dialog.js';
 import { makeExportDialog } from './lib/export-dialog.js';
-import { detectCapabilities, describeCapabilities, probeOptionalApis, unavailableNamespaces } from './lib/capabilities.js';
+import {
+  describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
+} from './lib/capabilities.js';
 import { findDuplicates, importContacts, newCompany, newContact, newProject, undoMerge } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
@@ -167,6 +169,8 @@ export async function activate(pluginApi) {
     const failures = await probeOptionalApis(pluginApi);
     if (failures.length) {
       pluginApi.log.warn(`optional API calls failed — ${failures.join(' | ')}`);
+      // the surface, so a method this plugin does not know about is findable
+      pluginApi.log.warn(`host API surface — ${describeSurface(pluginApi)}`);
     }
   } catch (err) {
     pluginApi.log.warn(`capability check failed: ${err.message}`);

@@ -13,7 +13,7 @@ import {
 import { makeDuplicateSection } from './detail-section.js';
 import {
   attachmentsForMessages, companyDomains, companyNameOf, companyOf, eventsForContact,
-  formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
+  calendarRange, formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { downloadBlob } from './download.js';
@@ -120,9 +120,7 @@ export function makeProfilePage(React, api) {
       const messages = text
         ? optionalCall(() => api.email.search({ text, limit: 10 }))
         : Promise.resolve([]);
-      const now = new Date();
-      const from = new Date(now.getTime() - 180 * 24 * 3600 * 1000).toISOString();
-      const to = new Date(now.getTime() + 90 * 24 * 3600 * 1000).toISOString();
+      const { from, to } = calendarRange();
       const tasks = optionalCall(() => api.tasks.list({ includeCompleted: false }));
       const events = optionalCall(() => api.calendar.getEvents({ from, to }));
       void Promise.all([messages, tasks, events]).then(([found, open, diary]) => {
@@ -266,7 +264,14 @@ export function makeProfilePage(React, api) {
         api.toast.warning(t('contacts.exportEmpty'));
         return;
       }
+      // A sandbox without `allow-downloads` refuses this, so the file is also
+      // shown: a success toast with no file is the bug this replaces.
       downloadBlob(new Blob([file.body], { type: file.type }), file.name);
+      await api.ui.openDialog({
+        title: t('export.resultTitle'),
+        slot: 'plugin-dialog',
+        extraProps: { exportResult: { name: file.name, body: file.body } },
+      });
       api.toast.success(t('contacts.exported', { count: cards.length }));
     };
 

@@ -90,7 +90,8 @@ export async function probeOptionalApis(api, now = Date.now()) {
   const day = 24 * 3600 * 1000;
   const checks = [
     ['email', () => api.email.search({ text: 'a', limit: 1 })],
-    ['tasks', () => api.tasks.list({ includeCompleted: true, limit: 1 })],
+    // no `limit`: the host rejects an unknown option, and the plugin never sends one
+    ['tasks', () => api.tasks.list({ includeCompleted: true })],
     ['calendar', () => api.calendar.getEvents({
       from: new Date(now).toISOString(),
       to: new Date(now + day).toISOString(),
@@ -105,4 +106,24 @@ export async function probeOptionalApis(api, now = Date.now()) {
     }
   }
   return failures;
+}
+
+/** The namespaces and method names the host actually exposes. */
+export function describeSurface(api) {
+  // a thunk, so reading the namespace is inside the try as well: a host that
+  // throws on property access must not take the log line down with it
+  const keys = (read) => {
+    try {
+      return Object.keys(read() ?? {}).sort().join(', ') || '(none)';
+    } catch {
+      return '(unreadable)';
+    }
+  };
+  return [
+    `api: ${keys(() => api)}`,
+    `ui: ${keys(() => api?.ui)}`,
+    `email: ${keys(() => api?.email)}`,
+    `tasks: ${keys(() => api?.tasks)}`,
+    `calendar: ${keys(() => api?.calendar)}`,
+  ].join(' | ');
 }

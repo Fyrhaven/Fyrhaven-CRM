@@ -2,7 +2,7 @@
 // missing API.
 import { describe, expect, it } from 'vitest';
 import {
-  detectCapabilities, describeCapabilities, probeOptionalApis, unavailableNamespaces,
+  describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from '../src/lib/capabilities.js';
 
 describe('detectCapabilities', () => {
@@ -81,5 +81,26 @@ describe('probeOptionalApis', () => {
     expect(failures).toHaveLength(3);
     expect(failures.map((entry) => entry.split(':')[0])).toEqual(['email', 'tasks', 'calendar']);
     for (const failure of failures) expect(failure).toContain('undefined');
+  });
+});
+
+describe('describeSurface', () => {
+  it('names the namespaces and their methods, so an unknown one is findable', () => {
+    const line = describeSurface({
+      ui: { openDialog: () => {}, openEmail: () => {} },
+      email: { search: () => {} },
+      tasks: { list: () => {} },
+    });
+
+    expect(line).toContain('ui: openDialog, openEmail');
+    expect(line).toContain('email: search');
+    expect(line).toContain('tasks: list');
+    expect(line).toContain('calendar: (none)');
+  });
+
+  it('survives a namespace it cannot read', () => {
+    const hostile = new Proxy({}, { get() { throw new Error('nope'); }, ownKeys() { throw new Error('nope'); } });
+
+    expect(describeSurface(hostile)).toContain('(unreadable)');
   });
 });

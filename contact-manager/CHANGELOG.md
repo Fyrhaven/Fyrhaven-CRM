@@ -7,6 +7,41 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.23.2] — 2026-10-25
+
+### Fixed
+
+- **Meetings now load.** The calendar window was sent as `toISOString()`, which
+  ends in `.123Z`; the host accepts `2026-05-01`, `2026-05-01T09:30` or
+  `2026-05-01T07:30:00Z` and **rejected the milliseconds**, so every call failed
+  and the profile reported *“Meetings are unavailable”*. It was never a
+  permission. `calendarRange()` now sends the accepted shape.
+- **The capability probe was crying wolf.** It passed `limit` to
+  `api.tasks.list`, which the host refuses as an unknown option — so tasks were
+  reported as broken when the plugin’s own calls (which send no `limit`) work
+  fine. The probe now sends only what the plugin sends.
+- **Exporting showed a success with no file.** The console names it: *“Download
+  is disallowed. The frame is sandboxed, but the flag `allow-downloads` is not
+  set.”* No plugin can download in that sandbox, so the export now **opens the
+  file it built** — in a text area with a *Copy to clipboard* button, and a
+  *Try the download anyway* for a host that allows it. Nothing is lost either
+  way.
+- A little room under the tab strip, since the bar’s own height belongs to the
+  kit and cannot be set from here.
+
+### Added
+
+- **The probe now reports the host’s API surface** — the namespaces and their
+  method names:
+
+  ```
+  host API surface — api: … | ui: … | email: … | tasks: … | calendar: …
+  ```
+
+  One paste of that line says exactly what a plugin can call, which is how a
+  method this plugin does not know about (opening a message, for one) becomes
+  findable instead of guessed at.
+
 ## [1.23.1] — 2026-10-25
 
 ### Fixed
