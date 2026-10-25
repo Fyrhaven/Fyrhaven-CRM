@@ -7,6 +7,37 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.23.0] — 2026-10-23
+
+### Added
+
+- **Retention: who has gone untouched, and what to do about it (#21).** A
+  *Retention* section on the Health dashboard with three buckets — a year, two
+  years, three years — each one a filter, and the stale contacts listed oldest
+  first with their age.
+- **The signal is named in the UI.** The section says it works from the
+  **server's own last-updated date**, and that **a contact the server never
+  stamped is not counted**. Reporting a contact as untouched on no evidence
+  would be worse than staying quiet.
+- **The export is not optional.** *Export and delete* writes the file **as part
+  of** the delete, so a retention clean-up can never be the only copy of what it
+  removed — which is what the issue asks for ("never auto-delete; require
+  explicit confirmation and an export"). A plain *Export* button sits beside it
+  for a copy without deleting, and the delete also leaves an undo record, so it
+  is recoverable twice over.
+
+### Fixed
+
+- The retention buckets started at a year while the list below them filtered at
+  two, so the two could disagree about who was stale. The list now uses the
+  lowest bucket, and a test pins it.
+
+### Notes
+
+**CSV is the archive format here**, because it carries every field including the
+ones vCard has no place for — the issue's "bulk archive or export preserves all
+fields" is asserted by the round-trip fixture added in v1.22.0.
+
 ## [1.22.0] — 2026-10-23
 
 ### Added
