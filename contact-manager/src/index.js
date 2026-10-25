@@ -136,7 +136,10 @@ async function publish(pluginApi) {
   }
   const t = (key) => pluginApi.i18n.t(key);
   await pluginApi.ui.setPages([
-    { id: 'contact-manager', title: t('page.title'), icon: 'users' },
+    // not 'users': that is the webmail's own contacts icon, and this is a page
+    // of its own. The name is from the kit's set; if it does not render, any
+    // other name from that set works here.
+    { id: 'contact-manager', title: t('page.title'), icon: 'book-user' },
   ]);
   const undoOn = undoWindowMinutes(pluginApi.plugin.settings) > 0;
   const pending = undoOn ? await readUndo(pluginApi) : [];

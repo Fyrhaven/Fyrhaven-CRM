@@ -51,7 +51,8 @@ describe('built plugin', () => {
     await plugin.activate(api);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.calls('ui.setPages')[0].args[0])
-      .toEqual([{ id: 'contact-manager', title: 'Contact Manager', icon: 'users' }]);
+      // not 'users': that is the webmail's own contacts icon
+      .toEqual([{ id: 'contact-manager', title: 'Contact Manager', icon: 'book-user' }]);
     expect(api.calls('ui.setActions').map((c) => c.args[0]))
       .toEqual(['command-palette', 'contact-list-actions']);
     expect(api.calls('ui.setActions')[0].args[1])

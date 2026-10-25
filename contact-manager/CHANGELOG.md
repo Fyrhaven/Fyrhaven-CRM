@@ -7,6 +7,21 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.24.2] — 2026-10-25
+
+### Changed
+
+- **A failure the user needs to see now stops them.** A toast is right for "that
+  did not work, carry on", but some failures are not: a scan that could not read
+  the address books, an undo that could not restore, a download the host refused.
+  Those go through `reportError`, which uses the host’s own `ui.alert` (called
+  the way `ui.confirm` is, with an object) and falls back to a toast when the
+  host has no usable alert.
+- **The plugin’s page has its own icon.** It used `users`, which is the webmail’s
+  own contacts icon, so the rail showed two identical ones. It is `book-user`
+  now — a name taken from the kit’s set, and any other name from that set works
+  here if this one does not render.
+
 ## [1.24.1] — 2026-10-25
 
 ### Fixed
