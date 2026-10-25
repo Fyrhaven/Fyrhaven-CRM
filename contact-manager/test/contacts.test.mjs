@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  bookIds, bookNamesById, contactName, emailEntries, isMergeable,
+  addressLabel, addressList, bookIds, bookNamesById, contactName, emailEntries, isMergeable,
   matchOptions, phoneEntries, primaryEmail, primaryPhone,
 } from '../src/lib/contacts.js';
 import { makeCard } from './fixtures.mjs';
@@ -76,5 +76,35 @@ describe('matchOptions', () => {
   it('treats missing settings as on', () => {
     expect(matchOptions(undefined)).toEqual({ matchByEmail: true, matchByPhone: true, matchByName: true });
     expect(matchOptions({ matchByName: false })).toEqual({ matchByEmail: true, matchByPhone: true, matchByName: false });
+  });
+});
+
+describe('address fields', () => {
+  it('reads the array of { name, email } the webmail actually sends', () => {
+    const from = [{ name: 'Ada Lovelace', email: 'ada@example.org' }];
+
+    expect(addressList(from)).toEqual(['ada@example.org']);
+    expect(addressLabel(from)).toBe('Ada Lovelace <ada@example.org>');
+  });
+
+  it('reads every other shape too', () => {
+    expect(addressList('a@b.de')).toEqual(['a@b.de']);
+    expect(addressList({ email: 'a@b.de' })).toEqual(['a@b.de']);
+    expect(addressList({ address: 'a@b.de' })).toEqual(['a@b.de']);
+    expect(addressList([{ email: 'a@b.de' }, { address: 'c@d.de' }])).toEqual(['a@b.de', 'c@d.de']);
+    expect(addressList(null)).toEqual([]);
+  });
+
+  it('never returns an object, whatever it is handed', () => {
+    // rendering the array itself is what crashed the profile (React error #31)
+    for (const value of [null, undefined, {}, [], [{}, null], { name: 'only a name' }]) {
+      expect(typeof addressLabel(value)).toBe('string');
+      for (const entry of addressList(value)) expect(typeof entry).toBe('string');
+    }
+  });
+
+  it('falls back to the name when there is no address', () => {
+    expect(addressLabel({ name: 'Ada' })).toBe('Ada');
+    expect(addressLabel([])).toBe('');
   });
 });

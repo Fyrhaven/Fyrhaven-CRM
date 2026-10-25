@@ -92,6 +92,33 @@ export function rawEmailAddresses(card) {
     .filter((value) => typeof value === 'string' && value.trim());
 }
 
+/**
+ * The addresses of a mail or calendar address field.
+ *
+ * The webmail is JMAP-shaped, so `from`, `to` and `participants` arrive as an
+ * **array** of `{ name, email }` — not as one object. Rendering that array
+ * directly is what crashed the profile with React error #31, and matching
+ * against `from.email` silently found nothing. This reads the array, a single
+ * entry, a plain `{ address }` and a bare string, so neither can happen again.
+ */
+export function addressList(value) {
+  return (Array.isArray(value) ? value : [value])
+    .map((entry) => (typeof entry === 'string' ? entry : (text(entry?.email) || text(entry?.address))))
+    .filter(Boolean);
+}
+
+/** `Ada Lovelace <ada@example.org>` for the first address of a field, or ''. */
+export function addressLabel(value) {
+  const first = (Array.isArray(value) ? value : [value])
+    .find((entry) => entry && (typeof entry === 'string' || entry.email || entry.address || entry.name));
+  if (!first) return '';
+  if (typeof first === 'string') return first;
+  const address = text(first.email) || text(first.address);
+  const name = text(first.name);
+  if (name && address) return `${name} <${address}>`;
+  return address || name;
+}
+
 /** The preferred email address of a contact, or null. */
 export function primaryEmail(card) {
   const entries = emailEntries(card).sort((a, b) => (a.pref ?? 101) - (b.pref ?? 101));

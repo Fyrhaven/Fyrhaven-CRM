@@ -26,7 +26,7 @@ export function makeProjectsPage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useRef, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
 
-  return function ProjectsPage() {
+  return function ProjectsPage({ revision } = {}) {
     const [projects, setProjects] = useState([]);
     const [cards, setCards] = useState([]);
     const [openTasks, setOpenTasks] = useState([]);
@@ -52,6 +52,14 @@ export function makeProjectsPage(React, api) {
     }, []);
 
     useEffect(() => { void load(); }, [load]);
+    // Reload when another page reports a change. A ref remembers the revision
+    // this instance started at, so mounting does not read everything twice.
+    const seenRevision = useRef(revision ?? 0);
+    useEffect(() => {
+      if ((revision ?? 0) === seenRevision.current) return;
+      seenRevision.current = revision ?? 0;
+      void load();
+    }, [revision]);
 
     // Milestone state comes from the open-task list; a missing tasks:read must
     // leave the page readable, so the call is optional.

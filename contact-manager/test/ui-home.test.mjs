@@ -120,3 +120,38 @@ describe('the main page', () => {
     expect(screen.getByRole('button', { name: 'Undo the last merge' })).toBeTruthy();
   });
 });
+
+describe('telling the other pages that something changed', () => {
+  it('signals a change after a task, instead of only reloading itself', async () => {
+    let bumped = 0;
+    const api = homeApi();
+    const Page = makeHomePage(React, api);
+    await act(async () => {
+      render(React.createElement(Page, { onNavigate: () => {}, revision: 0, onDataChanged: () => { bumped += 1; } }));
+    });
+    await waitFor(() => expect(screen.getByText('Sections')).toBeTruthy());
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'New contact' })); });
+    await waitFor(() => expect(api.calls('ui.openDialog')).toHaveLength(1));
+
+    // the Contacts tab has no idea a contact was just created unless it is told
+    expect(bumped).toBe(1);
+  });
+
+  it('reloads its own numbers when the revision moves', async () => {
+    const api = homeApi();
+    const Page = makeHomePage(React, api);
+    const draw = async (revision) => {
+      await act(async () => {
+        render(React.createElement(Page, { onNavigate: () => {}, revision, onDataChanged: () => {} }));
+      });
+      await waitFor(() => expect(screen.getByText('Sections')).toBeTruthy());
+    };
+    await draw(0);
+    expect(api.calls('contacts.list')).toHaveLength(1);
+
+    cleanup();
+    await draw(1);
+    expect(api.calls('contacts.list')).toHaveLength(2);
+  });
+});

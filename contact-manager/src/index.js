@@ -32,7 +32,7 @@ import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
 import { makeImportDialog } from './lib/import-dialog.js';
 import { makeExportDialog } from './lib/export-dialog.js';
-import { detectCapabilities, describeCapabilities, unavailableNamespaces } from './lib/capabilities.js';
+import { detectCapabilities, describeCapabilities, probeOptionalApis, unavailableNamespaces } from './lib/capabilities.js';
 import { findDuplicates, importContacts, newCompany, newContact, newProject, undoMerge } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
@@ -162,6 +162,11 @@ export async function activate(pluginApi) {
       pluginApi.log.warn(
         `optional APIs unavailable (${unavailable.join(', ')}) — host exposes ${describeCapabilities(capabilities)}`,
       );
+    }
+    // and whether they actually answer: a present method can still be refused
+    const failures = await probeOptionalApis(pluginApi);
+    if (failures.length) {
+      pluginApi.log.warn(`optional API calls failed — ${failures.join(' | ')}`);
     }
   } catch (err) {
     pluginApi.log.warn(`capability check failed: ${err.message}`);
