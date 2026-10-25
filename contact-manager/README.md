@@ -1061,11 +1061,20 @@ New ideas become a new issue with the `roadmap` label and a milestone.
 
 ## 12. License
 
-No separate `LICENSE` file is committed in this plugin folder yet. Per the
-[repository README](../README.md#license), the code here is released under the
-**same license as Bulwark Mail** unless stated otherwise; that license is not
-restated in this repository, so confirm it — together with any plugin-store
-terms — before distributing or selling the plugin. `manifest.json` names the
-`author` (`Alexander`); add a `LICENSE` file, and a `license` field beside it,
-once the terms are settled.
+No separate `LICENSE` file is committed in this plugin folder yet, and the terms
+are the maintainer's to set. The repository README's default — *"the same license
+as Bulwark Mail"* — is **not to be relied on**: the maintainer has said the
+licence will be set later and the current position disregarded.
+
+Two consequences for anyone working here:
+
+- **Do not treat the current wording as terms.** It describes an unresolved
+  position, not a grant.
+- **The premium tier is designed on the basis that the plugin will be licensed
+  separately from whatever it talks to.** See issue #68. Nothing that exists
+  today is to move behind a paywall, and no server-side work starts before the
+  terms exist.
+
+`manifest.json` names the `author` (`Alexander`); add a `LICENSE` file, and a
+`license` field beside it, once the terms are settled.
 
