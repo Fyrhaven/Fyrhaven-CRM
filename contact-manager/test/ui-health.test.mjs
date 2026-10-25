@@ -198,3 +198,97 @@ describe('retention', () => {
     expect(screen.getByText('Nothing has gone untouched for a year.')).toBeTruthy();
   });
 });
+
+describe('acting on a selection', () => {
+  const TIDY = makeCard({ id: 'tidy', name: 'Grace Hopper', emails: ['  Grace@Example.ORG '], phones: ['+491761234567'] });
+  const BARE = { id: 'bare', name: 'Nobody', addressBookIds: { b1: true } };
+
+  const pickApi = (handlers = {}) => healthApi({
+    'contacts.list': async () => [CLEAN, TIDY, BARE],
+    'contacts.update': async () => {},
+    'contacts.remove': async () => {},
+    'ui.confirm': async () => true,
+    ...handlers,
+  });
+
+  it('offers nothing until something is selected', async () => {
+    await renderPage(pickApi());
+
+    expect(screen.queryByRole('button', { name: 'Edit selected' })).toBeNull();
+    expect(screen.queryByText('1 selected')).toBeNull();
+  });
+
+  it('selects rows and shows the actions', async () => {
+    await renderPage(pickApi());
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    // the ones only the bar has
+    for (const name of ['Edit selected', 'Delete selected', 'Clear selection']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+    }
+    // `Clean up` is also the header's, for every contact at once; `Review` is on
+    // each duplicate row as well, so both are counted rather than looked up
+    for (const name of ['Clean up', 'Review']) {
+      expect(screen.getAllByRole('button', { name }).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('edits the whole selection through the bulk dialog', async () => {
+    const api = pickApi({
+      'ui.openDialog': async () => ({ tags: { add: ['vip'], remove: [] }, books: { add: [], remove: [] } }),
+    });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Nobody' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Edit selected' })); });
+
+    const editor = api.calls('ui.openDialog')[0].args[0].extraProps.bulkEditor;
+    expect(editor.cards.map((card) => card.id).sort()).toEqual(['bare', 'tidy']);
+    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(2));
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Updated 2 contact(s).');
+  });
+
+  it('cleans up the selection through the cleanup dialog', async () => {
+    const api = pickApi({
+      'ui.openDialog': async () => ({
+        plan: [{ id: 'tidy', patch: { emails: { e0: { address: 'grace@example.org' } } }, before: { emails: { e0: { address: '  Grace@Example.ORG ' } } } }],
+        region: '',
+      }),
+    });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    // the bar's button, not the header's
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Clean up' })[0]); });
+
+    const setup = api.calls('ui.openDialog')[0].args[0].extraProps.normalise;
+    expect(setup.cards.map((card) => card.id)).toEqual(['tidy']);
+    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
+  });
+
+  it('deletes the selection behind a confirmation, and keeps it undoable', async () => {
+    const api = pickApi();
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Nobody' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete selected' })); });
+
+    await waitFor(() => expect(api.calls('contacts.remove')).toHaveLength(1));
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('bare');
+    expect(api.calls('ui.confirm')[0].args[0].danger).toBe(true);
+    expect(api.storageSnapshot().undoBatches.at(-1).entries[0].removed).toHaveLength(1);
+  });
+
+  it('deletes nothing when the confirmation is declined', async () => {
+    const api = pickApi({ 'ui.confirm': async () => false });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Nobody' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete selected' })); });
+
+    expect(api.calls('contacts.remove')).toHaveLength(0);
+  });
+});

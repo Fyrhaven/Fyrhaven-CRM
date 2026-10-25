@@ -15,9 +15,9 @@ import { openEditor, toastEditorResult } from './open-editor.js';
 import { toastMergeResult } from './labels.js';
 import { applyNormalisation, readRegion } from './normalise.js';
 import { STALE_BANDS, healthBand, healthSummary, staleContacts, staleCounts, withIssue } from './health.js';
+import { applyBulkEdit, deleteContacts } from './bulk.js';
 import { contactsToFile } from './export.js';
 import { downloadBlob } from './download.js';
-import { deleteContacts } from './bulk.js';
 import { ACTION_BAR } from './layout.js';
 
 export function makeHealthPage(React, api) {
@@ -32,9 +32,11 @@ export function makeHealthPage(React, api) {
     const [status, setStatus] = useState('loading');
     const [filter, setFilter] = useState('');
     const [band, setBand] = useState('');
+    const [picked, setPicked] = useState(() => new Set());
 
     const load = useCallback(async () => {
       setStatus('loading');
+      setPicked(new Set());
       try {
         const [list, books, storedRegion] = await Promise.all([loadCards(api), loadBooks(api), readRegion(api)]);
         setCards(list);
@@ -157,6 +159,50 @@ export function makeHealthPage(React, api) {
       void load();
     };
 
+    const pickedCards = cards.filter((card) => picked.has(card.id));
+
+    const togglePicked = (id, on) => setPicked((current) => {
+      const next = new Set(current);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+    // Tags and address books, through the same dialog the Contacts page uses.
+    const editPicked = async () => {
+      if (!pickedCards.length) return;
+      const result = await api.ui.openDialog({
+        title: t('bulk.title', { count: pickedCards.length }),
+        slot: 'plugin-dialog',
+        extraProps: { bulkEditor: { cards: pickedCards, books: bookList } },
+      });
+      if (!result) return;
+      const outcome = await applyBulkEdit(api, pickedCards, result);
+      if (outcome.failed) api.toast.warning(t('bulk.partial', { updated: outcome.updated, failed: outcome.failed }));
+      else if (outcome.updated) api.toast.success(t('bulk.done', { updated: outcome.updated }));
+      else api.toast.info(t('bulk.nothing'));
+      void load();
+    };
+
+    // Delete is the one action here that removes data, so it is confirmed and
+    // leaves an undo record like every other bulk delete.
+    const deletePicked = async () => {
+      if (!pickedCards.length) return;
+      const ok = await api.ui.confirm({
+        title: t('contacts.deleteTitle', { count: pickedCards.length }),
+        message: t('contacts.deleteBody', {
+          names: pickedCards.slice(0, 3).map((card) => contactName(card) || card.id).join(', '),
+        }),
+        confirmLabel: t('contacts.deleteConfirm'),
+        danger: true,
+      });
+      if (!ok) return;
+      const result = await deleteContacts(api, pickedCards);
+      if (result.failed) api.toast.warning(t('contacts.deletePartial', { deleted: result.deleted, failed: result.failed }));
+      else api.toast.success(t('contacts.deleted', { count: result.deleted }));
+      void load();
+    };
+
     /** The cards a fix of one kind can be applied to. */
     const cardsFor = (fix) => summary.contacts
       .filter((entry) => entry.issues.some((issue) => issue.fix === fix))
@@ -173,6 +219,9 @@ export function makeHealthPage(React, api) {
         title: entry.name,
         subtitle: t('health.scoreLine', { score: entry.score, band: t(`health.band.${entry.band}`) }),
         meta: entry.issues.map((issue) => t(`health.rule.${issue.key}`)),
+        checked: picked.has(entry.id),
+        onCheck: (on) => togglePicked(entry.id, on),
+        checkLabel: t('contacts.selectRow', { name: entry.name }),
         actions: h(Row, { gap: 1, wrap: true },
           fixes.has('cleanup')
             ? h(Button, { size: 'sm', variant: 'secondary', onClick: () => void cleanUp([card]) }, t('health.fix.cleanup'))
@@ -254,6 +303,17 @@ export function makeHealthPage(React, api) {
                     ? h(Text, { tone: 'muted' }, t('import.more', { count: staleShown.length - 20 }))
                     : null)
               : h(Text, { tone: 'muted' }, t('retention.none')),
+            picked.size
+              ? h('div', { 'data-pane': 'health-actions', style: ACTION_BAR },
+                  h(Text, { tone: 'muted' }, t('contacts.selected', { count: picked.size })),
+                  h(Button, { size: 'sm', icon: 'edit', onClick: () => void editPicked() }, t('contacts.editSelected')),
+                  h(Button, {
+                    size: 'sm', variant: 'secondary', icon: 'wand', onClick: () => void cleanUp(pickedCards),
+                  }, t('cleanup.action')),
+                  h(Button, { size: 'sm', variant: 'secondary', onClick: () => void review(pickedCards) }, t('health.fix.merge')),
+                  h(Button, { size: 'sm', variant: 'secondary', onClick: () => void deletePicked() }, t('contacts.deleteSelected')),
+                  h(Button, { size: 'sm', variant: 'secondary', onClick: () => setPicked(new Set()) }, t('contacts.clearSelection')))
+              : null,
             h(Section, { title: t('health.contacts') },
               rows.length
                 ? h(List, { label: t('health.contacts') }, ...rows.map(contactRow))
