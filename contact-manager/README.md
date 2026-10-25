@@ -165,6 +165,7 @@ contact-manager/
 │   ├── import-templates.test.mjs # remembered mappings
 │   ├── ui-import.test.mjs  # the import wizard
 │   ├── export.test.mjs     # the CSV writer and both round trips
+│   ├── retention.test.mjs  # the age thresholds and the buckets
 │   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
@@ -674,6 +675,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/import-templates.test.mjs` | Remembered mappings: found by header row, replaced, capped, repaired |
 | `test/ui-import.test.mjs` | The wizard: guessing, previewing, holding back a duplicate, remembering a mapping, vCard, and cancel |
 | `test/export.test.mjs` | The CSV writer, the column widths, and the **round trip** for both formats: export, re-import, compare |
+| `test/retention.test.mjs` | The age thresholds at every boundary, the buckets, and that no date means no claim |
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
@@ -935,6 +937,15 @@ Import (#19, import half)
   applyImport(api, drafts) -> { created, failed }, one create per draft
   remembered mappings in 'importMappings', keyed by the header row
   NOT imported: photos, URLs, custom fields (see the CHANGELOG)
+
+Retention (#21)
+  STALE_BANDS = a year / two years / three years; STALE_MONTHS (24) is the
+    health rule's own threshold, not the retention list's
+  staleness(card, now) -> { months, band } | null    null when no date is known
+  staleContacts(cards, { months }) -> oldest first; staleCounts(cards)
+  the page lists from the LOWEST band, so buckets and rows cannot disagree
+  'Export and delete' writes the file as part of the delete, then deletes
+    through bulk.js, so it is undoable as well as archived
 
 Export (#19, export half)
   toCsv(rows) / escapeCell(cell)   RFC 4180 quoting, CRLF
