@@ -17,6 +17,7 @@ import {
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { saveFile } from './download.js';
+import { reportError } from './report.js';
 import { optionalCall } from './optional.js';
 import { ACTION_BAR, CONTENT_PANE, ROW_WITH_AVATAR, SAVED_ITEM, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
 import { avatarFor } from './avatar.js';
@@ -176,7 +177,7 @@ export function makeProfilePage(React, api) {
         const data = await api.email.getAttachment(file.emailId, file.blobId);
         await saveFile(api, data, file.name);
       } catch (err) {
-        api.toast.error(t('profile.downloadFailed', { name: file.name, reason: String(err?.message ?? err) }));
+        await reportError(api, t('profile.downloadFailed', { name: file.name, reason: String(err?.message ?? err) }));
       }
     };
 
