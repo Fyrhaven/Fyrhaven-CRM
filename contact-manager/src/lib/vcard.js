@@ -73,6 +73,9 @@ export function cardToVCard(card) {
     ...phones.flatMap((entry) => line('TEL', entry.number, entry.pref ? ';TYPE=PREF' : ';TYPE=OTHER')),
     ...(address ? [`ADR;TYPE=OTHER:${structured(address)}`] : []),
     ...linkUris(card).flatMap((uri) => line('URL', uri)),
+    // the tags, minus the company marker: it is structure, not a label, and
+    // re-importing it would turn a person into a company
+    ...line('CATEGORIES', Object.keys(card?.keywords ?? {}).filter((tag) => tag !== 'company').join(',')),
     ...line('NOTE', notesLine(card)),
     'END:VCARD',
   ];
