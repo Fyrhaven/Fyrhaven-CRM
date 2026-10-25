@@ -7,6 +7,41 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.23.1] — 2026-10-25
+
+### Fixed
+
+- **The profile crashed on a contact whose recent messages were listed.**
+  `Objects are not valid as a React child (found: object with keys {name,
+  email})`. The webmail is JMAP-shaped, so a message’s `from` and `to` arrive as
+  an **array** of `{ name, email }` — not as one object — and the page
+  rendered `from` itself when `from.email` was undefined. The same assumption
+  meant the timeline **never matched a message by its sender**, so “Recent
+  messages” quietly showed nothing. Both now go through `addressList` /
+  `addressLabel`, which read the array, a single entry, `{ address }` and a bare
+  string.
+- **Exporting downloaded nothing**, while reporting success. The object URL was
+  revoked on the same turn as the click, which cancels the download before the
+  browser has read the blob. It is released on the next turn now. This affected
+  every download the plugin offers: contact export, project export and the
+  attachments on a contact profile.
+- **The contact list did not refresh after an import.** Each sub-tab mounts once
+  and stays mounted, so the *Contacts* tab kept the address book it read when it
+  was first opened. The app page now owns a revision counter: a task that writes
+  something bumps it and every sub-page reloads.
+- The side pane is taller (`72vh`), so the list no longer sits in a small
+  scrollbar inside a much taller page.
+
+### Added
+
+- **The capability probe now tries a call, not only a look.** A namespace can be
+  present with its method attached and the call still refused — which is what a
+  missing permission looks like from inside a plugin, and exactly what this
+  instance hit: the profile said *“Unavailable: Meetings”* while the existence
+  probe found nothing missing. `activate()` now makes one cheap read per
+  optional namespace and logs `optional API calls failed — calendar: …` with
+  the reason.
+
 ## [1.23.0] — 2026-10-23
 
 ### Added
