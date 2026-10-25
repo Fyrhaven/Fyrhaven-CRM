@@ -7,6 +7,29 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.26.0] — 2026-10-25
+
+### Added
+
+- **Act on several contacts at once from the Health tab.** Every row has a
+  checkbox, and a selection reveals the same actions the Contacts page offers:
+
+  | Action | What it does |
+  |---|---|
+  | *Edit selected* | tags and address books, through the bulk dialog |
+  | *Clean up* | the normalisation dialog, for the ones that need it |
+  | *Review* | the merge dialog, for the duplicates in the selection |
+  | *Delete selected* | behind a danger confirm, and undoable |
+
+  It reuses the machinery the Contacts page already had — `applyBulkEdit`,
+  `applyNormalisation`, `deleteContacts` — so there is no second way to change
+  a contact, and no second set of rules about what a map patch contains.
+
+### Notes
+
+A selection is dropped whenever the page reloads, so a fix cannot be applied to
+contacts that have already changed underneath it.
+
 ## [1.25.0] — 2026-10-25
 
 ### Added
