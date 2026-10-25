@@ -546,3 +546,25 @@ describe('the webmail message shape', () => {
     await waitFor(() => expect(screen.getByText('The engine notes')).toBeTruthy());
   });
 });
+
+describe('an export the sandbox will not download', () => {
+  it('offers the file itself, instead of a success with nothing behind it', async () => {
+    const calls = [];
+    const api = profileApi({
+      'ui.openDialog': async (options) => {
+        calls.push(options);
+        // first the choice, then the result view
+        return calls.length === 1 ? { scope: 'shown', format: 'vcard' } : null;
+      },
+    });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
+
+    await waitFor(() => expect(calls).toHaveLength(2));
+    const result = calls[1].extraProps.exportResult;
+    expect(result.name).toBe('contacts.vcf');
+    // the bytes are handed over, so nothing is lost when the download is refused
+    expect(result.body).toContain('BEGIN:VCARD');
+  });
+});

@@ -33,12 +33,15 @@ export function makeAppShell(React, api, { home, duplicates, contacts, projects,
     }, [active]);
 
     return h('div', null,
-      h(Tabs, {
-        value: active,
-        label: t('page.title'),
-        tabs: tabs.map(({ id, label }) => ({ id, label })),
-        onChange: setActive,
-      }),
+      // A little room under the strip: the bar's own height belongs to the kit,
+      // but the spacing around it is ours to set.
+      h('div', { style: { marginBottom: '0.75rem' } },
+        h(Tabs, {
+          value: active,
+          label: t('page.title'),
+          tabs: tabs.map(({ id, label }) => ({ id, label })),
+          onChange: setActive,
+        })),
       ...tabs
         .filter((tab) => visited.includes(tab.id))
         .map((tab) => h('div', {
