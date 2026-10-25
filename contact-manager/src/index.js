@@ -35,7 +35,9 @@ import { makeExportDialog } from './lib/export-dialog.js';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from './lib/capabilities.js';
-import { findDuplicates, importContacts, newCompany, newContact, newProject, undoMerge } from './lib/actions.js';
+import {
+  checkServer, findDuplicates, importContacts, newCompany, newContact, newProject, undoMerge,
+} from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
 
@@ -110,6 +112,7 @@ export const hooks = {
     if (actionId === 'new-company') return newCompany(api);
     if (actionId === 'new-project') return newProject(api);
     if (actionId === 'import-contacts') return importContacts(api);
+    if (actionId === 'check-server') return checkServer(api);
     return undefined;
   },
 
@@ -149,6 +152,7 @@ async function publish(pluginApi) {
     { id: 'new-company', label: t('action.newCompany'), icon: 'building' },
     { id: 'new-project', label: t('action.newProject'), icon: 'folder' },
     { id: 'import-contacts', label: t('action.importContacts'), icon: 'upload' },
+    { id: 'check-server', label: t('action.checkServer'), icon: 'cloud' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
   await pluginApi.ui.setActions('contact-list-actions', [
