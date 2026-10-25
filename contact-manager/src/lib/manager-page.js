@@ -24,6 +24,7 @@ export function makeManagerPage(React, api) {
     const [hiddenGroups, setHiddenGroups] = useState([]);
     const [stats, setStats] = useState(null);
     const [bookNames, setBookNames] = useState(() => new Map());
+    const [bookList, setBookList] = useState([]);
     const [showHidden, setShowHidden] = useState(false);
     const [selected, setSelected] = useState(() => new Set());
     const [undo, setUndo] = useState(null); // the newest undo record, if any
@@ -46,6 +47,7 @@ export function makeManagerPage(React, api) {
         const when = new Date().toISOString();
         setUndo(batches.at(-1) ?? null);
         setBookNames(bookNamesById(books));
+        setBookList(books);
         setGroups(found.filter((group) => !hiddenSet.has(group.signature)));
         setHiddenGroups(found.filter((group) => hiddenSet.has(group.signature)));
         setStats({ when, contacts: cards.length, books: books.length });
@@ -137,6 +139,15 @@ export function makeManagerPage(React, api) {
       api.toast.info(t('undo.forgotten'));
     };
 
+    const openPolicies = async () => {
+      const result = await api.ui.openDialog({
+        title: t('policies.title'),
+        slot: 'plugin-dialog',
+        extraProps: { policiesDialog: true, books: bookList },
+      });
+      if (result?.saved) void scan();
+    };
+
     const hide = async (group) => {
       const next = await readDismissed(api);
       if (!next.includes(group.signature)) next.push(group.signature);
@@ -215,6 +226,8 @@ export function makeManagerPage(React, api) {
         actions: h(Row, { gap: 2 },
           h(Button, { icon: 'user-plus', variant: 'secondary', onClick: () => void newContact() },
             t('action.newContact')),
+          h(Button, { icon: 'shield', variant: 'secondary', onClick: () => void openPolicies() },
+            t('action.policies')),
           h(Button, { icon: 'refresh', busy: status === 'scanning', onClick: () => setRun((n) => n + 1) },
             status === 'ready' ? t('action.rescan') : t('action.scan')),
           status === 'ready' && (showHidden || hiddenGroups.length)
