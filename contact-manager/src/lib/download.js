@@ -17,3 +17,27 @@ export function downloadBlob(data, name) {
   // is why an export could report success and produce no file.
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
+
+/**
+ * Saves bytes, preferring the host's own download.
+ *
+ * The plugin frame is sandboxed without `allow-downloads`, so an anchor click is
+ * refused outright (the console says so). `api.ui.downloadFile` is the host's
+ * own mechanism and is not subject to that flag.
+ *
+ * @returns {Promise<boolean>} whether the host took the file. When it did not,
+ *   the caller shows the content instead of claiming a download happened.
+ */
+export async function saveFile(api, data, name, type = 'application/octet-stream') {
+  const download = api?.ui?.downloadFile;
+  if (typeof download === 'function') {
+    try {
+      await download(name, data, type);
+      return true;
+    } catch {
+      // the host refused, or its argument order is not the one guessed here
+    }
+  }
+  downloadBlob(data instanceof Blob ? data : new Blob([data], { type }), name);
+  return false;
+}

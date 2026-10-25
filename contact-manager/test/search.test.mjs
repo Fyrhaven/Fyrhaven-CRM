@@ -223,3 +223,19 @@ describe('negation', () => {
     expect(ids(searchCards(CARDS, '-tag:vip').results)).toEqual(['co']);
   });
 });
+
+describe('not:', () => {
+  it('excludes, the same as the minus', () => {
+    expect(parseQuery('not:tag:vip').notFilters).toEqual([{ field: 'tag', value: 'vip' }]);
+    expect(ids(searchCards(CARDS, 'not:tag:vip').results)).toEqual(['co']);
+  });
+
+  it('works on a free word, and in either case', () => {
+    expect(parseQuery('NOT:ada').notTerms).toEqual(['ada']);
+    expect(ids(searchCards(CARDS, 'is:person NOT:grace').results)).toEqual(['a']);
+  });
+
+  it('is not a field of its own', () => {
+    expect(parseQuery('not:tag:vip').errors).toEqual([]);
+  });
+});

@@ -222,8 +222,8 @@ describe('contacts page', () => {
 
       await waitFor(() => expect(api.calls('email.getAttachment')).toHaveLength(1));
       expect(api.calls('email.getAttachment')[0].args).toEqual(['m1', 'b-engine']);
-      expect(createObjectURL).toHaveBeenCalledWith(blob);
-      expect(click).toHaveBeenCalled();
+      // the host saves it: the plugin frame has no `allow-downloads`
+      expect(api.calls('ui.downloadFile')[0].args).toEqual(['engine.pdf', blob, 'application/octet-stream']);
     } finally {
       click.mockRestore();
     }
@@ -396,7 +396,10 @@ describe('contacts page', () => {
   });
 
   it('keeps the selection when the bulk dialog is cancelled', async () => {
-    const api = profileApi({ 'ui.openDialog': async () => null });
+      const api = profileApi({
+        'ui.openDialog': async () => null,
+        'ui.downloadFile': async () => { throw new Error('refused'); },
+      });
     await renderPage(api);
 
     await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
@@ -421,10 +424,9 @@ describe('contacts page', () => {
       // the dialog is told what it could export, and the file is built here
       expect(api.calls('ui.openDialog')[0].args[0].extraProps.exportSelection)
         .toEqual({ selected: 1, shown: 2 });
-      expect(createObjectURL).toHaveBeenCalledTimes(1);
-      expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
+      expect(api.calls('ui.downloadFile')).toHaveLength(1);
+      expect(typeof api.calls('ui.downloadFile')[0].args[1]).toBe('string');
       expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported 1 contact(s) as vCard.');
-      expect(click).toHaveBeenCalled();
     } finally {
       click.mockRestore();
     }
@@ -442,7 +444,7 @@ describe('contacts page', () => {
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
 
       // nothing is selected, so the whole shown list goes
-      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(api.calls('ui.downloadFile')).toHaveLength(1);
       expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported 2 contact(s) as vCard.');
     } finally {
       click.mockRestore();
@@ -451,7 +453,10 @@ describe('contacts page', () => {
 
   it('writes nothing when the export is cancelled', async () => {
     createObjectURL.mockClear();
-    const api = profileApi({ 'ui.openDialog': async () => null });
+      const api = profileApi({
+        'ui.openDialog': async () => null,
+        'ui.downloadFile': async () => { throw new Error('refused'); },
+      });
     await renderPage(api);
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
@@ -556,6 +561,8 @@ describe('an export the sandbox will not download', () => {
         // first the choice, then the result view
         return calls.length === 1 ? { scope: 'shown', format: 'vcard' } : null;
       },
+      // the host refuses, which is when the file has to be shown instead
+      'ui.downloadFile': async () => { throw new Error('refused'); },
     });
     await renderPage(api);
 
