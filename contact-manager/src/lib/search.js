@@ -12,7 +12,7 @@
 //   tag:vip                a keyword, matched whole
 //   book:Work              an address-book name or id
 //   has:phone  has:email   presence — also has:note, has:tag
-//   -tag:vip  -ada         a leading minus excludes
+//   -tag:vip  not:tag:vip  excludes instead of requiring
 //   is:company is:person   what kind of contact it is
 //
 // A leading `-` excludes instead of requiring: `-tag:vip`, `-has:phone`,
@@ -63,9 +63,14 @@ export function parseQuery(input) {
   const errors = [];
 
   for (const raw of String(input ?? '').trim().split(/\s+/).filter(Boolean)) {
-    // a leading `-` excludes; a lone `-` is just a character
-    const not = raw.length > 1 && raw.startsWith('-');
-    const token = not ? raw.slice(1) : raw;
+    // `not:` and a leading `-` both exclude. `not:` is what a user asks for by
+    // name; `-` is the shorthand. A lone `-` is still just a character.
+    const lowerRaw = raw.toLowerCase();
+    const negated = lowerRaw.startsWith('not:')
+      ? { not: true, token: raw.slice(4) }
+      : (raw.length > 1 && raw.startsWith('-') ? { not: true, token: raw.slice(1) } : { not: false, token: raw });
+    const not = negated.not;
+    const token = negated.token;
     const pushTerm = (value) => (not ? notTerms : terms).push(value);
     const pushFilter = (value) => (not ? notFilters : filters).push(value);
 
