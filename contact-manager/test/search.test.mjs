@@ -177,6 +177,49 @@ describe('parseQuery', () => {
   });
 
   it('reads an empty query as no terms and no filters', () => {
-    expect(parseQuery('   ')).toEqual({ terms: [], filters: [], errors: [] });
+    expect(parseQuery('   ')).toEqual({ terms: [], notTerms: [], filters: [], notFilters: [], errors: [] });
+  });
+});
+
+describe('negation', () => {
+  it('parses a leading minus into the negative lists', () => {
+    const parsed = parseQuery('-tag:vip -ada -has:phone');
+
+    expect(parsed.notFilters).toEqual([{ field: 'tag', value: 'vip' }, { field: 'has', value: 'phone' }]);
+    expect(parsed.notTerms).toEqual(['ada']);
+    expect(parsed.filters).toEqual([]);
+    expect(parsed.terms).toEqual([]);
+  });
+
+  it('excludes a tag instead of requiring it', () => {
+    expect(ids(searchCards(CARDS, 'tag:vip').results)).toEqual(['a', 'g']);
+    expect(ids(searchCards(CARDS, '-tag:vip').results)).toEqual(['co']);
+  });
+
+  it('excludes on presence and on text', () => {
+    expect(ids(searchCards(CARDS, '-has:phone').results)).toEqual(['co']);
+    expect(ids(searchCards(CARDS, 'is:person -grace').results)).toEqual(['a']);
+  });
+
+  it('combines with a positive filter', () => {
+    expect(ids(searchCards(CARDS, 'is:person -has:note').results)).toEqual(['g']);
+  });
+
+  it('treats a lone minus as ordinary text', () => {
+    const parsed = parseQuery('-');
+
+    expect(parsed.terms).toEqual(['-']);
+    expect(parsed.notTerms).toEqual([]);
+  });
+
+  it('still reports an unknown operator behind the minus', () => {
+    const parsed = parseQuery('-nope:x');
+
+    expect(parsed.errors[0]).toMatchObject({ field: 'nope', reason: 'unknown-field' });
+    expect(parsed.notTerms).toEqual(['nope:x']);
+  });
+
+  it('a query of nothing but negations still searches', () => {
+    expect(ids(searchCards(CARDS, '-tag:vip').results)).toEqual(['co']);
   });
 });
