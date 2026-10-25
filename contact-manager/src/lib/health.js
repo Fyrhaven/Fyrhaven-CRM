@@ -15,6 +15,49 @@ import { isValidE164, toE164 } from './phones.js';
 /** Months without an update before a contact counts as stale. */
 export const STALE_MONTHS = 24;
 
+/**
+ * The retention buckets, oldest threshold last. A contact falls in the first
+ * bucket whose threshold it has passed.
+ */
+export const STALE_BANDS = [
+  { id: 'year', months: 12 },
+  { id: 'twoYears', months: 24 },
+  { id: 'threeYears', months: 36 },
+];
+
+/**
+ * How long ago a contact was last updated, and which retention bucket that puts
+ * it in — or `null` when the host gave us no date to work from.
+ *
+ * The signal is the server's own `updated` field. A contact the host never
+ * stamped is **not** guessed at: reporting a contact as untouched because the
+ * plugin could not see a date would be worse than saying nothing.
+ */
+export function staleness(card, now = Date.now()) {
+  const months = monthsSince(card?.updated, now);
+  if (months === null) return null;
+  const passed = STALE_BANDS.filter((band) => months >= band.months);
+  return { months, band: passed.length ? passed.at(-1).id : 'fresh' };
+}
+
+/** The stale contacts, oldest first, with their age. */
+export function staleContacts(cards, { now = Date.now(), months = STALE_MONTHS } = {}) {
+  return (Array.isArray(cards) ? cards : [])
+    .map((card) => ({ card, staleness: staleness(card, now) }))
+    .filter((entry) => entry.staleness && entry.staleness.months >= months)
+    .sort((a, b) => b.staleness.months - a.staleness.months);
+}
+
+/** How many contacts are in each retention bucket. */
+export function staleCounts(cards, { now = Date.now() } = {}) {
+  const counts = Object.fromEntries(STALE_BANDS.map((band) => [band.id, 0]));
+  for (const card of Array.isArray(cards) ? cards : []) {
+    const found = staleness(card, now);
+    if (found && found.band !== 'fresh') counts[found.band] += 1;
+  }
+  return counts;
+}
+
 /** Score bands, and the cutoffs that define them. */
 export const BANDS = { good: 80, fair: 50 };
 
