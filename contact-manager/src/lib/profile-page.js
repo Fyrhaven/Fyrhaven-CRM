@@ -16,7 +16,7 @@ import {
   calendarRange, formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
-import { downloadBlob } from './download.js';
+import { saveFile } from './download.js';
 import { optionalCall } from './optional.js';
 import { ACTION_BAR, CONTENT_PANE, ROW_WITH_AVATAR, SAVED_ITEM, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
 import { avatarFor } from './avatar.js';
@@ -169,10 +169,12 @@ export function makeProfilePage(React, api) {
 
     // Saves an attachment of the interaction history. The bytes are streamed
     // straight to the browser; nothing is copied to the server or to storage.
-    const saveFile = async (file) => {
+    // named for what it saves: the shared `saveFile` helper would otherwise be
+    // shadowed, and this called itself
+    const saveAttachment = async (file) => {
       try {
         const data = await api.email.getAttachment(file.emailId, file.blobId);
-        downloadBlob(data, file.name);
+        await saveFile(api, data, file.name);
       } catch (err) {
         api.toast.error(t('profile.downloadFailed', { name: file.name, reason: String(err?.message ?? err) }));
       }
@@ -264,14 +266,17 @@ export function makeProfilePage(React, api) {
         api.toast.warning(t('contacts.exportEmpty'));
         return;
       }
-      // A sandbox without `allow-downloads` refuses this, so the file is also
-      // shown: a success toast with no file is the bug this replaces.
-      downloadBlob(new Blob([file.body], { type: file.type }), file.name);
-      await api.ui.openDialog({
-        title: t('export.resultTitle'),
-        slot: 'plugin-dialog',
-        extraProps: { exportResult: { name: file.name, body: file.body } },
-      });
+      // The host saves it when it can. The sandbox forbids an anchor download, so
+      // when it cannot, the file itself is shown: a success toast with no file
+      // behind it is the bug this replaces.
+      const saved = await saveFile(api, file.body, file.name, file.type);
+      if (!saved) {
+        await api.ui.openDialog({
+          title: t('export.resultTitle'),
+          slot: 'plugin-dialog',
+          extraProps: { exportResult: { name: file.name, body: file.body } },
+        });
+      }
       api.toast.success(t('contacts.exported', { count: cards.length }));
     };
 
@@ -511,7 +516,7 @@ export function makeProfilePage(React, api) {
                         ? h(Text, { tone: 'muted' }, formatDate(file.receivedAt, api.i18n.getLocale()))
                         : null,
                       file.subject ? h(Text, { tone: 'muted' }, file.subject) : null,
-                      h(Button, { size: 'sm', variant: 'secondary', onClick: () => void saveFile(file) },
+                      h(Button, { size: 'sm', variant: 'secondary', onClick: () => void saveAttachment(file) },
                         t('profile.download'))))),
                   h(Section, { title: t('profile.messages') },
                     context.status === 'loading' ? h(Text, { tone: 'muted' }, t('profile.loading')) : null,

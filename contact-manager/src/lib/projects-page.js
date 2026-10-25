@@ -12,7 +12,7 @@ import {
 } from '@plugin-host/ui';
 import { contactName, loadCards } from './contacts.js';
 import { openProject, toastProjectResult } from './open-project.js';
-import { downloadBlob } from './download.js';
+import { saveFile } from './download.js';
 import { optionalCall } from './optional.js';
 import { CONTENT_PANE, HIDDEN, SCROLL_AREA, SPLIT, sidePane } from './layout.js';
 import {
@@ -163,9 +163,11 @@ export function makeProjectsPage(React, api) {
 
     // The portable copy: one JSON file, no server involved.
     const exportAll = () => {
-      downloadBlob(
-        new Blob([JSON.stringify(exportPayload(projects), null, 2)], { type: 'application/json' }),
+      void saveFile(
+        api,
+        JSON.stringify(exportPayload(projects), null, 2),
         'contact-manager-projects.json',
+        'application/json',
       );
     };
 

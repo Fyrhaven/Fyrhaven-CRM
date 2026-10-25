@@ -7,6 +7,30 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.24.1] — 2026-10-25
+
+### Fixed
+
+- **`not:` now excludes, as well as a leading `-`.** The shorthand was shipped
+  without the word you had actually asked for, so `not:tag:vip` was read as an
+  unknown field and searched for as text — which is why excluding a tag looked
+  like it did nothing. Both spellings work now, in either case.
+- **The capability probe stopped reporting the calendar as broken.** The fix in
+  v1.23.2 went into the profile’s calendar range but not into the probe, which
+  kept sending milliseconds and kept failing — so the log still said the
+  calendar was refused while the profile had already been fixed.
+- **Exports and attachments are saved by the host.** The plugin frame is
+  sandboxed without `allow-downloads`, so an anchor download is refused outright.
+  The API surface shows the host has `ui.downloadFile`, which is not subject to
+  that flag, so `saveFile()` tries the host first and only falls back to showing
+  the content when the host will not take it. This covers the contact export, the
+  project export and the attachments on a contact profile.
+- **A shadowed name that recursed until it ran out of memory.** The Contacts
+  page already had a local `saveFile` for attachments; importing the shared
+  helper under the same name made the local one call itself. Caught by the test
+  suite as an out-of-memory failure rather than by a user. The local one is now
+  `saveAttachment`.
+
 ## [1.24.0] — 2026-10-25
 
 ### Added
