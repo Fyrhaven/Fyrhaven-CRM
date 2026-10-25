@@ -185,3 +185,52 @@ describe('findDuplicateGroups', () => {
     expect(findDuplicateGroups(emailPair().slice(0, 1), {})).toEqual([]);
   });
 });
+
+describe('per-book policies in findDuplicateGroups', () => {
+  it('excludes contacts only in a disabled book', () => {
+    const cards = [
+      { id: 'a', name: { full: 'Ada' }, emails: { e0: { address: 'ada@x.de' } }, addressBookIds: { b1: true } },
+      { id: 'b', name: { full: 'Ada' }, emails: { e0: { address: 'ada@y.de' } }, addressBookIds: { b1: true } },
+    ];
+    // without policies, they group by name
+    expect(findDuplicateGroups(cards, {})).toHaveLength(1);
+    // with b1 disabled, nothing is scanned
+    expect(findDuplicateGroups(cards, { policies: { b1: { enabled: false } } })).toEqual([]);
+  });
+
+  it('keeps contacts that are in at least one enabled book', () => {
+    const cards = [
+      { id: 'a', name: { full: 'Ada' }, emails: { e0: { address: 'ada@x.de' } }, addressBookIds: { b1: true, b2: true } },
+      { id: 'b', name: { full: 'Ada' }, emails: { e0: { address: 'ada@y.de' } }, addressBookIds: { b2: true } },
+    ];
+    // b1 disabled but both cards are in b2 (enabled by default), so they still group
+    expect(findDuplicateGroups(cards, { policies: { b1: { enabled: false } } })).toHaveLength(1);
+  });
+
+  it('skips contacts matching an ignore domain', () => {
+    const cards = [
+      { id: 'a', name: { full: 'Ada' }, emails: { e0: { address: 'ada@spam.com' } }, addressBookIds: { b1: true } },
+      { id: 'b', name: { full: 'Ada' }, emails: { e0: { address: 'ada@work.de' } }, addressBookIds: { b1: true } },
+    ];
+    expect(findDuplicateGroups(cards, { ignore: { domains: ['spam.com'], tags: [] } })).toEqual([]);
+  });
+
+  it('skips contacts matching an ignore tag', () => {
+    const cards = [
+      { id: 'a', name: { full: 'Ada' }, emails: { e0: { address: 'ada@x.de' } }, addressBookIds: { b1: true }, keywords: ['do-not-merge'] },
+      { id: 'b', name: { full: 'Ada' }, emails: { e0: { address: 'ada@y.de' } }, addressBookIds: { b1: true } },
+    ];
+    expect(findDuplicateGroups(cards, { ignore: { domains: [], tags: ['do-not-merge'] } })).toEqual([]);
+  });
+
+  it('applies per-book match strategy overrides', () => {
+    const cards = [
+      { id: 'a', name: { full: 'Ada' }, emails: { e0: { address: 'ada@x.de' } }, addressBookIds: { b1: true } },
+      { id: 'b', name: { full: 'Ada' }, emails: { e0: { address: 'ada@y.de' } }, addressBookIds: { b1: true } },
+    ];
+    // they match by name only
+    expect(findDuplicateGroups(cards, {})).toHaveLength(1);
+    // turning off name matching for b1 means no match
+    expect(findDuplicateGroups(cards, { policies: { b1: { matchByName: false } } })).toEqual([]);
+  });
+});
