@@ -24,7 +24,7 @@ import { makeAvatar } from './avatar-view.js';
 import { groupFromSelection } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
 import { applyBulkEdit, deleteContacts } from './bulk.js';
-import { contactsToVCard } from './vcard.js';
+import { contactsToFile } from './export.js';
 import { buildIndex, countsForIndex, matchIndexed, parseQuery } from './search.js';
 import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
@@ -243,17 +243,23 @@ export function makeProfilePage(React, api) {
       void load();
     };
 
-    // The selection as one vCard file: the interop format, so the export is
-    // useful outside this plugin. Nothing is sent to the server.
-    const exportPicked = () => {
-      if (!pickedCards.length) return;
-      const body = contactsToVCard(pickedCards);
-      if (!body) {
+    // The selection, or everything the search shows, as vCard or CSV. Built
+    // here because this is where the cards are; nothing is sent to the server.
+    const exportPicked = async () => {
+      const choice = await api.ui.openDialog({
+        title: t('export.title'),
+        slot: 'plugin-dialog',
+        extraProps: { exportSelection: { selected: pickedCards.length, shown: visible.length } },
+      });
+      if (!choice) return;
+      const cards = choice.scope === 'selected' ? pickedCards : visible;
+      const file = contactsToFile(cards, choice.format);
+      if (!file.body) {
         api.toast.warning(t('contacts.exportEmpty'));
         return;
       }
-      downloadBlob(new Blob([body], { type: 'text/vcard' }), 'contacts.vcf');
-      api.toast.success(t('contacts.exported', { count: pickedCards.length }));
+      downloadBlob(new Blob([file.body], { type: file.type }), file.name);
+      api.toast.success(t('contacts.exported', { count: cards.length }));
     };
 
     const removeSavedSearch = async (name) => {
@@ -377,6 +383,7 @@ export function makeProfilePage(React, api) {
         title: t('page.contactsTitle'),
         description: t('page.contactsDescription'),
         actions: h(Row, { gap: 2 },
+          h(Button, { variant: 'secondary', icon: 'download', onClick: () => void exportPicked() }, t('contacts.exportSelected')),
           h(Button, { icon: 'user-plus', onClick: () => void create() }, t('action.newContact')),
           h(Button, { icon: 'building', variant: 'secondary', onClick: () => void createCompany() },
             t('action.newCompany'))),
@@ -401,12 +408,6 @@ export function makeProfilePage(React, api) {
                       icon: 'edit',
                       onClick: () => void editPicked(),
                     }, t('contacts.editSelected')),
-                    h(Button, {
-                      size: 'sm',
-                      variant: 'secondary',
-                      icon: 'download',
-                      onClick: exportPicked,
-                    }, t('contacts.exportSelected')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
