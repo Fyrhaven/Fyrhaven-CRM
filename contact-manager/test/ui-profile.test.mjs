@@ -238,8 +238,9 @@ describe('contacts page', () => {
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
 
-    await waitFor(() => expect(api.calls('toast.error').length).toBeGreaterThan(0));
-    expect(api.calls('toast.error').at(-1).args[0])
+    // a refused download stops and is read, rather than sliding past as a toast
+    await waitFor(() => expect(api.calls('ui.alert').length).toBeGreaterThan(0));
+    expect(api.calls('ui.alert').at(-1).args[0].message)
       .toBe('Could not save engine.pdf: missing email:blob-read');
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
   });
