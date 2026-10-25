@@ -93,6 +93,7 @@ contact-manager/
 │       ├── health-page.js # the Health dashboard
 │       ├── home-page.js  # the main page: state, the menu and the section rows
 │       ├── actions.js    # the tasks the palette and the main page both run
+│       ├── remote.js     # the client for a user-configured server (#68)
 │       ├── csv.js        # the RFC 4180 reader
 │       ├── vcard-parse.js# reading vCard 3.0 and 4.0 back in
 │       ├── import-fields.js # the column fields and the header guesses
@@ -166,6 +167,7 @@ contact-manager/
 │   ├── ui-import.test.mjs  # the import wizard
 │   ├── export.test.mjs     # the CSV writer and both round trips
 │   ├── retention.test.mjs  # the age thresholds and the buckets
+│   ├── remote.test.mjs     # the server client: five answers, never a throw
 │   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
@@ -676,6 +678,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-import.test.mjs` | The wizard: guessing, previewing, holding back a duplicate, remembering a mapping, vCard, and cancel |
 | `test/export.test.mjs` | The CSV writer, the column widths, and the **round trip** for both formats: export, re-import, compare |
 | `test/retention.test.mjs` | The age thresholds at every boundary, the buckets, and that no date means no claim |
+| `test/remote.test.mjs` | The server client: unconfigured, no proxy, a refusal, a throw, a bad answer, and the URL and credential it sends |
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
@@ -938,6 +941,17 @@ Import (#19, import half)
   remembered mappings in 'importMappings', keyed by the header row
   NOT imported: photos, URLs, custom fields (see the CHANGELOG)
 
+Server client (#68, first step)
+  readRemoteUrl / writeRemoteUrl  the configured server, '' when local-only
+  callServer(api, path, { method, body }) ->
+    { status: 'ok'|'unconfigured'|'unavailable'|'failed', code?, body?, reason? }
+    it never throws: every failure is one of those answers
+  serverVersion(api) parses { version } from the answer
+  the request goes through api.proxy.fetch(credentialId, url, init) with the
+    http:proxy permission, so the host holds the credential
+  NOT confirmed against a live host: the signature is from the test double
+  scripts/mock-server.mjs is a throwaway endpoint for checking the path
+
 Retention (#21)
   STALE_BANDS = a year / two years / three years; STALE_MONTHS (24) is the
     health rule's own threshold, not the retention list's
@@ -1066,15 +1080,15 @@ are the maintainer's to set. The repository README's default — *"the same lice
 as Bulwark Mail"* — is **not to be relied on**: the maintainer has said the
 licence will be set later and the current position disregarded.
 
-Two consequences for anyone working here:
+The repository is **private** and no licensing decision is needed to keep
+working. What follows from that, and what does not:
 
-- **Do not treat the current wording as terms.** It describes an unresolved
-  position, not a grant.
-- **The premium tier is designed on the basis that the plugin will be licensed
-  separately from whatever it talks to.** See issue #68. Nothing that exists
-  today is to move behind a paywall, and no server-side work starts before the
-  terms exist.
+- **Feature placement is open.** Some features that exist today may end up in
+  the paid tier. Do not treat the current split as a promise.
+- **Server-side work may continue.** Nothing waits on the licence text.
+- **A plugin-side feature must still work with no server configured**, because
+  most users will never set one up.
 
 `manifest.json` names the `author` (`Alexander`); add a `LICENSE` file, and a
-`license` field beside it, once the terms are settled.
+`license` field beside it, when the terms are settled.
 

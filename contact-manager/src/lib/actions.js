@@ -97,3 +97,20 @@ export async function importContacts(api) {
     api.toast.success(api.i18n.t('import.done', { created: result.created }));
   }
 }
+
+/**
+ * Asks the configured server for its version — the spike that proves the path.
+ *
+ * It reports rather than throws, so an unconfigured plugin, an older webmail
+ * without `api.proxy` and a server that is down are three different messages
+ * instead of one failure.
+ */
+export async function checkServer(api) {
+  const { serverVersion } = await import('./remote.js');
+  const result = await serverVersion(api);
+  const t = (key, vars) => api.i18n.t(key, vars);
+  if (result.status === 'ok') api.toast.success(t('remote.ok', { version: result.version }));
+  else if (result.status === 'unconfigured') api.toast.info(t('remote.unconfigured'));
+  else if (result.status === 'unavailable') api.toast.warning(t('remote.unavailable'));
+  else api.toast.error(t('remote.failed', { reason: result.reason ?? result.code ?? '' }));
+}

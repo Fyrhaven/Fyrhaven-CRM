@@ -7,6 +7,44 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.25.0] — 2026-10-25
+
+### Added
+
+- **The plugin can talk to a server the user configures (#68, first step).**
+  `src/lib/remote.js` holds the client, and *Check the server* in the command
+  palette asks it for its version — the smallest thing that proves the path
+  end to end.
+
+  Every request goes through the **host's** proxy with the `http:proxy`
+  permission, so the host holds the credential and the plugin never sees a
+  secret. That is the whole reason this shape works for a paid tier: no API key
+  can leak out of a ZIP.
+
+- `scripts/mock-server.mjs` — a throwaway server for checking the path without
+  touching anything real:
+
+  ```
+  node scripts/mock-server.mjs 8787
+  curl http://localhost:8787/version   # { "version": "0.1.0-mock", … }
+  ```
+
+### Notes
+
+**Five answers, never a throw.** `callServer` reports `unconfigured` (no server
+set), `unavailable` (a webmail with no request proxy), `ok`, or `failed` with a
+reason or an HTTP code. An unconfigured plugin is the normal case, and it
+behaves exactly as it does today.
+
+The response shape — `{ status, ok, headers, body }` — is the one the host's
+own test double documents. **The request signature (`proxy.fetch(credentialId,
+url, init)`) is from that same source and has not been confirmed against a live
+host**: if it differs, *Check the server* reports a failure rather than doing
+anything unexpected.
+
+Nothing in this release sends user data anywhere, and the repository stays
+private, so no licensing decision was needed to start.
+
 ## [1.24.2] — 2026-10-25
 
 ### Changed
