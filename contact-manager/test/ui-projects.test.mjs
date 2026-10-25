@@ -239,22 +239,18 @@ describe('projects page', () => {
     expect(api.storageSnapshot().projects[0].timeEntries[0].id).toBe('te2');
   });
 
-  it('exports the projects as a JSON download', async () => {
-    createObjectURL.mockClear();
-    const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
-    try {
-      const api = projectsApi();
-      await api.storage.set('projects', [TIME_PROJECT]);
-      await renderPage(api);
-      await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
+  it('exports the projects through the host, the only way out of the sandbox', async () => {
+    const api = projectsApi();
+    await api.storage.set('projects', [TIME_PROJECT]);
+    await renderPage(api);
+    await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
 
-      expect(createObjectURL).toHaveBeenCalledTimes(1);
-      expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
-    } finally {
-      click.mockRestore();
-    }
+    // the plugin frame has no `allow-downloads`, so the host saves the file
+    const call = api.calls('ui.downloadFile')[0];
+    expect(call.args[0]).toBe('contact-manager-projects.json');
+    expect(JSON.parse(call.args[1]).format).toBe('bulwark-contact-manager-projects');
   });
 });
 

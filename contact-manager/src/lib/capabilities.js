@@ -92,9 +92,10 @@ export async function probeOptionalApis(api, now = Date.now()) {
     ['email', () => api.email.search({ text: 'a', limit: 1 })],
     // no `limit`: the host rejects an unknown option, and the plugin never sends one
     ['tasks', () => api.tasks.list({ includeCompleted: true })],
+    // the same shape the plugin sends: `.123Z` is rejected by the host
     ['calendar', () => api.calendar.getEvents({
-      from: new Date(now).toISOString(),
-      to: new Date(now + day).toISOString(),
+      from: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+      to: new Date(now + day).toISOString().replace(/\.\d{3}Z$/, 'Z'),
     })],
   ];
   const failures = [];
