@@ -152,6 +152,22 @@ const participantEmails = (event) => [
     .flatMap((entry) => [entry?.email, entry?.name]),
 ].filter(Boolean).map(lower);
 
+/**
+ * A date the host's calendar API accepts.
+ *
+ * `toISOString()` ends in `.123Z`, and the host rejects that: it wants
+ * `2026-05-01`, `2026-05-01T09:30` or `2026-05-01T07:30:00Z`. Sending the
+ * milliseconds is why the profile said "Meetings are unavailable" — the call was
+ * refused, not the permission.
+ */
+export const hostDate = (value) => new Date(value).toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+/** The calendar window the profile asks for, in the shape the host accepts. */
+export function calendarRange(now = Date.now(), backDays = 180, aheadDays = 90) {
+  const day = 24 * 3600 * 1000;
+  return { from: hostDate(now - backDays * day), to: hostDate(now + aheadDays * day) };
+}
+
 /** Calendar events the contact takes part in, newest first. */
 export function eventsForContact(events, card) {
   const terms = new Set([...contactTerms(card), ...emailEntries(card).map((entry) => lower(entry.address))]);
