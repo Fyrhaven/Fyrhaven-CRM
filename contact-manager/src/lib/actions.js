@@ -76,3 +76,24 @@ export async function newCompany(api) {
 export async function newProject(api) {
   toastProjectResult(api, await openProject(api, { mode: 'create' }));
 }
+
+/**
+ * The import wizard: it reads the file, shows what would happen, and returns
+ * what it wrote. The page toasts that; the palette has no page to toast from, so
+ * this does it here.
+ */
+export async function importContacts(api) {
+  const result = await api.ui.openDialog({
+    title: api.i18n.t('import.title'),
+    slot: 'plugin-dialog',
+    extraProps: { importWizard: true },
+  });
+  if (!result) return;
+  if (result.failed) {
+    api.toast.warning(api.i18n.t('import.partial', { created: result.created, failed: result.failed }));
+  } else if (result.skipped) {
+    api.toast.success(api.i18n.t('import.doneSkipped', { created: result.created, skipped: result.skipped }));
+  } else {
+    api.toast.success(api.i18n.t('import.done', { created: result.created }));
+  }
+}

@@ -60,6 +60,7 @@ describe('built plugin', () => {
         { id: 'new-contact', label: 'New contact', icon: 'user-plus' },
         { id: 'new-company', label: 'New company', icon: 'building' },
         { id: 'new-project', label: 'New project', icon: 'folder' },
+        { id: 'import-contacts', label: 'Import contacts', icon: 'upload' },
       ]);
     expect(api.calls('ui.setActions')[1].args[1])
       .toEqual([{ id: 'scan-selection', label: 'Find duplicates in selection', icon: 'copy' }]);
@@ -77,7 +78,7 @@ describe('built plugin', () => {
     await plugin.activate(api);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.calls('ui.setActions')[0].args[1].map((action) => action.id))
-      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'undo-merge']);
+      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'import-contacts', 'undo-merge']);
 
     // with the undo window turned off the entry disappears and records are dropped
     const offApi = pluginApi({ undoMinutes: 0 });
@@ -86,7 +87,7 @@ describe('built plugin', () => {
     await offPlugin.activate(offApi);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(offApi.calls('ui.setActions')[0].args[1].map((action) => action.id))
-      .toEqual(['scan', 'new-contact', 'new-company', 'new-project']);
+      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'import-contacts']);
   });
 
   it('the new-contact action opens the editor dialog', async () => {
