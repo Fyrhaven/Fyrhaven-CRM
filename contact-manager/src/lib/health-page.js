@@ -9,12 +9,15 @@
 import {
   Badge, Button, EmptyState, InfoBar, List, ListRow, Page, PageHeader, Row, Section, Stack, Text,
 } from '@plugin-host/ui';
-import { bookNamesById, loadBooks, loadCards, matchOptions } from './contacts.js';
+import { bookNamesById, contactName, loadBooks, loadCards, matchOptions } from './contacts.js';
 import { findDuplicateGroups } from './duplicates.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { toastMergeResult } from './labels.js';
 import { applyNormalisation, readRegion } from './normalise.js';
-import { healthBand, healthSummary, withIssue } from './health.js';
+import { STALE_BANDS, healthBand, healthSummary, staleContacts, staleCounts, withIssue } from './health.js';
+import { contactsToFile } from './export.js';
+import { downloadBlob } from './download.js';
+import { deleteContacts } from './bulk.js';
 import { ACTION_BAR } from './layout.js';
 
 export function makeHealthPage(React, api) {
@@ -28,6 +31,7 @@ export function makeHealthPage(React, api) {
     const [region, setRegion] = useState('');
     const [status, setStatus] = useState('loading');
     const [filter, setFilter] = useState('');
+    const [band, setBand] = useState('');
 
     const load = useCallback(async () => {
       setStatus('loading');
@@ -91,6 +95,57 @@ export function makeHealthPage(React, api) {
 
     const editCard = async (card) => {
       toastEditorResult(api, await openEditor(api, { mode: 'edit', contact: card }));
+      void load();
+    };
+
+    // Retention: who has gone untouched, oldest first. The signal is the
+    // server's own `updated`; a contact it never stamped is not guessed at.
+    // The list uses the *lowest* band, not the health rule's threshold, so the
+    // buckets and the rows below them can never disagree about who is stale.
+    const stale = useMemo(() => staleContacts(cards, { months: STALE_BANDS[0].months }), [cards]);
+    const staleBuckets = useMemo(() => staleCounts(cards), [cards]);
+    const staleShown = useMemo(
+      () => (band ? stale.filter((entry) => entry.staleness.band === band) : stale),
+      [stale, band],
+    );
+
+    /** The age of a contact, in the unit that reads best. */
+    const ageLabel = (months) => (months >= 24
+      ? t('retention.years', { count: Math.floor(months / 12) })
+      : t('retention.months', { count: Math.round(months) }));
+
+    /** Writes the file and returns whether there was anything in it. */
+    const archive = (list) => {
+      const file = contactsToFile(list, 'csv');
+      if (!file.body) return false;
+      downloadBlob(new Blob([file.body], { type: file.type }), file.name);
+      return true;
+    };
+
+    const exportStale = () => {
+      if (archive(staleShown.map((entry) => entry.card))) {
+        api.toast.success(t('retention.exported', { count: staleShown.length }));
+      }
+    };
+
+    // The export is not optional: it happens as part of the delete, so a
+    // retention clean-up can never be the only copy of what it removed.
+    const deleteStale = async () => {
+      const list = staleShown.map((entry) => entry.card);
+      const ok = await api.ui.confirm({
+        title: t('retention.confirmTitle', { count: list.length }),
+        message: t('retention.confirmBody'),
+        confirmLabel: t('retention.confirmAction'),
+        danger: true,
+      });
+      if (!ok) return;
+      if (!archive(list)) {
+        api.toast.warning(t('retention.exportEmpty'));
+        return;
+      }
+      const result = await deleteContacts(api, list);
+      if (result.failed) api.toast.warning(t('retention.partial', { deleted: result.deleted, failed: result.failed }));
+      else api.toast.success(t('retention.deleted', { count: result.deleted }));
       void load();
     };
 
@@ -167,6 +222,30 @@ export function makeHealthPage(React, api) {
                 filter
                   ? h(Button, { size: 'sm', variant: 'secondary', onClick: () => setFilter('') }, t('health.clearFilter'))
                   : null)),
+            stale.length
+              ? h(Section, { title: t('retention.title'), description: t('retention.source') },
+                  h(Text, { tone: 'muted' }, t('retention.hint')),
+                  h('div', { 'data-pane': 'retention', style: ACTION_BAR },
+                    ...STALE_BANDS.map((entry) => h(Button, {
+                      key: entry.id,
+                      size: 'sm',
+                      variant: band === entry.id ? 'primary' : 'secondary',
+                      disabled: !staleBuckets[entry.id],
+                      onClick: () => setBand(band === entry.id ? '' : entry.id),
+                    }, `${t(`retention.band.${entry.id}`)} (${staleBuckets[entry.id]})`)),
+                    h(Button, { size: 'sm', variant: 'secondary', icon: 'download', onClick: exportStale },
+                      t('retention.export', { count: staleShown.length })),
+                    h(Button, { size: 'sm', variant: 'secondary', onClick: () => void deleteStale() },
+                      t('retention.exportDelete', { count: staleShown.length }))),
+                  h(List, { label: t('retention.title') }, ...staleShown.slice(0, 20).map((entry) => h(ListRow, {
+                    key: entry.card.id,
+                    title: contactName(entry.card) || entry.card.id,
+                    subtitle: t('retention.age', { age: ageLabel(entry.staleness.months) }),
+                  }))),
+                  staleShown.length > 20
+                    ? h(Text, { tone: 'muted' }, t('import.more', { count: staleShown.length - 20 }))
+                    : null)
+              : h(Text, { tone: 'muted' }, t('retention.none')),
             h(Section, { title: t('health.contacts') },
               rows.length
                 ? h(List, { label: t('health.contacts') }, ...rows.map(contactRow))

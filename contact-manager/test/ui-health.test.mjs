@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The Health dashboard: the totals, the drill-down, and the fixes it offers.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
@@ -10,6 +10,11 @@ import { makeHealthPage } from '../src/lib/health-page.js';
 import { makeCard } from './fixtures.mjs';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
+
+// jsdom has no Blob URL support; the retention export needs it.
+const createObjectURL = vi.fn(() => 'blob:test');
+URL.createObjectURL = createObjectURL;
+URL.revokeObjectURL = vi.fn();
 afterEach(cleanup);
 
 const CLEAN = makeCard({ id: 'good', name: 'Ada Lovelace', emails: ['ada@example.org'], phones: ['+491761234567'] });
@@ -99,5 +104,97 @@ describe('duplicates on the dashboard', () => {
     expect(call.args[0].slot).toBe('plugin-dialog');
     // the whole group is handed over, so the review dialog has both sides
     expect(call.args[0].extraProps.groups[0].members.map((member) => member.id).sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('retention', () => {
+  const monthsAgo = (n) => new Date(Date.now() - n * 30 * 24 * 3600 * 1000).toISOString();
+  const OLD = makeCard({ id: 'old', name: 'Old Timer', emails: ['old@example.org'], updated: monthsAgo(40) });
+  const MIDDLE = makeCard({ id: 'mid', name: 'Middle Aged', emails: ['mid@example.org'], updated: monthsAgo(14) });
+
+  const retentionApi = (handlers = {}) => healthApi({
+    'contacts.list': async () => [OLD, MIDDLE, CLEAN],
+    'contacts.remove': async () => {},
+    ...handlers,
+  });
+
+  it('explains where the signal comes from, and says nothing is deleted on its own', async () => {
+    await renderPage(retentionApi());
+
+    expect(screen.getByText(/last-updated date the server keeps/)).toBeTruthy();
+    expect(screen.getByText(/Nothing is deleted on its own/)).toBeTruthy();
+  });
+
+  it('buckets the untouched contacts, and shows how old each one is', async () => {
+    await renderPage(retentionApi());
+
+    expect(screen.getByRole('button', { name: 'Untouched for a year (1)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Untouched for two years (0)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Untouched for three years (1)' })).toBeTruthy();
+    // the age lines belong to the retention list only
+    expect(screen.getByText('Last changed 3 year(s) ago')).toBeTruthy();
+    expect(screen.getByText('Last changed 14 month(s) ago')).toBeTruthy();
+  });
+
+  it('filters to one bucket', async () => {
+    await renderPage(retentionApi());
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Untouched for a year (1)' })); });
+
+    // only the year-old contact is left in the retention list
+    expect(screen.getByText('Last changed 14 month(s) ago')).toBeTruthy();
+    expect(screen.queryByText('Last changed 3 year(s) ago')).toBeNull();
+  });
+
+  it('writes the file before it deletes anything, and is undoable', async () => {
+    createObjectURL.mockClear();
+    const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const api = retentionApi({ 'ui.confirm': async () => true });
+      await renderPage(api);
+
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Export and delete/ })); });
+
+      await waitFor(() => expect(api.calls('contacts.remove')).toHaveLength(2));
+      // the export happened as part of the delete, so the data is on disk
+      expect(createObjectURL).toHaveBeenCalled();
+      expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported and deleted 2 contact(s).');
+      // and it is undoable
+      expect(api.storageSnapshot().undoBatches.at(-1).entries[0].removed).toHaveLength(2);
+    } finally {
+      click.mockRestore();
+    }
+  });
+
+  it('deletes nothing when the confirmation is declined', async () => {
+    const api = retentionApi({ 'ui.confirm': async () => false });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Export and delete/ })); });
+
+    expect(api.calls('contacts.remove')).toHaveLength(0);
+  });
+
+  it('exports on its own without deleting', async () => {
+    createObjectURL.mockClear();
+    const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const api = retentionApi();
+      await renderPage(api);
+
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export 2' })); });
+
+      expect(createObjectURL).toHaveBeenCalled();
+      expect(api.calls('contacts.remove')).toHaveLength(0);
+      expect(api.calls('toast.success').at(-1).args[0]).toBe('Wrote 2 contact(s) to a file.');
+    } finally {
+      click.mockRestore();
+    }
+  });
+
+  it('says so when nothing has gone stale', async () => {
+    await renderPage(healthApi());
+
+    expect(screen.getByText('Nothing has gone untouched for a year.')).toBeTruthy();
   });
 });
