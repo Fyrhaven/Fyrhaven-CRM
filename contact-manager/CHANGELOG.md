@@ -7,6 +7,43 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.22.0] — 2026-10-23
+
+### Added
+
+- **Export the selection, or everything the search shows, as vCard or CSV
+  (#19, the export half).** *Export* now sits in the Contacts page header — so
+  it works with or without a selection — and asks two questions: **what** (the
+  selection, or every contact the current search shows) and **in which format**
+  (vCard for other address books and phones, CSV for a spreadsheet).
+- `src/lib/export.js` — the CSV writer, and `contactsToFile(cards, format)`.
+  Email and phone columns are as wide as the **widest** contact, so nobody's
+  second address is dropped, and a contact with fewer is padded with blanks.
+
+### Fixed
+
+- **vCard export dropped the tags.** `CATEGORIES` was never written, so a
+  contact's tags survived a CSV round trip but not a vCard one. Caught by the
+  round-trip fixture this release adds — which is exactly what that fixture is
+  for. The company marker is still left out of both formats: it is structure,
+  not a label, and re-importing it would turn a person into a company.
+- An empty selection wrote a CSV with a header row and no contacts; it now
+  writes nothing, like the vCard writer always did.
+
+### Notes
+
+**The round trip is asserted, not assumed.** `test/export.test.mjs` exports
+contacts with every field the plugin stores, re-imports them through the same
+pipeline the wizard uses, and compares the result field by field — for CSV and
+for vCard. The CSV headers are deliberately the spellings `guessMapping`
+recognises, so a file exported here and imported back needs **no column work at
+all**, and a test says so.
+
+One thing the round trip cannot promise, and the tests are honest about: a
+contact that only ever had a **full name** (no first/last split) comes back with
+the name intact but its parts guessed, because one column cannot say where the
+boundary was. The name itself is asserted to survive.
+
 ## [1.21.0] — 2026-10-23
 
 ### Added

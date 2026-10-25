@@ -99,6 +99,8 @@ contact-manager/
 │       ├── import.js     # rows to drafts to cards, and the duplicate plan
 │       ├── import-templates.js # remembered column mappings
 │       ├── import-dialog.js # the import wizard
+│       ├── export.js     # the CSV writer and the file the export builds
+│       ├── export-dialog.js # what to export, and in which format
 │       ├── search.js      # the query language and the matcher behind the search box
 │       ├── phones.js      # E.164 normalisation and the region table
 │       ├── emails.js      # email syntax, role addresses, throwaway domains
@@ -162,6 +164,7 @@ contact-manager/
 │   ├── import.test.mjs     # mapping, the duplicate plan, the write
 │   ├── import-templates.test.mjs # remembered mappings
 │   ├── ui-import.test.mjs  # the import wizard
+│   ├── export.test.mjs     # the CSV writer and both round trips
 │   ├── normalise.test.mjs  # the cleanup plan, its application and its undo
 │   ├── saved-searches.test.mjs # the saved-search store
 │   ├── capabilities.test.mjs # the optional-API probe
@@ -670,6 +673,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/import.test.mjs` | Header guessing for Google and Apple exports, row to draft, and the duplicate plan by email, phone and name |
 | `test/import-templates.test.mjs` | Remembered mappings: found by header row, replaced, capped, repaired |
 | `test/ui-import.test.mjs` | The wizard: guessing, previewing, holding back a duplicate, remembering a mapping, vCard, and cancel |
+| `test/export.test.mjs` | The CSV writer, the column widths, and the **round trip** for both formats: export, re-import, compare |
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
@@ -931,6 +935,13 @@ Import (#19, import half)
   applyImport(api, drafts) -> { created, failed }, one create per draft
   remembered mappings in 'importMappings', keyed by the header row
   NOT imported: photos, URLs, custom fields (see the CHANGELOG)
+
+Export (#19, export half)
+  toCsv(rows) / escapeCell(cell)   RFC 4180 quoting, CRLF
+  contactsToCsv(cards) -> text; email/phone columns as wide as the widest card
+  contactsToFile(cards, 'vcard'|'csv') -> { body, name, type }
+  the CSV headers are the spellings guessMapping knows, so a round trip needs
+    no column work; the vCard writer emits CATEGORIES for the tags
 
 Main page (Overview)
   makeHomePage(React, api) renders the landing tab; every sub-page is handed

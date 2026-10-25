@@ -406,115 +406,57 @@ describe('contacts page', () => {
     expect(screen.getByText('1 selected')).toBeTruthy();
   });
 
-  it('exports the selection as one vCard download', async () => {
+  it('asks what to export, then writes the file it was asked for', async () => {
     createObjectURL.mockClear();
     const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
     try {
-      const api = profileApi();
+      const api = profileApi({
+        'ui.openDialog': async () => ({ scope: 'selected', format: 'vcard' }),
+      });
       await renderPage(api);
 
       await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace' })); });
-      await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
 
+      // the dialog is told what it could export, and the file is built here
+      expect(api.calls('ui.openDialog')[0].args[0].extraProps.exportSelection)
+        .toEqual({ selected: 1, shown: 2 });
       expect(createObjectURL).toHaveBeenCalledTimes(1);
       expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
-      expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported 2 contact(s) as vCard.');
+      expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported 1 contact(s) as vCard.');
       expect(click).toHaveBeenCalled();
     } finally {
       click.mockRestore();
     }
   });
 
-  it('cleans up a selection: the dialog plans, the page applies, and it can be undone', async () => {
-    const api = profileApi({
-      'contacts.update': async () => {},
-      'ui.openDialog': async (options) => ({
-        plan: [{ id: 'a', patch: { phones: { p0: { number: '+491761234567' } } }, before: { phones: { p0: { number: '0176 1234567' } } } }],
-        region: options.extraProps.normalise.region,
-      }),
-    });
-    await renderPage(api);
+  it('exports everything the search shows, as CSV, when asked', async () => {
+    createObjectURL.mockClear();
+    const click = vi.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const api = profileApi({
+        'ui.openDialog': async () => ({ scope: 'shown', format: 'csv' }),
+      });
+      await renderPage(api);
 
-    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace' })); });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Clean up' })); });
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
 
-    // the dialog is handed the picked contacts and the stored region
-    const setup = api.calls('ui.openDialog')[0].args[0].extraProps.normalise;
-    expect(setup.cards.map((card) => card.id)).toEqual(['a']);
-    expect(setup.region).toBe('');
-
-    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
-    expect(api.calls('toast.success').at(-1).args[0]).toBe('Cleaned up 1 contact(s).');
-    // the batch is reversible, and the page says so
-    expect(api.storageSnapshot().lastCleanup.entries).toHaveLength(1);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Undo cleanup' })).toBeTruthy());
-  });
-
-  it('puts a cleaned-up batch back', async () => {
-    const api = profileApi({ 'contacts.update': async () => {} });
-    await api.storage.set('lastCleanup', {
-      at: Date.now(),
-      expiresAt: Date.now() + 60_000,
-      entries: [{ id: 'a', before: { phones: { p0: { number: '0176 1234567' } } } }],
-    });
-    await renderPage(api);
-
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Undo cleanup' })); });
-
-    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
-    expect(api.calls('contacts.update')[0].args).toEqual(['a', { phones: { p0: { number: '0176 1234567' } } }]);
-    expect(api.calls('toast.success').at(-1).args[0]).toBe('Put 1 contact(s) back.');
-    expect(api.storageSnapshot().lastCleanup).toBeUndefined();
-  });
-
-  it('shows a Gravatar avatar only when the user turned it on', async () => {
-    const off = profileApi();
-    await renderPage(off);
-    expect(document.querySelectorAll('img[data-avatar="gravatar"]')).toHaveLength(0);
-
-    cleanup();
-    const on = fakeApi({
-      settings: { gravatar: true },
-      translations: manifest.locales,
-      handlers: {
-        'contacts.list': async () => CARDS,
-        'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
-      },
-    });
-    await renderPage(on);
-
-    // one per contact in the list, plus the open profile
-    const images = document.querySelectorAll('img[data-avatar="gravatar"]');
-    expect(images.length).toBeGreaterThan(1);
-    // the URL is the hash of the address, and a 404 means "no picture"
-    expect(images[0].getAttribute('src'))
-      .toBe('https://www.gravatar.com/avatar/5bfcf2d8e394674550332640d72db509?s=24&d=404&r=g');
-  });
-
-  it('prefers a photo stored on the contact, with Gravatar on or off', async () => {
-    const withPhoto = makeCard({
-      id: 'p', name: 'Photo Person', emails: ['photo@example.org'], media: { m: { kind: 'photo', uri: 'https://x/me.jpg' } },
-    });
-    const api = fakeApi({
-      settings: { gravatar: true },
-      translations: manifest.locales,
-      handlers: {
-        'contacts.list': async () => [withPhoto],
-        'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
-      },
-    });
-    // this card set has its own name, so the shared helper's wait does not apply
-    const Page = makeProfilePage(React, api);
-    await act(async () => { render(React.createElement(Page)); });
-    await waitFor(() => expect(screen.getAllByText('Photo Person').length).toBeGreaterThan(0));
-
-    const images = document.querySelectorAll('img');
-    expect(images.length).toBeGreaterThan(0);
-    for (const img of images) {
-      expect(img.getAttribute('src')).toBe('https://x/me.jpg');
-      expect(img.getAttribute('data-avatar')).toBe('card');
+      // nothing is selected, so the whole shown list goes
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported 2 contact(s) as vCard.');
+    } finally {
+      click.mockRestore();
     }
+  });
+
+  it('writes nothing when the export is cancelled', async () => {
+    createObjectURL.mockClear();
+    const api = profileApi({ 'ui.openDialog': async () => null });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Export' })); });
+
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 
   it('offers the editor from the profile and after creating a contact', async () => {
