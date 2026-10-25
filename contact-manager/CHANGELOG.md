@@ -7,6 +7,31 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.24.0] — 2026-10-25
+
+### Added
+
+- **Exclusion in the search box.** A leading minus now excludes instead of
+  requiring, on operators and on plain text alike:
+
+  | Query | Finds |
+  |---|---|
+  | `-tag:vip` | everyone **without** the vip tag |
+  | `is:person -has:phone` | people with no phone number |
+  | `-ada` | everyone whose name, address or note does not mention ada |
+
+  It combines with everything else, so `is:person -tag:vip -has:phone` reads as
+  one sentence. A lone `-` is still just a character, and an unknown operator
+  behind the minus is still reported.
+
+### Changed
+
+- **“Retention” is now “Untouched contacts”.** The section was named after the
+  concept rather than the thing on screen, which is no help to anyone who has
+  not read the changelog. The buckets already read “Untouched for a year”, so the
+  heading says what they are now.
+- The operator hint under the search box mentions the minus.
+
 ## [1.23.2] — 2026-10-25
 
 ### Fixed
