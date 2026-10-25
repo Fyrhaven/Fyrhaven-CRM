@@ -90,6 +90,23 @@ export function parseCsv(text, { delimiter } = {}) {
   return { delimiter: used, headers, rows: all.slice(1).map((row) => row.map((cell) => String(cell))) };
 }
 
+/** One CSV cell, quoted only when it has to be. */
+export function escapeCell(value) {
+  const cell = String(value ?? '');
+  return /[",\r\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell;
+}
+
+/**
+ * Rows to CSV text. CRLF line endings, as the format's own examples use, and
+ * every cell quoted only when it needs it — so a file exported here and opened
+ * in a spreadsheet looks like a file a spreadsheet wrote.
+ */
+export function toCsv(rows, { delimiter = ',' } = {}) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => (Array.isArray(row) ? row : []).map(escapeCell).join(delimiter))
+    .join('\r\n') + (rows?.length ? '\r\n' : '');
+}
+
 /** One CSV row, padded or trimmed to the header count. */
 export function alignRow(row, width) {
   const cells = (Array.isArray(row) ? row : []).map((cell) => String(cell ?? ''));
