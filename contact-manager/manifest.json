@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.27.0",
+  "version": "1.27.1",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan and duplicate hints in contact details.",
   "type": "ui-extension",
@@ -560,7 +560,7 @@
       "projects.milestoneFailed": "Could not add the milestone: {reason}",
       "action.policies": "Policies",
       "policies.title": "Address book policies",
-      "policies.intro": "Control which address books are scanned for duplicates and which contacts to ignore. Unchecked strategies fall back to the global settings.",
+      "policies.intro": "Control which address books are scanned for duplicates, and which contacts to ignore. A strategy left on Default follows the global settings.",
       "policies.booksSection": "Per-address-book settings",
       "policies.noBooks": "No address books found.",
       "policies.enabled": "Scan this book",
@@ -579,7 +579,9 @@
       "policies.ignoredTagsHint": "Contacts with any of these tags are excluded from scanning.",
       "policies.tagPlaceholder": "do-not-merge",
       "policies.addTag": "Add",
-      "policies.save": "Save policies"
+      "policies.save": "Save policies",
+      "policies.saveFailed": "Could not save the policies: {reason}",
+      "policies.loadFailed": "Could not read the stored policies: {reason}"
     },
     "de": {
       "page.title": "Kontakt-Manager",
@@ -1067,7 +1069,7 @@
       "projects.milestoneFailed": "Meilenstein konnte nicht hinzugefügt werden: {reason}",
       "action.policies": "Richtlinien",
       "policies.title": "Adressbuch-Richtlinien",
-      "policies.intro": "Steuere, welche Adressbücher auf Duplikate geprüft werden und welche Kontakte ignoriert werden. Nicht markierte Strategien verwenden die globalen Einstellungen.",
+      "policies.intro": "Steuere, welche Adressbücher auf Duplikate geprüft werden und welche Kontakte ignoriert werden. Eine Strategie auf Standard folgt den globalen Einstellungen.",
       "policies.booksSection": "Pro Adressbuch einstellen",
       "policies.noBooks": "Keine Adressbücher gefunden.",
       "policies.enabled": "Dieses Buch prüfen",
@@ -1086,7 +1088,9 @@
       "policies.ignoredTagsHint": "Kontakte mit einem dieser Schlagwörter werden von der Prüfung ausgeschlossen.",
       "policies.tagPlaceholder": "nicht-zusammenführen",
       "policies.addTag": "Hinzufügen",
-      "policies.save": "Richtlinien speichern"
+      "policies.save": "Richtlinien speichern",
+      "policies.saveFailed": "Richtlinien konnten nicht gespeichert werden: {reason}",
+      "policies.loadFailed": "Richtlinien konnten nicht gelesen werden: {reason}"
     }
   }
 }

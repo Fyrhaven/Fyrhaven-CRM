@@ -95,3 +95,50 @@ describe('warnAboutDuplicates', () => {
     expect(await warnAboutDuplicates(api, saved)).toEqual([]);
   });
 });
+
+// ── Per-address-book policies (#7) ──────────────────────────────
+//
+// A book the user turned off, and a contact carrying an ignored tag, must not
+// warn on save either. Without this the Duplicates page stays quiet about a
+// book that the save-time warning keeps shouting about.
+
+describe('warnAboutDuplicates and the book policies', () => {
+  it('stays silent for a contact in a book the policy excludes', async () => {
+    const api = searching();
+    await api.storage.set('bookPolicies', { b1: { enabled: false } });
+    const saved = makeCard({ id: 'b', name: 'A. Lovelace', emails: ['ada@example.org'] });
+    expect(await warnAboutDuplicates(api, saved)).toEqual([]);
+    expect(api.calls('toast.warning')).toHaveLength(0);
+  });
+
+  it('stays silent when it is the found contact that is excluded', async () => {
+    // The saved card sits in an enabled book; its twin sits only in the
+    // excluded one, so the twin is not a duplicate the user asked to hear about.
+    const twin = makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'], addressBookIds: { b9: true } });
+    const api = fakeApi({
+      translations: manifest.locales,
+      handlers: { 'contacts.search': async () => [twin] },
+    });
+    await api.storage.set('bookPolicies', { b9: { enabled: false } });
+    const saved = makeCard({ id: 'b', name: 'A. Lovelace', emails: ['ada@example.org'] });
+    expect(await warnAboutDuplicates(api, saved)).toEqual([]);
+  });
+
+  it('stays silent for a contact carrying an ignored tag', async () => {
+    const api = searching();
+    await api.storage.set('bookIgnore', { domains: [], tags: ['do-not-merge'] });
+    const saved = makeCard({
+      id: 'b', name: 'A. Lovelace', emails: ['ada@example.org'], keywords: { 'do-not-merge': true },
+    });
+    expect(await warnAboutDuplicates(api, saved)).toEqual([]);
+  });
+
+  it('still warns when the policy does not cover the contact', async () => {
+    // The guard against the three above passing for the wrong reason: a policy
+    // about some other book must change nothing.
+    const api = searching();
+    await api.storage.set('bookPolicies', { somewhereElse: { enabled: false } });
+    const saved = makeCard({ id: 'b', name: 'A. Lovelace', emails: ['ada@example.org'] });
+    expect((await warnAboutDuplicates(api, saved)).map((card) => card.id)).toEqual(['a']);
+  });
+});
