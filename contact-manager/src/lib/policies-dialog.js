@@ -3,9 +3,17 @@
 // through lib/book-policies.js.
 
 import {
-  Button, Checkbox, DialogButtons, Field, Input, Row, Section, Stack, Text,
+  Button, Checkbox, DialogButtons, Input, Row, Section, Segmented, Stack, Text,
 } from '@plugin-host/ui';
 import { readPolicies, readIgnore, writePolicies, writeIgnore } from './book-policies.js';
+import { reportError } from './report.js';
+
+// The three match strategies a book can override, and the label each carries.
+const STRATEGIES = [
+  ['matchByEmail', 'policies.matchByEmail'],
+  ['matchByPhone', 'policies.matchByPhone'],
+  ['matchByName', 'policies.matchByName'],
+];
 
 export function makePoliciesDialog(React, api) {
   const { createElement: h, useEffect, useState } = React;
@@ -23,7 +31,12 @@ export function makePoliciesDialog(React, api) {
     useEffect(() => {
       Promise.all([readPolicies(api), readIgnore(api)])
         .then(([p, i]) => { setPolicies(p); setIgnore(i); setLoading(false); })
-        .catch(() => setLoading(false));
+        .catch(async (err) => {
+          // Say so. A dialog showing empty policies that the user then saves
+          // would overwrite the real ones.
+          setLoading(false);
+          await reportError(api, t('policies.loadFailed', { reason: String(err?.message ?? err) }));
+        });
     }, []);
 
     const close = (value) => props.onResult?.(value);
@@ -40,9 +53,30 @@ export function makePoliciesDialog(React, api) {
     };
 
     const toggleBook = (bookId, field) => {
-      const current = policyFor(bookId);
-      setBookField(bookId, field, !current[field]);
+      // Flip what is SHOWN. The box reads `!== false`, so an untouched field
+      // looks on — `!current[field]` read that `undefined` as off and made the
+      // first click do nothing at all.
+      setBookField(bookId, field, policyFor(bookId)[field] === false);
     };
+
+    // A strategy is tri-state: `undefined` follows the global setting, `true`
+    // forces it on for this book, `false` forces it off. Without the third
+    // position an override could never be taken back.
+    const strategyValue = (bookId, field) => {
+      const value = policyFor(bookId)[field];
+      if (value === undefined) return 'default';
+      return value ? 'on' : 'off';
+    };
+
+    const setStrategy = (bookId, field, value) => {
+      setBookField(bookId, field, value === 'default' ? undefined : value === 'on');
+    };
+
+    const strategyOptions = () => [
+      { value: 'default', label: t('policies.default') },
+      { value: 'on', label: t('policies.on') },
+      { value: 'off', label: t('policies.off') },
+    ];
 
     const addDomain = () => {
       const domain = domainDraft.trim().toLowerCase();
@@ -71,8 +105,10 @@ export function makePoliciesDialog(React, api) {
       try {
         await Promise.all([writePolicies(api, policies), writeIgnore(api, ignore)]);
         close({ saved: true });
-      } catch {
+      } catch (err) {
+        // A save that did not happen must not look like one that did.
         setSaving(false);
+        await reportError(api, t('policies.saveFailed', { reason: String(err?.message ?? err) }));
       }
     };
 
@@ -85,27 +121,19 @@ export function makePoliciesDialog(React, api) {
         h(Stack, { gap: 3 },
           ...books.map((book) => h(Stack, { key: book.id, gap: 2 },
             h(Text, { weight: 'semibold' }, book.name || book.id),
+            h(Checkbox, {
+              checked: policyFor(book.id).enabled !== false,
+              onChange: () => toggleBook(book.id, 'enabled'),
+              label: t('policies.enabled'),
+            }),
             h(Row, { gap: 3, wrap: true },
-              h(Checkbox, {
-                checked: policyFor(book.id).enabled !== false,
-                onChange: () => toggleBook(book.id, 'enabled'),
-                label: t('policies.enabled'),
-              }),
-              h(Checkbox, {
-                checked: policyFor(book.id).matchByEmail !== false,
-                onChange: () => toggleBook(book.id, 'matchByEmail'),
-                label: t('policies.matchByEmail'),
-              }),
-              h(Checkbox, {
-                checked: policyFor(book.id).matchByPhone !== false,
-                onChange: () => toggleBook(book.id, 'matchByPhone'),
-                label: t('policies.matchByPhone'),
-              }),
-              h(Checkbox, {
-                checked: policyFor(book.id).matchByName !== false,
-                onChange: () => toggleBook(book.id, 'matchByName'),
-                label: t('policies.matchByName'),
-              }),
+              ...STRATEGIES.map(([field, labelKey]) => h(Segmented, {
+                key: field,
+                label: t(labelKey),
+                value: strategyValue(book.id, field),
+                options: strategyOptions(),
+                onChange: (value) => setStrategy(book.id, field, value),
+              })),
             ),
           )),
         ),

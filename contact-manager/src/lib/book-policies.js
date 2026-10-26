@@ -24,6 +24,8 @@
 // is the safe direction: a book that opts out never silences a match another
 // book still wants.
 
+import { bookIds, detectionOptions, emailEntries } from './contacts.js';
+
 export const POLICIES_KEY = 'bookPolicies';
 export const IGNORE_KEY = 'bookIgnore';
 export const MAX_POLICIES = 200;
@@ -143,35 +145,45 @@ export async function writeIgnore(api, ignore) {
   return cleaned;
 }
 
-// ── Application ─────────────────────────────────────────────────
-
-/** The ids a card belongs to. */
-function cardBookIds(card) {
-  const ids = card?.addressBookIds;
-  if (!ids) return [];
-  if (Array.isArray(ids)) return ids.filter((id) => typeof id === 'string' && id);
-  return Object.keys(ids).filter((id) => ids[id]);
+/**
+ * `detectionOptions` plus the stored policies and ignore rules — everything a
+ * duplicate check needs, from one call.
+ *
+ * Every path that looks for duplicates uses this, so a policy cannot be
+ * honoured on the Duplicates page and forgotten in the contact details or in
+ * the save-time warning. That is the bug this exists to make impossible.
+ */
+export async function policyAwareOptions(api) {
+  const [globalOpts, policies, ignore] = await Promise.all([
+    detectionOptions(api), readPolicies(api), readIgnore(api),
+  ]);
+  return { ...globalOpts, policies, ignore };
 }
 
-/** The tags (keywords) of a card. */
+// ── Application ─────────────────────────────────────────────────
+//
+// Cards are read through the shared readers in `contacts.js` — `bookIds` and
+// `emailEntries` — never by reaching into `addressBookIds` or `emails` here.
+// A second reading of the same field is a second opinion about what a card
+// looks like, and the two drift apart.
+
+/** The tags of a card: the KEYS of `keywords`, exactly as search.js reads them. */
 function cardTags(card) {
   const kw = card?.keywords;
-  if (Array.isArray(kw)) return kw.map((k) => text(k)).filter(Boolean);
-  if (kw && typeof kw === 'object') {
-    return Object.values(kw).map((entry) => text(entry?.label ?? entry?.name ?? entry)).filter(Boolean);
-  }
+  if (Array.isArray(kw)) return kw.map((tag) => text(tag)).filter(Boolean);
+  if (kw && typeof kw === 'object') return Object.keys(kw);
   return [];
 }
 
 /** The email domains of a card, lower-cased. */
 function cardEmailDomains(card) {
-  const emails = card?.emails;
-  const list = Array.isArray(emails) ? emails : Object.values(emails ?? {});
-  return list.map((entry) => {
-    const address = text(typeof entry === 'string' ? entry : entry?.address);
-    const at = address.lastIndexOf('@');
-    return at >= 0 ? address.slice(at + 1).toLowerCase() : '';
-  }).filter(Boolean);
+  return emailEntries(card)
+    .map((entry) => {
+      const address = text(entry.address);
+      const at = address.lastIndexOf('@');
+      return at >= 0 ? address.slice(at + 1).toLowerCase() : '';
+    })
+    .filter(Boolean);
 }
 
 /**
@@ -197,7 +209,7 @@ export function isCardIgnored(card, ignore) {
  */
 export function isCardScannable(card, policies) {
   if (!policies || !Object.keys(policies).length) return true;
-  const ids = cardBookIds(card);
+  const ids = bookIds(card);
   if (!ids.length) return true;
   return ids.some((id) => {
     const policy = policies[id];
@@ -211,7 +223,7 @@ export function isCardScannable(card, policies) {
  */
 export function effectiveOpts(card, policies, globalOpts = {}) {
   if (!policies || !Object.keys(policies).length) return globalOpts;
-  const ids = cardBookIds(card);
+  const ids = bookIds(card);
   if (!ids.length) return globalOpts;
   const result = {
     matchByEmail: globalOpts.matchByEmail !== false,

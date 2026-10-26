@@ -9,7 +9,8 @@
 // `contact-detail-section` slot, which offers *Review duplicates* for the
 // open contact.
 
-import { contactName, detectionOptions } from './contacts.js';
+import { contactName } from './contacts.js';
+import { policyAwareOptions } from './book-policies.js';
 import { findGroupFor } from './duplicates.js';
 import { reasonLine } from './labels.js';
 
@@ -33,11 +34,12 @@ export function isSameCard(a, b) {
  * The duplicate group around a just-saved contact, minus the contact itself:
  * `{ group, others }`, or `null` when there is no duplicate.
  * Uses api.contacts.search (email, then name), so it stays cheap on large
- * address books.
+ * address books. The per-book policies and ignore rules are honoured, so a
+ * book the user turned off does not warn on save either.
  */
 export async function findDuplicatesOf(api, contact, opts = null) {
   if (!contact || typeof contact !== 'object') return null;
-  const group = await findGroupFor(api, contact, opts ?? await detectionOptions(api));
+  const group = await findGroupFor(api, contact, opts ?? await policyAwareOptions(api));
   if (!group) return null;
   const others = (group.members ?? []).filter((member) => !isSameCard(member, contact));
   if (!others.length) return null;
