@@ -7,6 +7,17 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.27.2] — 2026-10-26
+
+### Fixed
+
+- **The policies dialog had nothing to configure when auto-scan was off.** The
+  *Policies* button is always in the Duplicates header, but the address books it
+  handed to the dialog came from the last scan — so with *Scan automatically*
+  turned off the dialog opened on "No address books found." and there was nothing
+  to set. The one page that owns the policies could not edit them until you ran a
+  scan first. It now reads the books when the dialog opens.
+
 ## [1.27.1] — 2026-10-26
 
 ### Fixed
