@@ -51,6 +51,7 @@ signatures, the last scan summary).
 | Surface | Where it appears | What it does |
 |---|---|---|
 | `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Projects* and *Health* |
+| *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, the match strategies per book, and global ignore rules by email domain or tag (#7) |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
@@ -85,6 +86,7 @@ contact-manager/
 │   └── lib/
 │       ├── contacts.js     # JSContact readers, loaders, settings flags
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
+│       ├── book-policies.js # per-book duplicate policies and ignore rules (#7)
 │       ├── labels.js       # shared display helpers and toasts
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
 │       ├── avatar.js      # MD5, the Gravatar URL, and whose picture wins
@@ -116,6 +118,7 @@ contact-manager/
 │       ├── capabilities.js# which optional host APIs this instance really has
 │       ├── download.js    # hand bytes to the browser as a download (files, project export)
 │       ├── manager-page.js # the Duplicates sub-tab
+│       ├── policies-dialog.js # the address-book policies dialog (#7)
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
 │       ├── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
@@ -135,9 +138,11 @@ contact-manager/
 │   ├── fixtures.mjs        # card builders
 │   ├── contacts.test.mjs   # readers, name/email/phone extraction
 │   ├── duplicates.test.mjs # normalisation, keys, grouping
+│   ├── book-policies.test.mjs # policy resolution, ignore rules, storage repairs
 │   ├── merge.test.mjs      # merge planning, conflict choices and the merge run
 │   ├── preview.test.mjs    # complete details, added/changed values, conflicts, counts
 │   ├── ui-page.test.mjs    # the manager page
+│   ├── ui-policies.test.mjs # the policies dialog
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -184,8 +189,9 @@ contact-manager/
 > `src/lib/*.js` must stay free of `api` and DOM access wherever possible —
 > that is what keeps the unit tests fast and the code portable. Only
 > `duplicates.js` (merge run, storage), `undo.js` (undo storage and restore),
-> `manager-page.js`, `review-dialog.js` and `detail-section.js` are allowed to
-> touch the host.
+> `book-policies.js` (policy and ignore-rule storage), `manager-page.js`,
+> `policies-dialog.js`, `review-dialog.js` and `detail-section.js` are allowed
+> to touch the host.
 
 
 ## 4. Architecture
@@ -356,7 +362,42 @@ strategy is on** (`!== false`), so new strategies default to enabled.
 Contact groups (distribution lists, `kind: 'group'`) are never treated as
 duplicates and never merged.
 
-### 5.4 The group around one contact
+### 5.4 Per-address-book policies and ignore rules (#7, v1.27.0)
+
+`src/lib/book-policies.js` is the model and `src/lib/policies-dialog.js` the
+dialog behind the *Policies* button on the Duplicates page. Both are stored in
+`api.storage` (per browser, like projects and saved searches) and repair
+themselves on read — an empty policy set behaves exactly as the plugin did
+before this feature.
+
+A per-book policy is keyed by book id and holds any of four booleans:
+
+| Field | Meaning |
+|---|---|
+| `enabled` | `false` excludes the whole book from scanning |
+| `matchByEmail` / `matchByPhone` / `matchByName` | override the global strategy for this book |
+
+`undefined` means "use the global setting", which is why an untouched checkbox
+reads *Default* rather than *Off*. The ignore rules are a single
+`{ domains, tags }` list that skips a contact by email domain or by tag,
+whatever book it lives in.
+
+Two rules decide the outcome, and both lean towards scanning rather than
+silence:
+
+* **A card with no book is always scanned** (the default book).
+* **A card in several books keeps the most permissive setting** across its
+  enabled books: if book A turns email matching off but book B leaves it on, the
+  card still matches on email. A book that opts out never silences a match
+  another book still wants.
+
+`filterForScan(cards, { policies, ignore, globalOpts })` applies both and
+returns the surviving cards together with their per-card effective options, so
+`findDuplicateGroups` uses each contact's own strategies instead of the globals.
+Every scan goes through it — the Duplicates page, the command palette, the Home
+overview and the Health tab.
+
+### 5.5 The group around one contact
 
 `findGroupFor(api, contact, opts)` is the contact-details path. It queries
 `api.contacts.search` with the contact's primary email and its name, keeps
@@ -653,8 +694,10 @@ plugin host are **not** bundled, the host provides them.
 |---|---|
 | `test/contacts.test.mjs` | Name/email/phone extraction across the card shapes, `isMergeable`, `matchOptions` |
 | `test/duplicates.test.mjs` | Normalisation, key building, union-find grouping, strength, reasons, sorting, hidden groups |
+| `test/book-policies.test.mjs` | Policy resolution: per-book overrides, the most-permissive rule, the ignore rules, and the repairs on read |
 | `test/merge.test.mjs` | `pickPrimary`, `planMerge` (unions, fills, keywords, patch shape), `mergeGroups` (update before remove, failure handling) |
 | `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection |
+| `test/ui-policies.test.mjs` | The policies dialog: the book list, the ignore sections, and the save |
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
@@ -854,6 +897,17 @@ Detection
   strong  <=> the group shares an email or a phone number
   possible <=> the group shares only a name
   dismissed signatures are excluded from the result
+
+Book policies (#7)
+  readPolicies / writePolicies, key 'bookPolicies', one record per book id
+  readIgnore / writeIgnore, key 'bookIgnore', { domains, tags }
+  normalizePolicies drops unknown fields and junk; both repair on read
+  isCardScannable(card, policies) — a card with no book is always scannable
+  effectiveOpts(card, policies, globalOpts) — the most permissive enabled
+    book wins, so a book that opts out never silences another book
+  isCardIgnored(card, ignore) — by email domain or by tag
+  filterForScan(cards, { policies, ignore, globalOpts }) -> { cards, perCardOpts }
+  an empty policy set is the previous behaviour: every book, global strategies
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
