@@ -5,6 +5,7 @@ import {
   setBookPolicy, writeIgnore, writePolicies,
 } from '../src/lib/book-policies.js';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { buildIndex } from '../src/lib/search.js';
 import { makeCard } from './fixtures.mjs';
 
 // ── Normalisation ───────────────────────────────────────────────
@@ -165,6 +166,15 @@ describe('isCardScannable', () => {
     expect(isCardScannable(card, { b1: { enabled: false } })).toBe(true);
     expect(isCardScannable(card, { b1: { enabled: false }, b2: { enabled: false } })).toBe(false);
   });
+
+  it('sees a card whose book the host reports as a single id', () => {
+    // `bookIds` in contacts.js falls back to `addressBookId` (singular). The
+    // policy check must agree with it, or such a card looks like it belongs to
+    // no book at all — always scanned, always with the global strategies.
+    const card = { id: 'a', addressBookId: 'b9' };
+    expect(isCardScannable(card, { b9: { enabled: false } })).toBe(false);
+    expect(effectiveOpts(card, { b9: { matchByName: false } }, {}).matchByName).toBe(false);
+  });
 });
 
 describe('isCardIgnored', () => {
@@ -179,14 +189,27 @@ describe('isCardIgnored', () => {
     expect(isCardIgnored(card, { domains: ['other.com'], tags: [] })).toBe(false);
   });
 
-  it('matches by tag (case insensitive)', () => {
-    const card = { id: 'a', keywords: { k1: { label: 'VIP' } } };
+  it('matches by tag on the keywords shape the host actually uses', () => {
+    // `keywords` is `{ tagName: true }` — the KEYS are the tags, which is how
+    // search.js, bulk.js, editor.js and duplicates.js all read them. Reading
+    // the *values* instead finds nothing, so no contact is ever ignored.
+    const card = makeCard({ id: 'a', name: 'A', keywords: { VIP: true, customer: true } });
     expect(isCardIgnored(card, { domains: [], tags: ['vip'] })).toBe(true);
-    expect(isCardIgnored(card, { domains: [], tags: ['customer'] })).toBe(false);
+    expect(isCardIgnored(card, { domains: [], tags: ['friend'] })).toBe(false);
   });
 
-  it('matches array-shaped keywords', () => {
-    const card = { id: 'a', keywords: ['VIP', 'customer'] };
+  it('matches array-shaped keywords too', () => {
+    const card = makeCard({ id: 'a', name: 'A', keywords: ['VIP', 'customer'] });
+    expect(isCardIgnored(card, { domains: [], tags: ['vip'] })).toBe(true);
+  });
+
+  it('sees the same tags the search box does', () => {
+    // One reading of `keywords` for the whole plugin: whatever `tag:vip`
+    // matches in the search box is what an ignore rule matches here. If the
+    // two ever drift, a user can search for a tag the policy cannot see.
+    const card = makeCard({ id: 'a', name: 'A', keywords: { VIP: true } });
+    const [entry] = buildIndex([card], { books: new Map() });
+    expect(entry.tags).toEqual(['vip']);
     expect(isCardIgnored(card, { domains: [], tags: ['vip'] })).toBe(true);
   });
 });

@@ -8,23 +8,22 @@
 //
 // They read the api and write through it; no DOM.
 
-import { detectionOptions, loadCards } from './contacts.js';
+import { loadCards } from './contacts.js';
 import { findDuplicateGroups, readDismissed } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { openProject, toastProjectResult } from './open-project.js';
 import { undoLastMerge } from './undo.js';
-import { readPolicies, readIgnore } from './book-policies.js';
+import { policyAwareOptions } from './book-policies.js';
 
 /** Duplicate groups over all contacts, or over `scopeIds` when given. */
 export async function scanGroups(api, scopeIds = null) {
   const cards = await loadCards(api);
   const list = scopeIds ? cards.filter((card) => scopeIds.has(card.id)) : cards;
-  const dismissed = scopeIds ? [] : await readDismissed(api);
-  const [globalOpts, policies, ignore] = await Promise.all([
-    detectionOptions(api), readPolicies(api), readIgnore(api),
+  const [dismissed, opts] = await Promise.all([
+    scopeIds ? [] : readDismissed(api), policyAwareOptions(api),
   ]);
-  return findDuplicateGroups(list, { ...globalOpts, policies, ignore }, dismissed);
+  return findDuplicateGroups(list, opts, dismissed);
 }
 
 /** Scan, then open the review dialog; toast the outcome. */

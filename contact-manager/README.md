@@ -51,7 +51,7 @@ signatures, the last scan summary).
 | Surface | Where it appears | What it does |
 |---|---|---|
 | `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Projects* and *Health* |
-| *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, the match strategies per book, and global ignore rules by email domain or tag (#7) |
+| *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
@@ -377,10 +377,13 @@ A per-book policy is keyed by book id and holds any of four booleans:
 | `enabled` | `false` excludes the whole book from scanning |
 | `matchByEmail` / `matchByPhone` / `matchByName` | override the global strategy for this book |
 
-`undefined` means "use the global setting", which is why an untouched checkbox
-reads *Default* rather than *Off*. The ignore rules are a single
-`{ domains, tags }` list that skips a contact by email domain or by tag,
-whatever book it lives in.
+`undefined` means "use the global setting". The dialog offers that as a third
+position — *Default*, beside *On* and *Off* — so an override can always be taken
+back: a book forced off can return to the global behaviour without anyone
+editing storage by hand. The ignore rules are a single `{ domains, tags }` list
+that skips a contact by email domain or by tag, whatever book it lives in. A tag
+is read the way the search box reads it — the **keys** of `keywords` — so
+`tag:vip` and an ignore rule for `vip` always agree.
 
 Two rules decide the outcome, and both lean towards scanning rather than
 silence:
@@ -394,8 +397,12 @@ silence:
 `filterForScan(cards, { policies, ignore, globalOpts })` applies both and
 returns the surviving cards together with their per-card effective options, so
 `findDuplicateGroups` uses each contact's own strategies instead of the globals.
-Every scan goes through it — the Duplicates page, the command palette, the Home
-overview and the Health tab.
+
+**Every** path that looks for duplicates goes through it — the Duplicates page,
+the command palette, the Home overview, the Health tab, the *Duplicate check*
+block inside an open contact, and the warning after a save. `policyAwareOptions(api)`
+is the one call that assembles the detection options with the stored policies,
+so a policy cannot be honoured on one page and forgotten on another.
 
 ### 5.5 The group around one contact
 
@@ -908,6 +915,12 @@ Book policies (#7)
   isCardIgnored(card, ignore) — by email domain or by tag
   filterForScan(cards, { policies, ignore, globalOpts }) -> { cards, perCardOpts }
   an empty policy set is the previous behaviour: every book, global strategies
+  a card's tags are the KEYS of its keywords — the reading search.js uses, so
+    `tag:vip` and an ignore rule for `vip` cannot disagree
+  cards are read through contacts.js (bookIds, emailEntries), never re-read here
+  policyAwareOptions(api) assembles detection options and policies in one call
+  findGroupFor honours the policies too, so the contact-details hint and the
+    save-time warning agree with the scan
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
