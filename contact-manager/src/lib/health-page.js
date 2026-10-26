@@ -19,6 +19,7 @@ import { applyBulkEdit, deleteContacts } from './bulk.js';
 import { contactsToFile } from './export.js';
 import { downloadBlob } from './download.js';
 import { ACTION_BAR } from './layout.js';
+import { readPolicies, readIgnore } from './book-policies.js';
 
 export function makeHealthPage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
@@ -38,11 +39,14 @@ export function makeHealthPage(React, api) {
       setStatus('loading');
       setPicked(new Set());
       try {
-        const [list, books, storedRegion] = await Promise.all([loadCards(api), loadBooks(api), readRegion(api)]);
+        const [list, books, storedRegion, policies, ignore] = await Promise.all([
+          loadCards(api), loadBooks(api), readRegion(api),
+          readPolicies(api), readIgnore(api),
+        ]);
         setCards(list);
         setBookList(books);
         setRegion(storedRegion);
-        setGroups(findDuplicateGroups(list, { ...matchOptions(api.plugin?.settings), region: storedRegion }, []));
+        setGroups(findDuplicateGroups(list, { ...matchOptions(api.plugin?.settings), region: storedRegion, policies, ignore }, []));
         setStatus('ready');
       } catch {
         setStatus('error');

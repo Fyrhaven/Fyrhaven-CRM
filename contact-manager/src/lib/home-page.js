@@ -21,6 +21,7 @@ import { findDuplicates, importContacts, newCompany, newContact, newProject, und
 import { undoWindowMinutes } from './labels.js';
 import { readUndo } from './undo.js';
 import { ACTION_BAR } from './layout.js';
+import { readPolicies, readIgnore } from './book-policies.js';
 
 export function makeHomePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useState } = React;
@@ -33,16 +34,18 @@ export function makeHomePage(React, api) {
     const load = useCallback(async () => {
       setState({ status: 'loading' });
       try {
-        const [cards, bookList, projects, region, undo, lastScan] = await Promise.all([
+        const [cards, bookList, projects, region, undo, lastScan, policies, ignore] = await Promise.all([
           loadCards(api),
           loadBooks(api),
           readProjects(api),
           readRegion(api),
           undoWindowMinutes(api.plugin?.settings) > 0 ? readUndo(api) : Promise.resolve([]),
           api.storage.get(LAST_SCAN_KEY),
+          readPolicies(api),
+          readIgnore(api),
         ]);
         const books = bookNamesById(bookList);
-        const groups = findDuplicateGroups(cards, { ...matchOptions(api.plugin?.settings), region }, []);
+        const groups = findDuplicateGroups(cards, { ...matchOptions(api.plugin?.settings), region, policies, ignore }, []);
         setState({
           status: 'ready',
           cards,
