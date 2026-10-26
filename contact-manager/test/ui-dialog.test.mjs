@@ -283,4 +283,18 @@ describe('contact detail section', () => {
     await act(async () => { render(React.createElement(Section, { contact })); });
     await waitFor(() => screen.getByText('No possible duplicates found.'));
   });
+
+  it('stays quiet about a book the policy excludes', async () => {
+    // The hint inside the contact must agree with the Duplicates page: a book
+    // the user turned off is off everywhere, not just on the scan.
+    const twin = makeCard({ id: 'x2', name: 'Roe, Jane', emails: ['jane@x.io'] });
+    const api = fakeApi({
+      translations: manifest.locales,
+      handlers: { 'contacts.search': async () => [contact, twin], 'ui.openDialog': async () => null },
+    });
+    await api.storage.set('bookPolicies', { b1: { enabled: false } });
+    const Section = makeDuplicateSection(React, api);
+    await act(async () => { render(React.createElement(Section, { contact })); });
+    await waitFor(() => screen.getByText('No possible duplicates found.'));
+  });
 });

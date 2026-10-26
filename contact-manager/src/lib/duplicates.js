@@ -469,17 +469,31 @@ export async function writeDismissed(api, signatures) {
  * The duplicate group `contact` belongs to, found with api.contacts.search:
  * candidates sharing a normalised email, phone or name key with the contact,
  * then grouped among themselves. `null` when there is none.
+ *
+ * The per-book policies and ignore rules in `opts` are honoured exactly as a
+ * full scan honours them. Without that a book the user turned off stays quiet
+ * on the Duplicates page while the contact-details hint and the save-time
+ * warning keep shouting about it — one policy, one answer, everywhere.
  */
 export async function findGroupFor(api, contact, opts = {}) {
   if (!isMergeable(contact)) return null;
+  const { policies, ignore, ...globalOpts } = opts;
+  const filter = { policies, ignore, globalOpts };
+
+  // One card in, the same answer `filterForScan` gives a whole scan: nothing
+  // when the card is excluded, and its own effective options when it is not.
+  const own = filterForScan([contact], filter);
+  if (!own.cards.length) return null;
+  const ownKeys = new Set(
+    prefixedKeys(contact, own.perCardOpts?.[0] ?? globalOpts).map(([prefix, value]) => prefix + value),
+  );
+  if (!ownKeys.size) return null;
+
   const queries = [];
   const email = primaryEmail(contact);
   if (email) queries.push(email);
   const name = contactName(contact);
   if (name && !name.includes('@')) queries.push(name);
-
-  const ownKeys = new Set(prefixedKeys(contact, opts).map(([prefix, value]) => prefix + value));
-  if (!ownKeys.size) return null;
 
   const seen = new Set(contact.id ? [contact.id] : []);
   const related = [];
@@ -493,7 +507,10 @@ export async function findGroupFor(api, contact, opts = {}) {
     for (const hit of Array.isArray(found) ? found : []) {
       if (!isMergeable(hit) || seen.has(hit.id)) continue;
       seen.add(hit.id);
-      const hitKeys = prefixedKeys(hit, opts).map(([prefix, value]) => prefix + value);
+      const hitScan = filterForScan([hit], filter);
+      if (!hitScan.cards.length) continue; // excluded by a policy or an ignore rule
+      const hitKeys = prefixedKeys(hit, hitScan.perCardOpts?.[0] ?? globalOpts)
+        .map(([prefix, value]) => prefix + value);
       if (hitKeys.some((key) => ownKeys.has(key))) related.push(hit);
     }
     if (related.length) break; // the first search that finds something is enough

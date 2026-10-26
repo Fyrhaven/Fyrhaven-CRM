@@ -3,7 +3,7 @@
 // button that opens the shared review dialog for the group found.
 
 import { Stack, Heading, Text, Button, Row, Badge } from '@plugin-host/ui';
-import { detectionOptions } from './contacts.js';
+import { policyAwareOptions } from './book-policies.js';
 import { findGroupFor } from './duplicates.js';
 import { memberLabel, reasonLine, strengthKey, toastMergeResult } from './labels.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
@@ -24,7 +24,7 @@ export function makeDuplicateSection(React, api) {
       }
       setState({ status: 'checking', group: null, reason: '' });
       try {
-        const group = await findGroupFor(api, contact, await detectionOptions(api));
+        const group = await findGroupFor(api, contact, await policyAwareOptions(api));
         setState({ status: group ? 'found' : 'none', group, reason: '' });
       } catch (err) {
         setState({ status: 'error', group: null, reason: String(err?.message ?? err) });

@@ -7,6 +7,44 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.27.1] — 2026-10-26
+
+### Fixed
+
+- **Ignored tags never matched anything.** The ignore rule read the *values* of a
+  contact's `keywords` map and looked for a label on them — but the tags are the
+  map's **keys** (`{ vip: true }`), which is how the search box reads them too.
+  The values are booleans, so every contact sailed through the rule and the
+  *Ignored tags* half of the policies dialog did nothing at all. It now reads the
+  keys, and a test compares the rule against the search index so the two readings
+  of `keywords` cannot drift apart again.
+
+- **Every checkbox in the policies dialog needed two clicks.** The box was drawn
+  from `!== false` but flipped with `!value`, so an untouched setting — which
+  *looks* on — was read as off and the first click changed nothing.
+
+- **A match strategy could never go back to the global setting.** Once a book had
+  been overridden there was no way to undo it. The three positions the strings
+  already described — *Default*, *On*, *Off* — are now a real control, and
+  *Default* removes the override instead of storing a value.
+
+- **Policies are now honoured everywhere.** The *Duplicate check* block inside an
+  open contact and the warning after a save both ignored the policies, so a book
+  you had turned off stayed quiet on the Duplicates page while those two kept
+  reporting it.
+
+### Changed
+
+- A policy save that fails now says so through the host's own alert instead of
+  silently re-enabling the button, and a dialog that could not *read* the stored
+  policies says so too, rather than offering to overwrite them.
+
+### Notes
+
+13 of the 16 new tests were written first and watched fail. Each "stays silent"
+test sits next to one that still warns, so silence cannot pass for the wrong
+reason.
+
 ## [1.27.0] — 2026-10-25
 
 ### Added
