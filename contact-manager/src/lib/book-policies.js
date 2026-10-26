@@ -1,0 +1,255 @@
+// Per-address-book duplicate policies and ignore rules (#7). Each address book
+// can override the global match strategies (email, phone, name) or be excluded
+// from scanning entirely. Global ignore rules skip contacts by email domain or
+// tag regardless of which book they live in.
+//
+// Pure model plus api.storage — no DOM. The UI lives in the manager page.
+//
+// Stored shape (one record per book, keyed by book id):
+//   {
+//     [bookId]: {
+//       enabled: true | false,
+//       matchByEmail: true | false | undefined,   // undefined = use global
+//       matchByPhone: true | false | undefined,
+//       matchByName: true | false | undefined,
+//     }
+//   }
+// Plus an ignore list:
+//   { domains: ['example.com', ...], tags: ['do-not-merge', ...] }
+//
+// A contact is scannable when it belongs to at least one enabled book. Its
+// effective match strategy is the most permissive across every enabled book it
+// belongs to — if book A says matchByEmail:false but book B says true (or is
+// unset, defaulting to the global on), the contact keeps email matching. That
+// is the safe direction: a book that opts out never silences a match another
+// book still wants.
+
+export const POLICIES_KEY = 'bookPolicies';
+export const IGNORE_KEY = 'bookIgnore';
+export const MAX_POLICIES = 200;
+export const MAX_IGNORE = 50;
+
+const text = (value) => (typeof value === 'string' ? value.trim() : '');
+
+// ── Policies ────────────────────────────────────────────────────
+
+/** Is this a valid boolean override? `undefined` means "use the global". */
+const isOptBool = (value) => value === true || value === false;
+
+/** One book's overrides, repaired: only known fields, only valid booleans. */
+function normalizeBookPolicy(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  if (isOptBool(raw.enabled)) out.enabled = raw.enabled;
+  if (isOptBool(raw.matchByEmail)) out.matchByEmail = raw.matchByEmail;
+  if (isOptBool(raw.matchByPhone)) out.matchByPhone = raw.matchByPhone;
+  if (isOptBool(raw.matchByName)) out.matchByName = raw.matchByName;
+  return out;
+}
+
+/** The stored policies map, repaired. Only book ids with real overrides survive. */
+export function normalizePolicies(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  const out = {};
+  let count = 0;
+  for (const [bookId, policy] of Object.entries(raw)) {
+    const id = text(bookId);
+    if (!id) continue;
+    const cleaned = normalizeBookPolicy(policy);
+    if (!Object.keys(cleaned).length) continue;
+    if (count >= MAX_POLICIES) break;
+    out[id] = cleaned;
+    count += 1;
+  }
+  return out;
+}
+
+/** Read the stored policies; rewrites when junk was dropped. */
+export async function readPolicies(api) {
+  const stored = await api.storage.get(POLICIES_KEY);
+  const raw = stored && typeof stored === 'object' ? stored : {};
+  const policies = normalizePolicies(raw);
+  if (JSON.stringify(policies) !== JSON.stringify(raw)) {
+    if (Object.keys(policies).length) await api.storage.set(POLICIES_KEY, policies);
+    else await api.storage.remove(POLICIES_KEY);
+  }
+  return policies;
+}
+
+/** Write a full policies map. An empty map removes the key. */
+export async function writePolicies(api, policies) {
+  const cleaned = normalizePolicies(policies);
+  if (Object.keys(cleaned).length) await api.storage.set(POLICIES_KEY, cleaned);
+  else await api.storage.remove(POLICIES_KEY);
+  return cleaned;
+}
+
+/**
+ * Flip or set one book's override. Pass `undefined` as value to clear the
+ * override (the book falls back to the global setting).
+ */
+export async function setBookPolicy(api, bookId, field, value) {
+  const policies = await readPolicies(api);
+  const id = text(bookId);
+  if (!id) return policies;
+  if (!['enabled', 'matchByEmail', 'matchByPhone', 'matchByName'].includes(field)) return policies;
+  const current = policies[id] ?? {};
+  if (value === undefined || value === null) {
+    delete current[field];
+  } else if (isOptBool(value)) {
+    current[field] = value;
+  } else {
+    return policies;
+  }
+  if (!Object.keys(normalizeBookPolicy(current)).length) {
+    delete policies[id];
+  } else {
+    policies[id] = normalizeBookPolicy(current);
+  }
+  return writePolicies(api, policies);
+}
+
+// ── Ignore rules ────────────────────────────────────────────────
+
+/** The stored ignore rules, repaired. */
+export function normalizeIgnore(raw) {
+  if (!raw || typeof raw !== 'object') return { domains: [], tags: [] };
+  const domains = Array.isArray(raw.domains)
+    ? raw.domains.map((d) => text(d).toLowerCase()).filter(Boolean).slice(0, MAX_IGNORE)
+    : [];
+  const tags = Array.isArray(raw.tags)
+    ? raw.tags.map((t) => text(t)).filter(Boolean).slice(0, MAX_IGNORE)
+    : [];
+  return { domains, tags };
+}
+
+/** Read the stored ignore rules; rewrites when junk was dropped. */
+export async function readIgnore(api) {
+  const stored = await api.storage.get(IGNORE_KEY);
+  const raw = stored && typeof stored === 'object' ? stored : {};
+  const ignore = normalizeIgnore(raw);
+  if (JSON.stringify(ignore) !== JSON.stringify(raw)) {
+    if (ignore.domains.length || ignore.tags.length) await api.storage.set(IGNORE_KEY, ignore);
+    else await api.storage.remove(IGNORE_KEY);
+  }
+  return ignore;
+}
+
+/** Write a full ignore map. Empty lists remove the key. */
+export async function writeIgnore(api, ignore) {
+  const cleaned = normalizeIgnore(ignore);
+  if (cleaned.domains.length || cleaned.tags.length) await api.storage.set(IGNORE_KEY, cleaned);
+  else await api.storage.remove(IGNORE_KEY);
+  return cleaned;
+}
+
+// ── Application ─────────────────────────────────────────────────
+
+/** The ids a card belongs to. */
+function cardBookIds(card) {
+  const ids = card?.addressBookIds;
+  if (!ids) return [];
+  if (Array.isArray(ids)) return ids.filter((id) => typeof id === 'string' && id);
+  return Object.keys(ids).filter((id) => ids[id]);
+}
+
+/** The tags (keywords) of a card. */
+function cardTags(card) {
+  const kw = card?.keywords;
+  if (Array.isArray(kw)) return kw.map((k) => text(k)).filter(Boolean);
+  if (kw && typeof kw === 'object') {
+    return Object.values(kw).map((entry) => text(entry?.label ?? entry?.name ?? entry)).filter(Boolean);
+  }
+  return [];
+}
+
+/** The email domains of a card, lower-cased. */
+function cardEmailDomains(card) {
+  const emails = card?.emails;
+  const list = Array.isArray(emails) ? emails : Object.values(emails ?? {});
+  return list.map((entry) => {
+    const address = text(typeof entry === 'string' ? entry : entry?.address);
+    const at = address.lastIndexOf('@');
+    return at >= 0 ? address.slice(at + 1).toLowerCase() : '';
+  }).filter(Boolean);
+}
+
+/**
+ * Whether a card is ignored by the current rules: it matches a domain or a tag.
+ */
+export function isCardIgnored(card, ignore) {
+  if (!ignore) return false;
+  const { domains, tags } = ignore;
+  if (domains?.length) {
+    const cardDomains = cardEmailDomains(card);
+    if (cardDomains.some((d) => domains.includes(d))) return true;
+  }
+  if (tags?.length) {
+    const cardTagSet = cardTags(card).map((t) => t.toLowerCase());
+    if (tags.some((tag) => cardTagSet.includes(tag.toLowerCase()))) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a card is scannable: it must belong to at least one enabled book.
+ * Cards with no books are always scannable.
+ */
+export function isCardScannable(card, policies) {
+  if (!policies || !Object.keys(policies).length) return true;
+  const ids = cardBookIds(card);
+  if (!ids.length) return true;
+  return ids.some((id) => {
+    const policy = policies[id];
+    return !policy || policy.enabled !== false;
+  });
+}
+
+/**
+ * The effective match options for one card, given per-book overrides and the
+ * global options. The most permissive setting across every enabled book wins.
+ */
+export function effectiveOpts(card, policies, globalOpts = {}) {
+  if (!policies || !Object.keys(policies).length) return globalOpts;
+  const ids = cardBookIds(card);
+  if (!ids.length) return globalOpts;
+  const result = {
+    matchByEmail: globalOpts.matchByEmail !== false,
+    matchByPhone: globalOpts.matchByPhone !== false,
+    matchByName: globalOpts.matchByName !== false,
+    region: globalOpts.region,
+  };
+  const enabledIds = ids.filter((id) => {
+    const policy = policies[id];
+    return !policy || policy.enabled !== false;
+  });
+  if (!enabledIds.length) return result;
+  const bookOpts = (id) => policies[id] ?? {};
+  result.matchByEmail = enabledIds.some((id) => bookOpts(id).matchByEmail !== false);
+  result.matchByPhone = enabledIds.some((id) => bookOpts(id).matchByPhone !== false);
+  result.matchByName = enabledIds.some((id) => bookOpts(id).matchByName !== false);
+  return result;
+}
+
+/**
+ * Filter a card list to the scannable, non-ignored subset. Per-card effective
+ * options are returned alongside so the caller can use them instead of the
+ * global ones.
+ */
+export function filterForScan(cards, { policies, ignore, globalOpts } = {}) {
+  const list = Array.isArray(cards) ? cards : [];
+  const hasPolicies = policies && Object.keys(policies).length;
+  const hasIgnore = ignore && (ignore.domains?.length || ignore.tags?.length);
+  if (!hasPolicies && !hasIgnore) {
+    return { cards: list, perCardOpts: null };
+  }
+  const filtered = [];
+  const perCardOpts = [];
+  for (const card of list) {
+    if (hasPolicies && !isCardScannable(card, policies)) continue;
+    if (hasIgnore && isCardIgnored(card, ignore)) continue;
+    filtered.push(card);
+    perCardOpts.push(hasPolicies ? effectiveOpts(card, policies, globalOpts) : globalOpts);
+  }
+  return { cards: filtered, perCardOpts };
+}

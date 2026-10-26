@@ -7,6 +7,36 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.27.0] — 2026-10-25
+
+### Added
+
+- **Per-address-book duplicate policies and ignore rules (#7).** The Duplicates
+  page gains a *Policies* button that opens a dialog to configure how each
+  address book is scanned:
+
+  | Setting | What it does |
+  |---|---|
+  | *Scan this book* | exclude a book from scanning entirely |
+  | *Match by email / phone / name* | override the global strategy per book |
+
+  Plus global **ignore rules** that skip contacts by email domain or tag —
+  useful for noreply addresses, service accounts, or contacts you deliberately
+  keep separate.
+
+  A contact in multiple books uses the most permissive setting across all its
+  enabled books, so a book that opts out never silences a match another book
+  still wants. Cards with no book (the default book) are always scanned.
+
+  The policies apply to every scan — the Duplicates page, the command palette,
+  the Home overview and the Health tab.
+
+### Notes
+
+Policies are stored in `api.storage` (per browser, like projects) and repair
+themselves on read. An empty policy set is the same as the previous behaviour:
+every book is scanned with the global strategies.
+
 ## [1.26.0] — 2026-10-25
 
 ### Added

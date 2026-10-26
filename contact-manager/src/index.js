@@ -32,6 +32,7 @@ import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
 import { makeImportDialog } from './lib/import-dialog.js';
 import { makeExportDialog } from './lib/export-dialog.js';
+import { makePoliciesDialog } from './lib/policies-dialog.js';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from './lib/capabilities.js';
@@ -65,6 +66,7 @@ const BulkDialog = makeBulkDialog(React, api);
 const NormaliseDialog = makeNormaliseDialog(React, api);
 const ImportDialog = makeImportDialog(React, api);
 const ExportDialog = makeExportDialog(React, api);
+const PoliciesDialog = makePoliciesDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
@@ -72,6 +74,7 @@ function DialogSlot(props) {
   if (props?.normalise) return React.createElement(NormaliseDialog, props);
   if (props?.importWizard) return React.createElement(ImportDialog, props);
   if (props?.exportSelection) return React.createElement(ExportDialog, props);
+  if (props?.policiesDialog) return React.createElement(PoliciesDialog, props);
   return React.createElement(ReviewDialog, props);
 }
 
