@@ -10,10 +10,10 @@
 // its scan button, done once here instead of on every visit to a section.
 
 import {
-  Badge, Button, Card, EmptyState, Heading, InfoBar, List, ListRow, Page, PageHeader, Section, Stack, Text,
+  Badge, Button, Card, EmptyState, Heading, InfoBar, List, ListRow, Page, PageHeader, Row, Section, Stack, Text,
 } from '@plugin-host/ui';
 import { bookNamesById, loadBooks, loadCards, matchOptions } from './contacts.js';
-import { findDuplicateGroups, LAST_SCAN_KEY } from './duplicates.js';
+import { findDuplicateGroups, LAST_SCAN_KEY, readDismissed } from './duplicates.js';
 import { readProjects } from './projects.js';
 import { healthSummary } from './health.js';
 import { readRegion } from './normalise.js';
@@ -22,6 +22,7 @@ import { undoWindowMinutes } from './labels.js';
 import { readUndo } from './undo.js';
 import { ACTION_BAR } from './layout.js';
 import { readPolicies, readIgnore } from './book-policies.js';
+import { acknowledge, buildDigest, digestWindowDays, groupSignatures, readDigestState } from './digest.js';
 
 export function makeHomePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useState } = React;
@@ -29,12 +30,13 @@ export function makeHomePage(React, api) {
 
   return function HomePage({ onNavigate, revision, onDataChanged } = {}) {
     const [state, setState] = useState({ status: 'loading' });
+    const [digest, setDigest] = useState(null);
     const go = (tab) => { if (typeof onNavigate === 'function') onNavigate(tab); };
 
     const load = useCallback(async () => {
       setState({ status: 'loading' });
       try {
-        const [cards, bookList, projects, region, undo, lastScan, policies, ignore] = await Promise.all([
+        const [cards, bookList, projects, region, undo, lastScan, policies, ignore, dismissed, told] = await Promise.all([
           loadCards(api),
           loadBooks(api),
           readProjects(api),
@@ -43,9 +45,30 @@ export function makeHomePage(React, api) {
           api.storage.get(LAST_SCAN_KEY),
           readPolicies(api),
           readIgnore(api),
+          readDismissed(api),
+          readDigestState(api),
         ]);
         const books = bookNamesById(bookList);
         const groups = findDuplicateGroups(cards, { ...matchOptions(api.plugin?.settings), region, policies, ignore }, []);
+        // The digest only counts groups the user has not already hidden: a
+        // hidden group is a decision, and the digest is for undecided ones.
+        const hidden = new Set(dismissed);
+        const visible = groups.filter((group) => !hidden.has(group.signature));
+        const signatures = groupSignatures(visible);
+        const days = digestWindowDays(api.plugin?.settings);
+        const at = lastScan?.when ? Date.parse(String(lastScan.when)) : NaN;
+        setDigest(buildDigest({
+          at,
+          signatures,
+          acknowledged: told.signatures,
+          seenAt: told.at,
+          baseline: told.baseline,
+          days,
+        }));
+        // First look with the digest on: remember the baseline, so the next
+        // group to appear is recognisable as *new* rather than "the address
+        // book", which would be a false alarm on every fresh browser.
+        if (days && !told.baseline) await acknowledge(api, signatures);
         setState({
           status: 'ready',
           cards,
@@ -80,6 +103,28 @@ export function makeHomePage(React, api) {
       contacts: (state.groups ?? []).reduce((n, group) => n + group.members.length, 0),
     });
 
+    /** Why the digest is showing: something changed, or nothing was scanned. */
+    const digestLine = (entry) => {
+      const locale = api.i18n.getLocale();
+      const format = (ms) => (ms ? new Date(ms).toLocaleDateString(locale) : '');
+      if (entry.changed) {
+        return t('digest.changed', { fresh: entry.fresh, when: format(entry.seenAt ?? entry.at) });
+      }
+      return t('digest.stale', { days: digestWindowDays(api.plugin?.settings), when: format(entry.at) });
+    };
+
+    // Both buttons mean "I have been told": reviewing acknowledges before the
+    // dialog opens, so the digest never repeats what it has just shown.
+    const digestAcknowledge = async () => {
+      await acknowledge(api, digest?.signatures ?? []);
+      setDigest(null);
+    };
+    const digestReview = async () => {
+      await digestAcknowledge();
+      await findDuplicates(api);
+      onDataChanged?.();
+    };
+
     const menu = () => h('div', { 'data-pane': 'menu', style: ACTION_BAR },
       h(Button, { icon: 'search', onClick: () => void findDuplicates(api).then(() => onDataChanged?.()) }, t('action.scanCommand')),
       h(Button, { variant: 'secondary', icon: 'user-plus', onClick: () => void newContact(api).then(() => onDataChanged?.()) }, t('action.newContact')),
@@ -104,6 +149,14 @@ export function makeHomePage(React, api) {
       state.status === 'error' ? h(EmptyState, { title: t('home.unavailable') }) : null,
       state.status === 'ready'
         ? h(Stack, { gap: 4 },
+            digest
+              ? h(InfoBar, { tone: 'warning', title: t('digest.title') },
+                  h(Stack, { gap: 2 },
+                    h(Text, { tone: 'muted' }, digestLine(digest)),
+                    h(Row, { gap: 2 },
+                      h(Button, { size: 'sm', icon: 'search', onClick: () => void digestReview() }, t('digest.review')),
+                      h(Button, { size: 'sm', variant: 'secondary', onClick: () => void digestAcknowledge() }, t('digest.dismiss')))))
+              : null,
             h(InfoBar, { tone: state.groups.length ? 'warning' : 'success' },
               state.groups.length ? duplicateLine() : t('home.duplicatesClean')),
             h(Card, null,
