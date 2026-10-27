@@ -8,17 +8,26 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import { makeHomePage } from '../src/lib/home-page.js';
+import { findDuplicateGroups } from '../src/lib/duplicates.js';
 import { makeCard } from './fixtures.mjs';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
 afterEach(cleanup);
 
+const DAY_MS = 24 * 3600 * 1000;
+const CARL = makeCard({ id: 'c', name: 'Carl Jung', emails: ['carl@example.org'] });
+const KARL = makeCard({ id: 'd', name: 'K. Jung', emails: ['carl@example.org'] });
+
 const ADA = makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'], phones: ['+491761234567'] });
 const TWIN = makeCard({ id: 'b', name: 'A. Lovelace', emails: ['ada@example.org'], phones: ['+493012345678'] });
 
-function homeApi(handlers = {}) {
+/** The signature of the ADA/TWIN group, as the page computes it. */
+const adaTwinSignature = () => findDuplicateGroups([ADA, TWIN], {}, [])[0].signature;
+
+function homeApi(handlers = {}, settings = {}) {
   return fakeApi({
     translations: manifest.locales,
+    settings,
     handlers: {
       'contacts.list': async () => [ADA, TWIN],
       'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
@@ -153,5 +162,98 @@ describe('telling the other pages that something changed', () => {
     cleanup();
     await draw(1);
     expect(api.calls('contacts.list')).toHaveLength(2);
+  });
+});
+
+describe('the duplicate digest', () => {
+  const stale = () => ({ when: new Date(Date.now() - 10 * DAY_MS).toISOString(), contacts: 2, books: 1 });
+
+  it('stays quiet while the reminder is off', async () => {
+    const api = homeApi();
+    await api.storage.set('lastScan', stale());
+    await renderPage(api);
+
+    expect(screen.queryByText('Duplicate digest')).toBeNull();
+    // and nothing is remembered: the feature was not on
+    expect(await api.storage.get('scanDigest')).toBeNull();
+  });
+
+  it('reminds about a scan older than the window', async () => {
+    const api = homeApi({}, { digestDays: 7 });
+    await api.storage.set('lastScan', stale());
+    await renderPage(api);
+
+    expect(screen.getByText('Duplicate digest')).toBeTruthy();
+    expect(screen.getByText(/The last scan was .*more than 7 day\(s\) ago\./)).toBeTruthy();
+    // the first look also sets the baseline for what comes next
+    expect((await api.storage.get('scanDigest')).signatures).toHaveLength(1);
+  });
+
+  it('does not repeat a reminder the user has already been given', async () => {
+    const api = homeApi({}, { digestDays: 7 });
+    await api.storage.set('lastScan', stale());
+    await renderPage(api);
+    expect(screen.getByText('Duplicate digest')).toBeTruthy();
+
+    cleanup();
+    await renderPage(api);
+    expect(screen.queryByText('Duplicate digest')).toBeNull();
+  });
+
+  it('reports a group that appears after the user was last shown the list', async () => {
+    let cards = [ADA, TWIN];
+    const api = homeApi({ 'contacts.list': async () => cards }, { digestDays: 7 });
+    await api.storage.set('lastScan', { when: new Date().toISOString(), contacts: 2, books: 1 });
+    await renderPage(api);
+    // the group that was already there is not "new"
+    expect(screen.queryByText('Duplicate digest')).toBeNull();
+
+    cleanup();
+    cards = [ADA, TWIN, CARL, KARL];
+    await renderPage(api);
+    expect(screen.getByText('Duplicate digest')).toBeTruthy();
+    expect(screen.getByText(/1 group\(s\) appeared since you were last shown them/)).toBeTruthy();
+  });
+
+  it('acknowledges what it showed, so dismissing it sticks', async () => {
+    const api = homeApi({}, { digestDays: 7 });
+    await api.storage.set('lastScan', stale());
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Got it' })); });
+    await waitFor(() => expect(screen.queryByText('Duplicate digest')).toBeNull());
+    expect((await api.storage.get('scanDigest')).signatures).toHaveLength(1);
+
+    cleanup();
+    await renderPage(api);
+    expect(screen.queryByText('Duplicate digest')).toBeNull();
+  });
+
+  it('reviews the groups it reports, through the one review dialog', async () => {
+    const api = homeApi({}, { digestDays: 7 });
+    await api.storage.set('lastScan', stale());
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Review now' })); });
+
+    await waitFor(() => expect(api.calls('ui.openDialog')).toHaveLength(1));
+    expect(api.calls('ui.openDialog')[0].args[0].extraProps.groups).toHaveLength(1);
+  });
+
+  it('leaves hidden groups out: a hidden group is a decision, not news', async () => {
+    const hidden = homeApi({}, { digestDays: 7 });
+    await hidden.storage.set('scanDigest', { at: new Date().toISOString(), signatures: [] });
+    await hidden.storage.set('dismissedGroups', [adaTwinSignature()]);
+    await hidden.storage.set('lastScan', { when: new Date().toISOString(), contacts: 2, books: 1 });
+    await renderPage(hidden);
+    expect(screen.queryByText('Duplicate digest')).toBeNull();
+
+    // the positive twin: the same setup with the group visible does report it
+    cleanup();
+    const visible = homeApi({}, { digestDays: 7 });
+    await visible.storage.set('scanDigest', { at: new Date().toISOString(), signatures: [] });
+    await visible.storage.set('lastScan', { when: new Date().toISOString(), contacts: 2, books: 1 });
+    await renderPage(visible);
+    expect(screen.getByText('Duplicate digest')).toBeTruthy();
   });
 });
