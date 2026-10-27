@@ -906,6 +906,7 @@ committed `build/` directory. Delete the feature branch once its PR has landed
 | A fixture shaped like the *code*, not like the *host* | The test passes and the feature is dead — `keywords: { k1: { label } }` ignored every real tag, because tags are the map's **keys** | Build cards with `makeCard`, and read fields through `contacts.js` |
 | A "stays silent" test with no positive twin | Silence passes for the wrong reason — a function that always returns nothing satisfies it | Assert the same path still fires when the rule does *not* apply |
 | A control drawn from one expression and toggled by another | `checked: v !== false` with `onChange(!v)` makes the first click do nothing | Derive both from the same reading of the value |
+| A test written against the permissive fake api | It passes against methods the host does not have — that is how three shipped profile sections were inert (#75) | Declare the shape: `fakeApi({ host: { absent, exposes } })` |
 
 ---
 

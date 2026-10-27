@@ -30,6 +30,12 @@
   #71, #72, #73, #76, #78, #80, #81, #83, #85, #87, #89, #91, #93, #95, #97, #98, #99,
   #101, #102, #103, #104, #106, #107, #108, #110 and #112 merged). Nothing is
   waiting to be released.
+- **Test double**: `test-utils/fake-api.mjs` can now declare a host **shape** —
+  `fakeApi({ host: { absent: [...], exposes: { email: ['query', 'send'] } } })` —
+  so "the method was renamed" and "the namespace is gone" are expressible in a
+  test instead of invisible to it. The permissive default is unchanged and now
+  documented as deliberate. **No version bump**: `test-utils/` is not shipped, so
+  the bundle is identical to v1.29.0 and there is nothing to release.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
