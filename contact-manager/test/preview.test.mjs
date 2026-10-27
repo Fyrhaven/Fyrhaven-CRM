@@ -40,6 +40,21 @@ describe('previewFields', () => {
     expect(field(fields, 'notes').added).toEqual([{ value: 'Friend', fromId: 'b' }]);
     expect(field(fields, 'phones').conflicts).toEqual([]);
   });
+  it('shows a map-valued field filled from a donor, value by value', () => {
+    // The plan reports one `added` entry per value. Reporting the whole map made
+    // DISPLAY read it as a single entry, so an organisation filled from a donor
+    // was written to the contact but never appeared in the preview.
+    const kept = makeCard({ id: 'a', name: 'Bob Smith', emails: ['bob@x.de'] });
+    const donor = makeCard({
+      id: 'b', name: 'Bob Smith', emails: ['bob@x.de'],
+      organizations: { o1: { name: 'Acme' }, o2: { name: 'Initech' } },
+    });
+    const fields = previewFields(planMerge(groupOf(kept, donor), 'a'));
+    expect(field(fields, 'organizations').added)
+      .toEqual([{ value: 'Acme', fromId: 'b' }, { value: 'Initech', fromId: 'b' }]);
+  });
+
+
 
   it('flags a different single value of another contact as not merged', () => {
     const kept = makeCard({ id: 'a', name: 'Bob Smith', emails: ['bob@x.de'], organizations: { o: { name: 'Acme' } } });

@@ -197,3 +197,46 @@ describe('policies dialog: the per-book controls', () => {
   });
 });
 
+
+// ── Protected fields (#7) ───────────────────────────────────────
+
+describe('policies dialog: protected fields', () => {
+  const field = (name) => screen.getByLabelText(en()[`policies.field.${name}`]);
+
+  it('stores a field as protected, and reads it back', async () => {
+    const { api, state } = await openDialog();
+    expect(field('name').getAttribute('aria-checked')).toBe('false');
+    await click(field('name'));
+    expect(field('name').getAttribute('aria-checked')).toBe('true');
+    await save();
+    await waitFor(() => expect(state.result).toEqual({ saved: true }));
+    expect(await api.storage.get('bookPolicies')).toEqual({ b1: { protectedFields: ['name'] } });
+  });
+
+  it('unprotects a field again, leaving no empty list behind', async () => {
+    const api = dialogApi();
+    await api.storage.set('bookPolicies', { b1: { protectedFields: ['name'] } });
+    const Dialog = makePoliciesDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { policiesDialog: true, books: ONE_BOOK, onResult: () => {} }));
+    });
+    await waitFor(() => screen.getByText('Personal'));
+    expect(field('name').getAttribute('aria-checked')).toBe('true');
+
+    await click(field('name'));
+    await save();
+    // Nothing left to store: the book's policy goes, rather than an empty list.
+    await waitFor(() => expect(api.storage.get('bookPolicies')).resolves.toBeNull());
+  });
+
+  it('keeps a protected field alongside the other settings of the same book', async () => {
+    const { api, state } = await openDialog();
+    await click(within(strategy('policies.matchByName')).getByRole('radio', { name: en()['policies.off'] }));
+    await click(field('emails'));
+    await save();
+    await waitFor(() => expect(state.result).toEqual({ saved: true }));
+    expect(await api.storage.get('bookPolicies'))
+      .toEqual({ b1: { matchByName: false, protectedFields: ['emails'] } });
+  });
+});
+

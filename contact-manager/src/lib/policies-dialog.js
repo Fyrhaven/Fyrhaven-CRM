@@ -5,7 +5,9 @@
 import {
   Button, Checkbox, DialogButtons, Input, Row, Section, Segmented, Stack, Text,
 } from '@plugin-host/ui';
-import { readPolicies, readIgnore, writePolicies, writeIgnore } from './book-policies.js';
+import {
+  readPolicies, readIgnore, writePolicies, writeIgnore, PROTECTED_FIELDS,
+} from './book-policies.js';
 import { reportError } from './report.js';
 
 // The three match strategies a book can override, and the label each carries.
@@ -72,6 +74,16 @@ export function makePoliciesDialog(React, api) {
       setBookField(bookId, field, value === 'default' ? undefined : value === 'on');
     };
 
+    // Protected fields are a plain list on the policy: add or remove one, and
+    // drop the key entirely when the last one goes.
+    const toggleProtected = (bookId, field) => {
+      const current = policyFor(bookId).protectedFields ?? [];
+      const next = current.includes(field)
+        ? current.filter((name) => name !== field)
+        : [...current, field];
+      setBookField(bookId, 'protectedFields', next.length ? next : undefined);
+    };
+
     const strategyOptions = () => [
       { value: 'default', label: t('policies.default') },
       { value: 'on', label: t('policies.on') },
@@ -133,6 +145,16 @@ export function makePoliciesDialog(React, api) {
                 value: strategyValue(book.id, field),
                 options: strategyOptions(),
                 onChange: (value) => setStrategy(book.id, field, value),
+              })),
+            ),
+            h(Text, { weight: 'semibold' }, t('policies.protected')),
+            h(Text, { tone: 'muted' }, t('policies.protectedHint')),
+            h(Row, { gap: 3, wrap: true },
+              ...PROTECTED_FIELDS.map((field) => h(Checkbox, {
+                key: field,
+                checked: (policyFor(book.id).protectedFields ?? []).includes(field),
+                onChange: () => toggleProtected(book.id, field),
+                label: t(`policies.field.${field}`),
               })),
             ),
           )),
