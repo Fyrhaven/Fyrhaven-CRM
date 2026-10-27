@@ -60,11 +60,12 @@ signatures, the last scan summary).
 | Create/update hooks | After a contact is saved | A non-blocking warning when the saved contact looks like an existing one |
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
+| Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
-| `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | The review/merge dialog, the **contact editor** and the **project editor** — the only places that write |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **bulk editor**, the **import wizard**, the **export choice** and the **policies** dialog |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -746,9 +747,9 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-home.test.mjs` | The main page: the headline numbers, the last-scan line, each row leading into its section, and that the menu runs the same actions as the palette |
 | `test/csv.test.mjs` | The RFC 4180 cases: quoted commas and newlines, doubled quotes, CRLF, a BOM, empty fields |
 | `test/vcard-parse.test.mjs` | vCard 3.0 and 4.0, folded lines, grouped properties, the escapes, and junk |
-| `test/import.test.mjs` | Header guessing for Google and Apple exports, row to draft, and the duplicate plan by email, phone and name |
+| `test/import.test.mjs` | Header guessing for Google and Apple exports, row to draft, the duplicate plan by email, phone and name, the per-duplicate key, and the merge groups an import queues |
 | `test/import-templates.test.mjs` | Remembered mappings: found by header row, replaced, capped, repaired |
-| `test/ui-import.test.mjs` | The wizard: guessing, previewing, holding back a duplicate, remembering a mapping, vCard, and cancel |
+| `test/ui-import.test.mjs` | The wizard: guessing, previewing, a decision per duplicate (skip / merge / separate), the batch default, remembering a mapping, vCard, and cancel |
 | `test/export.test.mjs` | The CSV writer, the column widths, and the **round trip** for both formats: export, re-import, compare |
 | `test/retention.test.mjs` | The age thresholds at every boundary, the buckets, and that no date means no claim |
 | `test/remote.test.mjs` | The server client: unconfigured, no proxy, a refusal, a throw, a bad answer, and the URL and credential it sends |
@@ -1036,14 +1037,20 @@ Phone numbers
   phoneKey(number, region) is what detection compares
   isValidE164 requires the '+' and 7..15 digits with no leading zero
 
-Import (#19, import half)
+Import (#19, import half; a decision per duplicate since #4)
   parseCsv(text) -> { delimiter, headers, rows }   RFC 4180, BOM, CRLF
   parseVCards(text) -> draft-shaped records; 3.0 and 4.0, folded, grouped
   guessMapping(headers) -> a field per column; guessField is the one-header form
   rowToDraft(row, mapping, { bookIds }) -> the editor's draft shape
   planImport(drafts, existing, { region }) -> { fresh, duplicates }
     matched on the same keys detection uses, so an import cannot create duplicates
-  applyImport(api, drafts) -> { created, failed }, one create per draft
+  duplicateKey(entry) -> a stable key for one duplicate, so a per-contact
+    decision survives the drafts being rebuilt on every render
+  applyImport(api, drafts) -> { created, failed, cards }, one create per draft
+    cards pairs each draft that was written with the card the host returned
+  mergeGroupsFromImport(merges, created) -> review-dialog groups, [existing, imported]
+    each carries keepId = the existing contact, so "merge" folds the file in;
+    the wizard queues them and actions.js opens the one review dialog (#4)
   remembered mappings in 'importMappings', keyed by the header row
   NOT imported: photos, URLs, custom fields (see the CHANGELOG)
 
