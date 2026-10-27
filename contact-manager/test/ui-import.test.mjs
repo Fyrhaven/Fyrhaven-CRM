@@ -108,14 +108,51 @@ describe('the import wizard', () => {
     expect(api.calls('contacts.create')[0].args[0].addressBookIds).toEqual({ b1: true });
   });
 
-  it('imports the duplicates too when the user says so', async () => {
+  it('imports a duplicate as a separate contact when the user says so', async () => {
     const api = importApi();
     const results = await open(api);
     await pickFile('google.csv', GOOGLE_CSV);
     await waitFor(() => expect(screen.getByText('1 contact(s) would be created.')).toBeTruthy());
 
     await act(async () => {
-      fireEvent.click(screen.getByLabelText('Skip those, import only the new ones'));
+      fireEvent.change(screen.getByLabelText('For Ada Lovelace'), { target: { value: 'separate' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Import' })); });
+
+    await waitFor(() => expect(results).toHaveLength(1));
+    expect(results[0]).toMatchObject({ created: 2, skipped: 0 });
+    expect(results[0].mergeGroups).toEqual([]);
+  });
+
+  it('hands a duplicate the user chose to merge back to the review dialog', async () => {
+    const api = importApi();
+    const results = await open(api);
+    await pickFile('google.csv', GOOGLE_CSV);
+    await waitFor(() => expect(screen.getByText('1 contact(s) look like ones you already have.')).toBeTruthy());
+
+    // Ada matches the contact already in the book: merge the file's details in
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('For Ada Lovelace'), { target: { value: 'merge' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Import' })); });
+
+    await waitFor(() => expect(results).toHaveLength(1));
+    // the imported copy is written, then the pair is queued for the one dialog
+    // every merge goes through
+    expect(results[0]).toMatchObject({ created: 2, skipped: 0 });
+    expect(results[0].mergeGroups).toHaveLength(1);
+    expect(results[0].mergeGroups[0].members.map((member) => member.id)).toEqual(['a', 'new']);
+    expect(results[0].mergeGroups[0].keepId).toBe('a');
+  });
+
+  it('applies the batch default to every duplicate at once', async () => {
+    const api = importApi();
+    const results = await open(api);
+    await pickFile('google.csv', GOOGLE_CSV);
+    await waitFor(() => expect(screen.getByText('1 contact(s) would be created.')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('For every one of them'), { target: { value: 'separate' } });
     });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Import' })); });
 

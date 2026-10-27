@@ -10,7 +10,7 @@
 
 import { alignRow } from './csv.js';
 import { cardFromDraft, emptyDraft } from './editor.js';
-import { cardKeys } from './duplicates.js';
+import { cardKeys, groupFromSelection } from './duplicates.js';
 import { ADDRESS_FIELDS } from './import-fields.js';
 
 /**
@@ -111,21 +111,74 @@ export function planImport(drafts, existing, { region = '' } = {}) {
 }
 
 /**
+ * A stable key for one duplicate of the plan, so a per-group decision survives
+ * a re-render (the drafts are rebuilt whenever the mapping or the target book
+ * changes, so their object identity does not). Keyed by what matched, why and
+ * which draft — the same trio the wizard shows the user.
+ */
+export function duplicateKey(entry) {
+  const draft = entry?.draft ?? {};
+  const label = draft.emails?.[0]?.address
+    || [draft.given, draft.surname].filter(Boolean).join(' ')
+    || draft.fullName
+    || draft.phones?.[0]?.number
+    || '';
+  return `${entry?.match?.id ?? ''}|${entry?.reason ?? ''}|${label}`;
+}
+
+/**
+ * The review-dialog groups for the duplicates the user chose to *merge*.
+ *
+ * A merge is the one decision the import cannot make on its own: every merge in
+ * this plugin goes through the review dialog (§9.2), so the wizard queues the
+ * pair and this turns the pairs into groups the dialog understands. Each group
+ * is `[existing, imported]` — the existing contact is preferred as the one to
+ * keep, because "merge" here means "fold what the file adds into the contact I
+ * already have" — and carries `keepId` so the dialog opens on that choice.
+ *
+ * Pairs whose imported card the host did not accept are dropped: there is
+ * nothing to merge, and the import already reported the failure.
+ *
+ * @param {Array<{draft: object, match: object}>} merges the merge decisions
+ * @param {Array<{draft: object, card: object}>} created what `applyImport` wrote
+ * @returns {object[]} groups for `api.ui.openDialog`'s review dialog
+ */
+export function mergeGroupsFromImport(merges, created) {
+  const byDraft = new Map((Array.isArray(created) ? created : []).map((entry) => [entry.draft, entry.card]));
+  const groups = [];
+  for (const entry of Array.isArray(merges) ? merges : []) {
+    const card = byDraft.get(entry?.draft);
+    if (!card?.id || !entry?.match?.id) continue;
+    const group = groupFromSelection([entry.match, card]);
+    group.keepId = entry.match.id;
+    groups.push(group);
+  }
+  return groups;
+}
+
+/**
  * Writes the drafts the user accepted. A draft the host refuses is counted in
  * `failed` and reported, never silently dropped.
  *
- * @returns {Promise<{created: number, failed: number}>}
+ * `cards` pairs every draft that was created with the card the host returned,
+ * so a caller that has to keep working with the new contact — the wizard's
+ * merge decisions, which hand the pair to the review dialog — does not have to
+ * guess the id the host assigned.
+ *
+ * @returns {Promise<{created: number, failed: number, cards: Array<{draft: object, card: object}>}>}
  */
 export async function applyImport(api, drafts) {
   let created = 0;
   let failed = 0;
+  const cards = [];
   for (const draft of Array.isArray(drafts) ? drafts : []) {
     try {
-      await api.contacts.create(cardFromDraft(draft, 'create'));
+      const card = await api.contacts.create(cardFromDraft(draft, 'create'));
       created += 1;
+      cards.push({ draft, card });
     } catch {
       failed += 1;
     }
   }
-  return { created, failed };
+  return { created, failed, cards };
 }
