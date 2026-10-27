@@ -380,10 +380,22 @@ A per-book policy is keyed by book id and holds any of four booleans:
 `undefined` means "use the global setting". The dialog offers that as a third
 position — *Default*, beside *On* and *Off* — so an override can always be taken
 back: a book forced off can return to the global behaviour without anyone
-editing storage by hand. The ignore rules are a single `{ domains, tags }` list
-that skips a contact by email domain or by tag, whatever book it lives in. A tag
-is read the way the search box reads it — the **keys** of `keywords` — so
-`tag:vip` and an ignore rule for `vip` always agree.
+editing storage by hand.
+
+The ignore rules are one list, `{ domains, tags, companies }`, that skips a
+contact whatever book it lives in:
+
+| Rule | Matches |
+|---|---|
+| `domains` | an email domain, folded to lower case |
+| `tags` | a tag, read the way the search box reads it — the **keys** of `keywords` — so `tag:vip` and an ignore rule for `vip` always agree |
+| `companies` | **part** of the organisation name, case-insensitively |
+
+Companies match on a *part* of the name, so one rule covers `Acme`, `Acme Inc.`
+and `ACME GmbH`; an exact match would fail silently on the spellings nobody can
+predict. `hasIgnoreRules(ignore)` is the single place that decides whether any
+rule is set — every caller asks it rather than testing the fields itself, which
+is how a rule that set only `companies` first slipped past the scan.
 
 Two rules decide the outcome, and both lean towards scanning rather than
 silence:
@@ -921,17 +933,21 @@ Detection
 
 Book policies (#7)
   readPolicies / writePolicies, key 'bookPolicies', one record per book id
-  readIgnore / writeIgnore, key 'bookIgnore', { domains, tags }
+  readIgnore / writeIgnore, key 'bookIgnore', { domains, tags, companies }
   normalizePolicies drops unknown fields and junk; both repair on read
   isCardScannable(card, policies) — a card with no book is always scannable
   effectiveOpts(card, policies, globalOpts) — the most permissive enabled
     book wins, so a book that opts out never silences another book
-  isCardIgnored(card, ignore) — by email domain or by tag
+  isCardIgnored(card, ignore) — by email domain, by tag, or by part of the
+    organisation name, case-insensitively
+  hasIgnoreRules(ignore) is the ONE place that decides whether any rule is set;
+    a caller testing the fields itself is how a companies-only rule was missed
   filterForScan(cards, { policies, ignore, globalOpts }) -> { cards, perCardOpts }
   an empty policy set is the previous behaviour: every book, global strategies
   a card's tags are the KEYS of its keywords — the reading search.js uses, so
     `tag:vip` and an ignore rule for `vip` cannot disagree
-  cards are read through contacts.js (bookIds, emailEntries), never re-read here
+  cards are read through contacts.js (bookIds, emailEntries, orgName), never
+    re-read here
   policyAwareOptions(api) assembles detection options and policies in one call
   findGroupFor honours the policies too, so the contact-details hint and the
     save-time warning agree with the scan

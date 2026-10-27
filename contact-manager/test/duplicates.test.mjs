@@ -215,12 +215,25 @@ describe('per-book policies in findDuplicateGroups', () => {
     expect(findDuplicateGroups(cards, { ignore: { domains: ['spam.com'], tags: [] } })).toEqual([]);
   });
 
-  it('skips contacts matching an ignore tag', () => {
+  it('skips contacts matching an ignore tag, on the keywords shape the host uses', () => {
+    // `{ tagName: true }`, not an array. The array shape is not something the
+    // host produces, and a test built on it hides a rule that matches nothing.
     const cards = [
-      { id: 'a', name: { full: 'Ada' }, emails: { e0: { address: 'ada@x.de' } }, addressBookIds: { b1: true }, keywords: ['do-not-merge'] },
-      { id: 'b', name: { full: 'Ada' }, emails: { e0: { address: 'ada@y.de' } }, addressBookIds: { b1: true } },
+      makeCard({ id: 'a', name: 'Ada', emails: ['ada@x.de'], keywords: { 'do-not-merge': true } }),
+      makeCard({ id: 'b', name: 'Ada', emails: ['ada@y.de'] }),
     ];
     expect(findDuplicateGroups(cards, { ignore: { domains: [], tags: ['do-not-merge'] } })).toEqual([]);
+  });
+
+  it('skips contacts matching an ignore company, on part of the name', () => {
+    const cards = [
+      makeCard({ id: 'a', name: 'Ada', emails: ['ada@x.de'], organizations: { o: { name: 'Acme Inc.' } } }),
+      makeCard({ id: 'b', name: 'Ada', emails: ['ada@y.de'] }),
+    ];
+    expect(findDuplicateGroups(cards, { ignore: { domains: [], tags: [], companies: ['acme'] } })).toEqual([]);
+    // The same cards are grouped the moment nothing is ignored — so the
+    // assertion above cannot pass because the two never matched anyway.
+    expect(findDuplicateGroups(cards, { ignore: { domains: [], tags: [], companies: [] } })).toHaveLength(1);
   });
 
   it('applies per-book match strategy overrides', () => {

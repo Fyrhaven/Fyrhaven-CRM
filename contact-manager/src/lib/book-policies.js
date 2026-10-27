@@ -24,7 +24,7 @@
 // is the safe direction: a book that opts out never silences a match another
 // book still wants.
 
-import { bookIds, detectionOptions, emailEntries } from './contacts.js';
+import { bookIds, detectionOptions, emailEntries, orgName } from './contacts.js';
 
 export const POLICIES_KEY = 'bookPolicies';
 export const IGNORE_KEY = 'bookIgnore';
@@ -137,14 +137,19 @@ export async function setBookPolicy(api, bookId, field, value) {
 
 /** The stored ignore rules, repaired. */
 export function normalizeIgnore(raw) {
-  if (!raw || typeof raw !== 'object') return { domains: [], tags: [] };
+  if (!raw || typeof raw !== 'object') return { domains: [], tags: [], companies: [] };
   const domains = Array.isArray(raw.domains)
     ? raw.domains.map((d) => text(d).toLowerCase()).filter(Boolean).slice(0, MAX_IGNORE)
     : [];
   const tags = Array.isArray(raw.tags)
     ? raw.tags.map((t) => text(t)).filter(Boolean).slice(0, MAX_IGNORE)
     : [];
-  return { domains, tags };
+  // Companies keep their casing — they are shown back to the user and matched
+  // case-insensitively — where a domain is a machine name and is folded.
+  const companies = Array.isArray(raw.companies)
+    ? raw.companies.map((c) => text(c)).filter(Boolean).slice(0, MAX_IGNORE)
+    : [];
+  return { domains, tags, companies };
 }
 
 /** Read the stored ignore rules; rewrites when junk was dropped. */
@@ -153,16 +158,21 @@ export async function readIgnore(api) {
   const raw = stored && typeof stored === 'object' ? stored : {};
   const ignore = normalizeIgnore(raw);
   if (JSON.stringify(ignore) !== JSON.stringify(raw)) {
-    if (ignore.domains.length || ignore.tags.length) await api.storage.set(IGNORE_KEY, ignore);
+    if (hasIgnoreRules(ignore)) await api.storage.set(IGNORE_KEY, ignore);
     else await api.storage.remove(IGNORE_KEY);
   }
   return ignore;
 }
 
+/** Whether any ignore rule is set at all — the one place that decides. */
+export function hasIgnoreRules(ignore) {
+  return Boolean(ignore?.domains?.length || ignore?.tags?.length || ignore?.companies?.length);
+}
+
 /** Write a full ignore map. Empty lists remove the key. */
 export async function writeIgnore(api, ignore) {
   const cleaned = normalizeIgnore(ignore);
-  if (cleaned.domains.length || cleaned.tags.length) await api.storage.set(IGNORE_KEY, cleaned);
+  if (hasIgnoreRules(cleaned)) await api.storage.set(IGNORE_KEY, cleaned);
   else await api.storage.remove(IGNORE_KEY);
   return cleaned;
 }
@@ -209,11 +219,12 @@ function cardEmailDomains(card) {
 }
 
 /**
- * Whether a card is ignored by the current rules: it matches a domain or a tag.
+ * Whether a card is ignored by the current rules: it matches a domain, a tag or
+ * a company.
  */
 export function isCardIgnored(card, ignore) {
   if (!ignore) return false;
-  const { domains, tags } = ignore;
+  const { domains, tags, companies } = ignore;
   if (domains?.length) {
     const cardDomains = cardEmailDomains(card);
     if (cardDomains.some((d) => domains.includes(d))) return true;
@@ -221,6 +232,15 @@ export function isCardIgnored(card, ignore) {
   if (tags?.length) {
     const cardTagSet = cardTags(card).map((t) => t.toLowerCase());
     if (tags.some((tag) => cardTagSet.includes(tag.toLowerCase()))) return true;
+  }
+  if (companies?.length) {
+    // A *part* of the organisation name, so one rule covers "Acme", "Acme Inc."
+    // and "ACME GmbH" — an exact match fails silently on the spellings a user
+    // cannot predict. Empty needles are dropped, because `''` is inside every
+    // string and would ignore the entire address book.
+    const org = text(orgName(card)).toLowerCase();
+    const needles = companies.map((name) => text(name).toLowerCase()).filter(Boolean);
+    if (org && needles.some((name) => org.includes(name))) return true;
   }
   return false;
 }
@@ -294,7 +314,7 @@ export function protectedFieldsFor(card, policies) {
 export function filterForScan(cards, { policies, ignore, globalOpts } = {}) {
   const list = Array.isArray(cards) ? cards : [];
   const hasPolicies = policies && Object.keys(policies).length;
-  const hasIgnore = ignore && (ignore.domains?.length || ignore.tags?.length);
+  const hasIgnore = hasIgnoreRules(ignore);
   if (!hasPolicies && !hasIgnore) {
     return { cards: list, perCardOpts: null };
   }
