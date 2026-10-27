@@ -42,24 +42,33 @@ describe('normalizePolicies', () => {
 
 describe('normalizeIgnore', () => {
   it('returns empty lists for junk input', () => {
-    expect(normalizeIgnore(null)).toEqual({ domains: [], tags: [] });
-    expect(normalizeIgnore('nope')).toEqual({ domains: [], tags: [] });
+    expect(normalizeIgnore(null)).toEqual({ domains: [], tags: [], companies: [] });
+    expect(normalizeIgnore('nope')).toEqual({ domains: [], tags: [], companies: [] });
   });
 
-  it('lower-cases domains, trims tags, drops empties', () => {
+  it('lower-cases domains, trims tags and companies, drops empties', () => {
     const result = normalizeIgnore({
       domains: ['Example.COM', '  ', null, 'foo.de'],
       tags: ['VIP', '', null, 'do-not-merge'],
+      companies: [' Acme Inc. ', '', null, 'Initech'],
     });
     expect(result).toEqual({
       domains: ['example.com', 'foo.de'],
       tags: ['VIP', 'do-not-merge'],
+      companies: ['Acme Inc.', 'Initech'],
     });
   });
 
   it('caps each list at 50', () => {
-    const big = { domains: Array.from({ length: 100 }, (_, i) => `d${i}.com`), tags: [] };
-    expect(normalizeIgnore(big).domains.length).toBe(50);
+    const big = {
+      domains: Array.from({ length: 100 }, (_, i) => `d${i}.com`),
+      tags: Array.from({ length: 100 }, (_, i) => `t${i}`),
+      companies: Array.from({ length: 100 }, (_, i) => `c${i}`),
+    };
+    const capped = normalizeIgnore(big);
+    expect(capped.domains.length).toBe(50);
+    expect(capped.tags.length).toBe(50);
+    expect(capped.companies.length).toBe(50);
   });
 });
 
@@ -127,19 +136,19 @@ describe('setBookPolicy', () => {
 describe('readIgnore / writeIgnore', () => {
   it('reads an empty store as empty lists', async () => {
     const api = fakeApi();
-    expect(await readIgnore(api)).toEqual({ domains: [], tags: [] });
+    expect(await readIgnore(api)).toEqual({ domains: [], tags: [], companies: [] });
   });
 
   it('round-trips valid ignore rules', async () => {
     const api = fakeApi();
-    const rules = { domains: ['example.com'], tags: ['VIP'] };
+    const rules = { domains: ['example.com'], tags: ['VIP'], companies: ['Acme Inc.'] };
     await writeIgnore(api, rules);
     expect(await readIgnore(api)).toEqual(rules);
   });
 
   it('removes the key when lists are empty', async () => {
     const api = fakeApi();
-    await writeIgnore(api, { domains: [], tags: [] });
+    await writeIgnore(api, { domains: [], tags: [], companies: [] });
     expect(await api.storage.get('bookIgnore')).toBeNull();
   });
 });
@@ -211,6 +220,21 @@ describe('isCardIgnored', () => {
     const [entry] = buildIndex([card], { books: new Map() });
     expect(entry.tags).toEqual(['vip']);
     expect(isCardIgnored(card, { domains: [], tags: ['vip'] })).toBe(true);
+  });
+
+  it('matches by company, case-insensitively and on part of the name', () => {
+    // A rule has to survive the ways the same employer is written down, or it
+    // fails silently: "Acme" has to cover "Acme Inc." and "ACME GmbH".
+    const card = makeCard({ id: 'a', name: 'A', organizations: { o: { name: 'Acme Inc.' } } });
+    expect(isCardIgnored(card, { domains: [], tags: [], companies: ['acme'] })).toBe(true);
+    expect(isCardIgnored(card, { domains: [], tags: [], companies: ['ACME INC.'] })).toBe(true);
+    expect(isCardIgnored(card, { domains: [], tags: [], companies: ['Initech'] })).toBe(false);
+  });
+
+  it('matches no company when the contact has none', () => {
+    const card = makeCard({ id: 'a', name: 'A' });
+    expect(isCardIgnored(card, { domains: [], tags: [], companies: ['acme'] })).toBe(false);
+    expect(isCardIgnored(card, { domains: [], tags: [], companies: [''] })).toBe(false);
   });
 });
 
