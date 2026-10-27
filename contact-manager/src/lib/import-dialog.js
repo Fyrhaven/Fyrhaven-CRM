@@ -11,13 +11,17 @@
 import {
   Alert, Badge, Button, Checkbox, DialogButtons, Field, InfoBar, Input, Row, Section, Select, Stack, Text,
 } from '@plugin-host/ui';
-import { bookNamesById, detectionOptions, loadBooks, loadCards } from './contacts.js';
+import { bookNamesById, contactName, detectionOptions, loadBooks, loadCards } from './contacts.js';
 import { IMPORT_FIELDS, guessMapping, isUsableMapping } from './import-fields.js';
 import { findTemplate, saveTemplate } from './import-templates.js';
-import { applyImport, planImport, rowsToDrafts } from './import.js';
+import { applyImport, duplicateKey, mergeGroupsFromImport, planImport, rowsToDrafts } from './import.js';
 import { parseCsv } from './csv.js';
 import { looksLikeVCard, parseVCards } from './vcard-parse.js';
 import { PREVIEW_AREA } from './layout.js';
+
+// The reasons `planImport` reports, as i18n keys. Literal, so the locale
+// completeness test can see them.
+const REASON_KEYS = { email: 'group.reasonEmail', phone: 'group.reasonPhone', name: 'group.reasonName' };
 
 /** Reads a picked file as text, without a library. */
 function readText(file) {
@@ -40,7 +44,12 @@ export function makeImportDialog(React, api) {
     const [mapping, setMapping] = useState([]);
     const [remember, setRemember] = useState(true);
     const [bookId, setBookId] = useState('');
-    const [skipDuplicates, setSkipDuplicates] = useState(true);
+    // One decision per duplicate (`skip` | `merge` | `separate`), keyed by
+    // `duplicateKey` so it survives the drafts being rebuilt, plus the default
+    // the user picked for the whole batch. Both live only as long as the
+    // wizard is open: "remembered per batch" is the batch.
+    const [decisions, setDecisions] = useState({});
+    const [defaultDecision, setDefaultDecision] = useState('skip');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
 
@@ -104,7 +113,20 @@ export function makeImportDialog(React, api) {
       [drafts, ready],
     );
 
-    const toWrite = skipDuplicates ? plan.fresh : [...plan.fresh, ...plan.duplicates.map((entry) => entry.draft)];
+    // A per-contact decision, falling back to the batch default. `skip` keeps
+    // the pre-v1.30 behaviour: a duplicate is held back unless the user says
+    // otherwise, so nothing is ever created or merged behind their back.
+    const decisionOptions = [
+      { value: 'skip', label: t('import.decisionSkip') },
+      { value: 'merge', label: t('import.decisionMerge') },
+      { value: 'separate', label: t('import.decisionSeparate') },
+    ];
+    const decisionFor = (entry) => decisions[duplicateKey(entry)] ?? defaultDecision;
+
+    const skipped = plan.duplicates.filter((entry) => decisionFor(entry) === 'skip');
+    const merging = plan.duplicates.filter((entry) => decisionFor(entry) === 'merge');
+    const separate = plan.duplicates.filter((entry) => decisionFor(entry) === 'separate');
+    const toWrite = [...plan.fresh, ...separate.map((entry) => entry.draft), ...merging.map((entry) => entry.draft)];
     const canImport = ready.status === 'ready' && Boolean(bookId) && toWrite.length > 0 && !busy;
 
     const run = async () => {
@@ -115,13 +137,24 @@ export function makeImportDialog(React, api) {
           await saveTemplate(api, source.headers, mapping);
         }
         const result = await applyImport(api, toWrite);
-        close({ ...result, skipped: skipDuplicates ? plan.duplicates.length : 0 });
+        // A merge is not finished here: the pair goes back to the caller, which
+        // opens the one review dialog every merge in the plugin goes through.
+        close({
+          created: result.created,
+          failed: result.failed,
+          skipped: skipped.length,
+          mergeGroups: mergeGroupsFromImport(merging, result.cards),
+        });
       } catch (err) {
         setError(t('import.failed', { reason: String(err?.message ?? err) }));
       } finally {
         setBusy(false);
       }
     };
+
+    /** The name to show for an imported draft, the same way the preview does. */
+    const draftLabel = (draft) => [draft?.given, draft?.surname].filter(Boolean).join(' ')
+      || draft?.fullName || draft?.emails?.[0]?.address || draft?.phones?.[0]?.number || t('import.unnamed');
 
     const fieldOptions = IMPORT_FIELDS.map((field) => ({ value: field, label: t(`import.field.${field}`) }));
 
@@ -166,13 +199,23 @@ export function makeImportDialog(React, api) {
                 options: (ready.books ?? []).map((book) => ({ value: book.id, label: book.name || book.id })),
               })),
             plan.duplicates.length
-              ? h(Stack, { gap: 1 },
+              ? h(Section, { title: t('import.duplicatesTitle'), description: t('import.duplicatesHint') },
                   h(Alert, { tone: 'warning' }, t('import.duplicates', { count: plan.duplicates.length })),
-                  h(Checkbox, {
-                    checked: skipDuplicates,
-                    label: t('import.skip'),
-                    onChange: setSkipDuplicates,
-                  }))
+                  h(Field, { label: t('import.defaultDecision') },
+                    h(Select, { value: defaultDecision, options: decisionOptions, onChange: setDefaultDecision })),
+                  ...plan.duplicates.map((entry) => h(Field, {
+                    key: duplicateKey(entry),
+                    label: t('import.duplicateLabel', { name: draftLabel(entry.draft) }),
+                    hint: t('import.duplicateHint', {
+                      match: contactName(entry.match) || entry.match?.id || '',
+                      reason: t(REASON_KEYS[entry.reason] ?? 'group.reasonName'),
+                    }),
+                  },
+                    h(Select, {
+                      value: decisionFor(entry),
+                      options: decisionOptions,
+                      onChange: (value) => setDecisions((previous) => ({ ...previous, [duplicateKey(entry)]: value })),
+                    }))))
               : null,
             source.kind === 'csv'
               ? h(Checkbox, { checked: remember, label: t('import.remember'), onChange: setRemember })

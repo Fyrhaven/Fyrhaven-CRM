@@ -23,7 +23,7 @@ export function makeReviewDialog(React, api) {
       .filter((group) => Array.isArray(group.members) && group.members.length > 1);
     const [included, setIncluded] = useState(() => new Set(groups.map((g) => g.signature)));
     const [keepBy, setKeepBy] = useState(() =>
-      Object.fromEntries(groups.map((g) => [g.signature, planMerge(g).primary?.id ?? ''])));
+      Object.fromEntries(groups.map((g) => [g.signature, g.keepId ?? planMerge(g).primary?.id ?? ''])));
     const [choicesBy, setChoicesBy] = useState({});
     const [busy, setBusy] = useState(false);
     // The policies the merge will actually run under. Read here so the preview
