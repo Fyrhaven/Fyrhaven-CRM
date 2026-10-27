@@ -4,6 +4,7 @@
 //     permissions: ['http:proxy'],
 //     settings: { folder: '/Mail' },
 //     handlers: { 'proxy.fetch': async (credentialId, url, init) => ({ status: 200, ok: true, headers: {}, body: '...' }) },
+//     host: { absent: ['calendar'], exposes: { email: ['query', 'send'] } },
 //   });
 //   await plugin.activate(api);
 //   expect(api.calls('ui.setActions')).toHaveLength(1);
@@ -11,8 +12,19 @@
 // Every method of every namespace exists: `api.anything.method(...)` records
 // the call and returns what `handlers['anything.method']` returns (undefined
 // without a handler). storage, i18n and plugin.settings work for real.
+//
+// That permissiveness is deliberate — it keeps most tests short — but it means
+// the fake will happily invent a method the host does not have, so a test
+// written against it cannot tell a real API from an assumed one. When the host
+// SHAPE is the thing under test, declare it: `host.absent` names namespaces
+// that are not there at all, and `host.exposes` gives a namespace the exact
+// methods it has, so a call to anything else throws the way the host would.
+// That is the difference between "the API was renamed" and "the API is gone".
 
-export function fakeApi({ id = 'test-plugin', version = '1.0.0', settings = {}, locale = 'en', translations = {}, handlers = {} } = {}) {
+export function fakeApi({
+  id = 'test-plugin', version = '1.0.0', settings = {}, locale = 'en',
+  translations = {}, handlers = {}, host = {},
+} = {}) {
   const log = [];
   const store = new Map();
   const settingsListeners = [];
@@ -60,6 +72,9 @@ export function fakeApi({ id = 'test-plugin', version = '1.0.0', settings = {}, 
     },
   };
 
+  const absent = new Set(host.absent ?? []);
+  const exposes = host.exposes ?? {};
+
   const namespace = (name) => new Proxy({}, {
     get(_t, method) {
       if (typeof method !== 'string') return undefined;
@@ -75,6 +90,17 @@ export function fakeApi({ id = 'test-plugin', version = '1.0.0', settings = {}, 
       if (name === 'storageSnapshot') return () => Object.fromEntries(store);
       if (typeof name !== 'string') return undefined;
       if (name in target) return target[name];
+      if (absent.has(name)) return undefined;
+      if (Array.isArray(exposes[name])) {
+        // Exactly these methods, nothing else. A call to any other name is a
+        // TypeError, which is what the host does and what `optionalCall` is
+        // there to survive.
+        const ns = Object.fromEntries(
+          exposes[name].map((method) => [method, (...args) => call(`${name}.${method}`, args)]),
+        );
+        target[name] = ns;
+        return ns;
+      }
       const ns = namespace(name);
       target[name] = ns;
       return ns;
