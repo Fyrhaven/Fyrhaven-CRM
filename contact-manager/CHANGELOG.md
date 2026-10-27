@@ -7,6 +7,33 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.29.0] — 2026-10-27
+
+### Added
+
+- **Ignore rules by field: ignored companies (#7).** The policies dialog gains a
+  third ignore rule beside domains and tags. A contact is skipped when its
+  organisation name **contains** the text, so one rule covers `Acme`,
+  `Acme Inc.` and `ACME GmbH` — an exact match would fail silently on the
+  spellings nobody can predict.
+
+### Fixed
+
+- **A rule that set only companies did nothing.** `filterForScan` decided whether
+  to filter at all by testing `domains` and `tags` itself, so a companies-only
+  rule never reached `isCardIgnored` and the scan returned every duplicate as
+  before. There is now one `hasIgnoreRules(ignore)` that every caller asks, so
+  adding a rule type cannot leave a gate behind again. The new test caught it.
+
+### Notes
+
+This completes #7's build list apart from the auto-merge threshold, which is
+deliberately not built: every merge must go through the review dialog (§9.2), so
+an automatic merge would bypass the one surface the plugin insists on.
+
+The stored ignore record is now `{ domains, tags, companies }`; a record written
+by an earlier version repairs itself on read.
+
 ## [1.28.0] — 2026-10-27
 
 ### Added
