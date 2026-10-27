@@ -38,9 +38,10 @@ const TASKS = [
   { id: 't2', title: 'Unrelated task' },
 ];
 
-function profileApi(handlers = {}) {
+function profileApi(handlers = {}, host = {}) {
   return fakeApi({
     translations: manifest.locales,
+    host,
     handlers: {
       'contacts.list': async () => CARDS,
       'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
@@ -266,12 +267,24 @@ describe('contacts page', () => {
   it('stays readable when the optional APIs are missing entirely', async () => {
     // An older host that does not expose api.calendar at all: reading the
     // method throws synchronously, before any promise exists to catch.
-    const api = profileApi();
-    api.calendar = undefined;
+    const api = profileApi({}, { absent: ['calendar'] });
     await renderPage(api);
 
     expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.getByText(/Unavailable: Meetings/)).toBeTruthy());
+  });
+
+  it('stays readable when the host exposes a namespace without the method (#75)', async () => {
+    // The shape that actually crashed a live install: `api.email` is there and
+    // simply has no `search`. Reading the method throws *synchronously*, which
+    // is why a bare `.catch()` could not see it and the page went down.
+    const api = profileApi({}, { exposes: { email: ['query', 'send'], tasks: ['create'] } });
+    await renderPage(api);
+
+    expect(screen.getAllByText('Ada Lovelace').length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByText(/Unavailable: Messages, Tasks/)).toBeTruthy());
+    // The pieces that DO work are still there — the page degraded, it did not die.
+    await waitFor(() => expect(screen.getByText('Engine kickoff')).toBeTruthy());
   });
 
   it('stays readable when a namespace exists but the method does not', async () => {

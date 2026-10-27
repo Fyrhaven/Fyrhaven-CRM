@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from '../src/lib/capabilities.js';
+import { fakeApi } from '../test-utils/fake-api.mjs';
 
 describe('detectCapabilities', () => {
   it('reports a namespace that exposes everything the plugin wants', () => {
@@ -102,5 +103,32 @@ describe('describeSurface', () => {
     const hostile = new Proxy({}, { get() { throw new Error('nope'); }, ownKeys() { throw new Error('nope'); } });
 
     expect(describeSurface(hostile)).toContain('(unreadable)');
+  });
+});
+
+// The probe against the same fake the rest of the suite uses. The fake can now
+// declare a host shape, so "the method was renamed" is something a test can say
+// rather than something only a hand-built object could describe (#75).
+describe('the probe through the fake api', () => {
+  it('tells a renamed method from a missing namespace', () => {
+    const api = fakeApi({ host: { absent: ['calendar'], exposes: { email: ['query', 'send'] } } });
+    const caps = detectCapabilities(api);
+
+    expect(caps.email.present).toBe(true);
+    expect(caps.email.missing).toEqual(['search', 'getAttachment']);
+    expect(caps.calendar.present).toBe(false);
+    expect(describeCapabilities(caps)).toContain('email: query, send');
+  });
+
+  it('reports a namespace the fake exposes in full as usable', () => {
+    const api = fakeApi({ host: { exposes: { email: ['search', 'getAttachment'] } } });
+    expect(detectCapabilities(api).email.missing).toEqual([]);
+  });
+
+  it('still invents methods when no host shape is declared, which is the point', () => {
+    // Documented rather than accidental: the permissive fake keeps most tests
+    // short, and is exactly why a shape-sensitive test must declare one.
+    const api = fakeApi({});
+    expect(typeof api.email.search).toBe('function');
   });
 });
