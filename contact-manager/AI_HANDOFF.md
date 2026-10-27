@@ -914,6 +914,41 @@ Two structural reasons the plugin cannot do much more today:
 Suggested order for the next work: #9 (editor) → #13 (search) → #10 (profile),
 because the editor is the prerequisite for every other "manager" feature.
 
+> **Updated 2026-10-27:** every item in that list has since shipped — the editor
+> (#9, v1.6.0), the profile (#10, v1.7.0), smart search and saved searches (#13,
+> v1.16.0), bulk actions (#14, v1.15.0) and avatars (#15, v1.18.0). #11 (custom
+> fields) is the only one still open, and it needs a host change. See finding 3.
+
+### 3. The open roadmap, sorted by what actually blocks it (2026-10-27)
+
+A triage of every open issue against the tree at v1.30.0, recorded on **#40**.
+The short version, because it changes what "next" means:
+
+**Buildable now, no host change** — #6 (bulk merge by company or domain), #8
+(fuzzy names), #13 (the palette half of search), #20 (normalisation rules), #12
+(groups, emulated via `keywords` — a plugin convention, not a host record), #39
+(scale), and the local halves of #25 (a change history of the plugin's own
+writes) and #26 (consent records + anonymise). #34's saved lists with live counts
+already shipped in v1.16.0; what is left is AND/OR composition and using a saved
+search as a bulk scope. #5 (scheduled scans) is buildable, but "scheduled" can
+only mean "while the webmail is open" — there is no server-side scheduler.
+
+**Needs a host change** — #11 (custom fields: the host has no custom object types
+or fields), #37 (composer and hover cards: the plugin has only three slots), #23
+(per-book role *enforcement*: permissions are plugin-level and granted once at
+install, so only an advisory UI is honest), and #18 / #35 / #36 (they read mail or
+tasks — the optional APIs #75 is waiting on).
+
+**Needs the server tier (#68)** — #24 (a shared review queue) and #28–#32
+(CardDAV, LDAP/AD, directory sync, CRM sync, webhooks). `http:proxy` lets the
+plugin reach a user-configured server, but secrets and shared state cannot live in
+plugin storage.
+
+This is #75's finding one level up: the plugin cannot assume a host API exists,
+cannot hold a secret and cannot share state. Anything that must be *dependable* is
+a #68 candidate; anything needing a new *surface* is a host change; everything
+else is ordinary work and can be taken in any order.
+
 ## Versioning Policy
 - Follows semantic versioning: MAJOR.MINOR.PATCH
 - `manifest.json` version is the single source of truth
