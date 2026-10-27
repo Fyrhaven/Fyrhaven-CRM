@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.27.2 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
-- **Last changes**: the policies dialog reads the address books when it opens, so it has something to configure even when auto-scan is off (v1.27.2); on top of the two bugs a green suite hid in the book policies — ignored tags read the keyword *values* instead of the keys and so never matched, and every policy checkbox needed two clicks; plus the *Default*/*On*/*Off* tri-state the strings had always promised, and policies now honoured by the contact-details hint and the save-time warning too (#7, v1.27.1); on top of per-address-book duplicate policies and ignore rules — each book can be excluded or given its own match strategies, and contacts can be ignored by email domain or tag (#7, v1.27.0); on top of multi-select on the Health tab — edit, clean up, review or delete several at once (v1.26.0); on top of the server client and the `http:proxy` permission — *Check the server* asks a user-configured server for its version (#68, first step, v1.25.0); on top of failures worth stopping for using the host’s `ui.alert`, and the page having its own icon (v1.24.2); on top of `not:` as well as `-`, the probe’s calendar format, and exports saved through the host’s `ui.downloadFile` (v1.24.1); on top of search exclusion (v1.24.0) and plainer wording for the untouched-contacts section; before that, v1.23.2 (Meetings were refused because the calendar range carried milliseconds, the probe cried wolf about tasks, exporting shows its file because the sandbox forbids downloads, and the probe reports the host API surface) and v1.23.1 (four reported bugs fixed) — the profile crashed on a JMAP-shaped message sender, exporting downloaded nothing, the contact list did not refresh after an import, and the side pane was too short; on top of retention — the untouched contacts by age bucket, with an export that is written as part of any delete (#21, v1.23.0); on top of exporting the selection or the shown list as vCard or CSV, with the round trip asserted (#19, export half, v1.22.0); on top of importing contacts from CSV or vCard, with column mapping, a preview, duplicate protection and remembered mappings (#19, import half, v1.21.0); on top of the plugin opening on a main page — headline state, a menu of the palette tasks and a row into every section (v1.20.0); on top of a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.28.0 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
+- **Last changes**: protected fields per address book — a book can freeze the fields a merge never changes, the kept contact's books decide by union, and the review dialog names what it is holding back (#7, v1.28.0); on top of the policies dialog reading the address books when it opens (v1.27.2); on top of the two bugs a green suite hid in the book policies — ignored tags read the keyword *values* instead of the keys and so never matched, and every policy checkbox needed two clicks; plus the *Default*/*On*/*Off* tri-state the strings had always promised, and policies now honoured by the contact-details hint and the save-time warning too (#7, v1.27.1); on top of per-address-book duplicate policies and ignore rules — each book can be excluded or given its own match strategies, and contacts can be ignored by email domain or tag (#7, v1.27.0); on top of multi-select on the Health tab — edit, clean up, review or delete several at once (v1.26.0); on top of the server client and the `http:proxy` permission — *Check the server* asks a user-configured server for its version (#68, first step, v1.25.0); on top of failures worth stopping for using the host’s `ui.alert`, and the page having its own icon (v1.24.2); on top of `not:` as well as `-`, the probe’s calendar format, and exports saved through the host’s `ui.downloadFile` (v1.24.1); on top of search exclusion (v1.24.0) and plainer wording for the untouched-contacts section; before that, v1.23.2 (Meetings were refused because the calendar range carried milliseconds, the probe cried wolf about tasks, exporting shows its file because the sandbox forbids downloads, and the probe reports the host API surface) and v1.23.1 (four reported bugs fixed) — the profile crashed on a JMAP-shaped message sender, exporting downloaded nothing, the contact list did not refresh after an import, and the side pane was too short; on top of retention — the untouched contacts by age bucket, with an export that is written as part of any delete (#21, v1.23.0); on top of exporting the selection or the shown list as vCard or CSV, with the round trip asserted (#19, export half, v1.22.0); on top of importing contacts from CSV or vCard, with column mapping, a preview, duplicate protection and remembered mappings (#19, import half, v1.21.0); on top of the plugin opening on a main page — headline state, a menu of the palette tasks and a row into every section (v1.20.0); on top of a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.27.2` is the newest GitHub release (v1.27.1,
   v1.27.0,
   v1.26.0,
@@ -26,8 +26,9 @@
   v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
   #71, #72, #73, #76, #78, #80, #81, #83, #85, #87, #89, #91, #93, #95, #97, #98, #99,
-  #101, #102, #103, #104, #106, #107 and #108 merged). Nothing is waiting to be
-  released.
+  #101, #102, #103, #104, #106, #107 and #108 merged). **v1.28.0 is prepared on
+  `cline/cwh7pyf2`** and still needs its PR, the merge, the mirror sync and
+  `npm run release` — then a handoff commit saying it is released.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -38,37 +39,41 @@
 
 ## Implementation Summary
 
-### Per-address-book policies, and a rule that leans towards scanning (v1.27.0) — #7
+### Protected fields, and protection points the other way (v1.28.0) — #7
 
-`book-policies.js` is the model (pure, plus `api.storage`), `policies-dialog.js`
-the dialog behind the *Policies* button on the Duplicates page. A policy is one
-record per book id — `enabled` and an optional `matchByEmail` / `matchByPhone` /
-`matchByName` — plus one global `{ domains, tags }` ignore list. An untouched
-field is `undefined`, which means “use the global setting”, and an empty policy
-set is exactly the previous behaviour.
+`PROTECTED_FIELDS` lists every field a merge can write, so there is no field a
+user can watch being changed but cannot freeze. A book's `protectedFields` is a
+list on its policy, edited with checkboxes in the same dialog.
 
-**The multi-book rule is the whole design.** A contact can live in several
-books, so “does book A’s policy apply?” has no single answer. The plugin takes
-the **most permissive** setting across every enabled book, and a card with no
-book is always scanned. Both choices lean towards scanning: a book that opts out
-never silences a match another book still wants, so a policy cannot make a
-duplicate disappear by accident.
+**Protection unions; matching does not.** The match strategies take the *most
+permissive* reading across a contact's books, because silence is the failure
+there. Protection takes the **union**, because losing data is the failure here:
+a field protected by any book the contact is in is protected. Same shape of rule,
+opposite direction, and both are the safe way to be wrong.
 
-**One filter, six entry points.** `filterForScan` returns the surviving cards
-and each card’s effective options together, so `findDuplicateGroups` compares
-with a contact’s own strategies instead of the globals. `actions.js`,
-`manager-page.js`, `home-page.js` and `health-page.js` pass the policies into a
-full scan, and `findGroupFor` filters each candidate the same way — which is what
-makes a policy true of the Duplicates page, the palette, the Home overview, the
-Health tab, the *Duplicate check* block in an open contact and the warning after
-a save, all at once.
+**Derived, not passed around.** `planMerge(group, keepId, choices, { policies })`
+computes the frozen set from the kept contact itself, and `mergeGroups` reads the
+policies on its own. Neither is told the answer by the other, so the preview the
+user approves and the write that follows cannot disagree — which is exactly the
+failure a "pass the frozen fields down" design would have had.
 
-**Stored like the other per-browser state** (projects, saved searches, import
-mappings): `api.storage`, repaired on read, capped, and removed rather than
-written when it would be empty.
+**Protection is not silence.** A frozen field simply never appears as filled,
+unioned or replaced, and the dialog names the fields it is holding back, so a
+merge that deliberately leaves something alone says so instead of looking like it
+forgot.
 
-Tests: 606 passing (was 564) — 35 for the policy model and 2 for the dialog,
-with the resolution rule and the ignore rules asserted both ways.
+**A bug found while writing the tests.** `planMerge` reported a filled map field
+(`organizations`, `titles`, `personalInfo`, `media`) as one whole-map entry, and
+the preview handed that map to `DISPLAY` as if it were a single entry — so an
+organisation merged in from a donor was written to the contact with no line in
+the dialog explaining where it came from. The plan now reports one entry per
+value, the shape the union fields already used. It was caught by the
+protected-fields UI test, which asserts the donor's organisation *is* offered
+when nothing protects it: the positive twin that stops the assertion passing for
+the wrong reason.
+
+Tests: 647 passing (was 623).
+
 
 ### The two bugs a green suite hid (v1.27.1) — #7, the fixes
 
@@ -106,6 +111,38 @@ sends, and a negative test needs a positive twin. Each “stays silent” test h
 sits next to one that still warns, so silence cannot pass for the wrong reason.
 
 Tests: 622 passing (was 606) — 13 written first and watched fail.
+
+### Per-address-book policies, and a rule that leans towards scanning (v1.27.0) — #7
+
+`book-policies.js` is the model (pure, plus `api.storage`), `policies-dialog.js`
+the dialog behind the *Policies* button on the Duplicates page. A policy is one
+record per book id — `enabled` and an optional `matchByEmail` / `matchByPhone` /
+`matchByName` — plus one global `{ domains, tags }` ignore list. An untouched
+field is `undefined`, which means “use the global setting”, and an empty policy
+set is exactly the previous behaviour.
+
+**The multi-book rule is the whole design.** A contact can live in several
+books, so “does book A’s policy apply?” has no single answer. The plugin takes
+the **most permissive** setting across every enabled book, and a card with no
+book is always scanned. Both choices lean towards scanning: a book that opts out
+never silences a match another book still wants, so a policy cannot make a
+duplicate disappear by accident.
+
+**One filter, six entry points.** `filterForScan` returns the surviving cards
+and each card’s effective options together, so `findDuplicateGroups` compares
+with a contact’s own strategies instead of the globals. `actions.js`,
+`manager-page.js`, `home-page.js` and `health-page.js` pass the policies into a
+full scan, and `findGroupFor` filters each candidate the same way — which is what
+makes a policy true of the Duplicates page, the palette, the Home overview, the
+Health tab, the *Duplicate check* block in an open contact and the warning after
+a save, all at once.
+
+**Stored like the other per-browser state** (projects, saved searches, import
+mappings): `api.storage`, repaired on read, capped, and removed rather than
+written when it would be empty.
+
+Tests: 606 passing (was 564) — 35 for the policy model and 2 for the dialog,
+with the resolution rule and the ignore rules asserted both ways.
 
 ### The webmail is JMAP-shaped, and two bugs came from forgetting it (v1.23.1)
 

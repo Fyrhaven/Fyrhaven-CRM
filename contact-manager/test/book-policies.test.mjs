@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   effectiveOpts, filterForScan, isCardIgnored, isCardScannable,
-  normalizeIgnore, normalizePolicies, readIgnore, readPolicies,
+  normalizeIgnore, normalizePolicies, protectedFieldsFor, readIgnore, readPolicies,
   setBookPolicy, writeIgnore, writePolicies,
 } from '../src/lib/book-policies.js';
 import { fakeApi } from '../test-utils/fake-api.mjs';
@@ -289,3 +289,57 @@ describe('filterForScan', () => {
     expect(result.perCardOpts[1].matchByEmail).toBe(true);
   });
 });
+
+// ── Protected fields (#7) ───────────────────────────────────────
+
+describe('protectedFieldsFor', () => {
+  it('returns nothing without policies', () => {
+    expect(protectedFieldsFor(makeCard({ id: 'a' }), {})).toEqual([]);
+    expect(protectedFieldsFor(makeCard({ id: 'a' }), null)).toEqual([]);
+  });
+
+  it('unions the protected fields of every enabled book', () => {
+    const card = makeCard({ id: 'a', addressBookIds: { b1: true, b2: true } });
+    const policies = { b1: { protectedFields: ['name'] }, b2: { protectedFields: ['emails'] } };
+    expect(protectedFieldsFor(card, policies).sort()).toEqual(['emails', 'name']);
+  });
+
+  it('ignores a book that is switched off', () => {
+    const card = makeCard({ id: 'a', addressBookIds: { b1: true, b2: true } });
+    const policies = { b2: { enabled: false, protectedFields: ['name'] } };
+    expect(protectedFieldsFor(card, policies)).toEqual([]);
+  });
+
+  it('names a field once even when two books protect it', () => {
+    const card = makeCard({ id: 'a', addressBookIds: { b1: true, b2: true } });
+    const policies = { b1: { protectedFields: ['name'] }, b2: { protectedFields: ['name'] } };
+    expect(protectedFieldsFor(card, policies)).toEqual(['name']);
+  });
+});
+
+describe('protectedFields in the stored policy', () => {
+  it('keeps known fields, drops the rest and de-duplicates', () => {
+    expect(normalizePolicies({ b1: { protectedFields: ['name', 'nonsense', 'name'] } }))
+      .toEqual({ b1: { protectedFields: ['name'] } });
+  });
+
+  it('drops an empty list or a value that is not a list', () => {
+    expect(normalizePolicies({ b1: { protectedFields: [] } })).toEqual({});
+    expect(normalizePolicies({ b1: { protectedFields: 'name' } })).toEqual({});
+  });
+
+  it('sets and clears the list through setBookPolicy', async () => {
+    const api = fakeApi({});
+    await setBookPolicy(api, 'b1', 'protectedFields', ['name', 'nonsense']);
+    expect(await api.storage.get('bookPolicies')).toEqual({ b1: { protectedFields: ['name'] } });
+    await setBookPolicy(api, 'b1', 'protectedFields', []);
+    expect(await api.storage.get('bookPolicies')).toBeNull();
+  });
+
+  it('survives a round trip through storage', async () => {
+    const api = fakeApi({});
+    await writePolicies(api, { b1: { enabled: false, protectedFields: ['emails', 'phones'] } });
+    expect(await readPolicies(api)).toEqual({ b1: { enabled: false, protectedFields: ['emails', 'phones'] } });
+  });
+});
+

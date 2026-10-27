@@ -31,6 +31,17 @@ export const IGNORE_KEY = 'bookIgnore';
 export const MAX_POLICIES = 200;
 export const MAX_IGNORE = 50;
 
+/**
+ * The fields a book can protect from a merge. Every field `planMerge` is able
+ * to write is here, so there is no field a user can see being changed but
+ * cannot freeze.
+ */
+export const PROTECTED_FIELDS = [
+  'name', 'emails', 'phones', 'addresses', 'onlineServices', 'links',
+  'nicknames', 'notes', 'anniversaries', 'organizations', 'titles',
+  'personalInfo', 'media', 'keywords',
+];
+
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
 // ── Policies ────────────────────────────────────────────────────
@@ -38,7 +49,7 @@ const text = (value) => (typeof value === 'string' ? value.trim() : '');
 /** Is this a valid boolean override? `undefined` means "use the global". */
 const isOptBool = (value) => value === true || value === false;
 
-/** One book's overrides, repaired: only known fields, only valid booleans. */
+/** One book's overrides, repaired: only known fields, only valid values. */
 function normalizeBookPolicy(raw) {
   if (!raw || typeof raw !== 'object') return {};
   const out = {};
@@ -46,6 +57,10 @@ function normalizeBookPolicy(raw) {
   if (isOptBool(raw.matchByEmail)) out.matchByEmail = raw.matchByEmail;
   if (isOptBool(raw.matchByPhone)) out.matchByPhone = raw.matchByPhone;
   if (isOptBool(raw.matchByName)) out.matchByName = raw.matchByName;
+  if (Array.isArray(raw.protectedFields)) {
+    const fields = [...new Set(raw.protectedFields.filter((f) => PROTECTED_FIELDS.includes(f)))];
+    if (fields.length) out.protectedFields = fields;
+  }
   return out;
 }
 
@@ -94,10 +109,17 @@ export async function setBookPolicy(api, bookId, field, value) {
   const policies = await readPolicies(api);
   const id = text(bookId);
   if (!id) return policies;
-  if (!['enabled', 'matchByEmail', 'matchByPhone', 'matchByName'].includes(field)) return policies;
+  const boolFields = ['enabled', 'matchByEmail', 'matchByPhone', 'matchByName'];
+  if (!boolFields.includes(field) && field !== 'protectedFields') return policies;
   const current = policies[id] ?? {};
-  if (value === undefined || value === null) {
+  const empty = value === undefined || value === null || (Array.isArray(value) && !value.length);
+  if (empty) {
     delete current[field];
+  } else if (field === 'protectedFields') {
+    if (!Array.isArray(value)) return policies;
+    const fields = [...new Set(value.filter((f) => PROTECTED_FIELDS.includes(f)))];
+    if (fields.length) current[field] = fields;
+    else delete current[field];
   } else if (isOptBool(value)) {
     current[field] = value;
   } else {
@@ -241,6 +263,27 @@ export function effectiveOpts(card, policies, globalOpts = {}) {
   result.matchByPhone = enabledIds.some((id) => bookOpts(id).matchByPhone !== false);
   result.matchByName = enabledIds.some((id) => bookOpts(id).matchByName !== false);
   return result;
+}
+
+/**
+ * The fields a merge must not change for this card: the **union** over every
+ * enabled book it belongs to.
+ *
+ * The union — not the most permissive reading the match strategies use —
+ * because protection is a safety property and the two directions are opposite.
+ * A field protected by *any* book the contact lives in is protected: more
+ * protection is the safe way to be wrong. A book that is switched off
+ * contributes nothing, since its contacts are not scanned at all.
+ */
+export function protectedFieldsFor(card, policies) {
+  if (!policies || !Object.keys(policies).length) return [];
+  const out = new Set();
+  for (const id of bookIds(card)) {
+    const policy = policies[id];
+    if (!policy || policy.enabled === false) continue;
+    for (const field of policy.protectedFields ?? []) out.add(field);
+  }
+  return [...out];
 }
 
 /**
