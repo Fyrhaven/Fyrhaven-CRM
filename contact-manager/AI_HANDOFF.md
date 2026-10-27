@@ -7,7 +7,8 @@
 ## Current State
 - **Version**: 1.27.2 (`manifest.json` is the single source of truth; `package.json` and `package-lock.json` match)
 - **Last changes**: the policies dialog reads the address books when it opens, so it has something to configure even when auto-scan is off (v1.27.2); on top of the two bugs a green suite hid in the book policies — ignored tags read the keyword *values* instead of the keys and so never matched, and every policy checkbox needed two clicks; plus the *Default*/*On*/*Off* tri-state the strings had always promised, and policies now honoured by the contact-details hint and the save-time warning too (#7, v1.27.1); on top of per-address-book duplicate policies and ignore rules — each book can be excluded or given its own match strategies, and contacts can be ignored by email domain or tag (#7, v1.27.0); on top of multi-select on the Health tab — edit, clean up, review or delete several at once (v1.26.0); on top of the server client and the `http:proxy` permission — *Check the server* asks a user-configured server for its version (#68, first step, v1.25.0); on top of failures worth stopping for using the host’s `ui.alert`, and the page having its own icon (v1.24.2); on top of `not:` as well as `-`, the probe’s calendar format, and exports saved through the host’s `ui.downloadFile` (v1.24.1); on top of search exclusion (v1.24.0) and plainer wording for the untouched-contacts section; before that, v1.23.2 (Meetings were refused because the calendar range carried milliseconds, the probe cried wolf about tasks, exporting shows its file because the sandbox forbids downloads, and the probe reports the host API surface) and v1.23.1 (four reported bugs fixed) — the profile crashed on a JMAP-shaped message sender, exporting downloaded nothing, the contact list did not refresh after an import, and the side pane was too short; on top of retention — the untouched contacts by age bucket, with an export that is written as part of any delete (#21, v1.23.0); on top of exporting the selection or the shown list as vCard or CSV, with the round trip asserted (#19, export half, v1.22.0); on top of importing contacts from CSV or vCard, with column mapping, a preview, duplicate protection and remembered mappings (#19, import half, v1.21.0); on top of the plugin opening on a main page — headline state, a menu of the palette tasks and a row into every section (v1.20.0); on top of a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
-- **Released**: `contact-manager-v1.27.1` is the newest GitHub release (v1.27.0,
+- **Released**: `contact-manager-v1.27.2` is the newest GitHub release (v1.27.1,
+  v1.27.0,
   v1.26.0,
   v1.25.0,
   v1.24.2, v1.24.1, v1.24.0, v1.23.2,
@@ -25,9 +26,8 @@
   v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
   #71, #72, #73, #76, #78, #80, #81, #83, #85, #87, #89, #91, #93, #95, #97, #98, #99,
-  #101, #102, #103, #104, #106 and #107 merged). **v1.27.2 is prepared on
-  `cline/cwh7pyf2`** and still needs its PR, the merge, the mirror sync and
-  `npm run release` — then a handoff commit saying it is released.
+  #101, #102, #103, #104, #106, #107 and #108 merged). Nothing is waiting to be
+  released.
 - **Files modified in 1.4.0**:
   - `src/lib/watch.js` - new: `isSameCard`, `findDuplicatesOf`, `warnAboutDuplicates`
   - `src/index.js` - hooks `onAfterContactCreate` / `onAfterContactUpdate`
@@ -932,7 +932,7 @@ of scope.
   single roadmap issue; it links every feature issue. Milestones
   `Contact Manager v1.2.0` … `v2.0.0` group them by release.
 - **Releases**: tagged `contact-manager-vX.Y.Z`; installable ZIPs are the
-  release assets. The newest release is `contact-manager-v1.27.1`.
+  release assets. The newest release is `contact-manager-v1.27.2`.
 - **Cutting a release**: merge the feature PR(s) into `main`, keep
   `contact-manager` in step, bump `manifest.json`/`package.json` + `CHANGELOG.md`
   on `main`, then run `npm run release` — it tags, pushes the tag and uploads
