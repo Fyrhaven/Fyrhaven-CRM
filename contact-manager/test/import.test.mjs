@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import { guessField, guessMapping, isUsableMapping, mappingKey } from '../src/lib/import-fields.js';
 import { applyImport, duplicateKey, mergeGroupsFromImport, planImport, rowToDraft, rowsToDrafts, splitName } from '../src/lib/import.js';
+import { mergeGroups } from '../src/lib/duplicates.js';
 import { parseCsv } from '../src/lib/csv.js';
 import { makeCard } from './fixtures.mjs';
 
@@ -284,5 +285,35 @@ describe('mergeGroupsFromImport', () => {
   it('survives junk', () => {
     expect(mergeGroupsFromImport(null, null)).toEqual([]);
     expect(mergeGroupsFromImport([null], created)).toEqual([]);
+  });
+
+  it('drives the real merge: the existing contact is patched, the imported copy removed', async () => {
+    // what the host returns from create: the whole card, with the id it assigned
+    const createdCard = {
+      id: 'new',
+      name: { full: 'Ada Lovelace' },
+      emails: { e0: { address: 'ada@example.org' } },
+      phones: { p0: { number: '+491761234567' } },
+    };
+    const api = fakeApi({
+      handlers: {
+        'contacts.create': async () => createdCard,
+        'contacts.update': async () => {},
+        'contacts.remove': async () => {},
+      },
+    });
+
+    const written = await applyImport(api, [draft]);
+    const groups = mergeGroupsFromImport([{ draft, match: existing }], written.cards);
+    // exactly what the review dialog does with a group's keepId
+    const keepBy = Object.fromEntries(groups.map((group) => [group.signature, group.keepId]));
+    const result = await mergeGroups(api, groups, keepBy);
+
+    expect(result).toMatchObject({ merged: 1, removed: 1, failed: [] });
+    // the contact that was already there gains the file's phone number...
+    expect(api.calls('contacts.update')[0].args[0]).toBe('a');
+    expect(api.calls('contacts.update')[0].args[1].phones).toBeTruthy();
+    // ...and the copy the import wrote is the one deleted
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('new');
   });
 });
