@@ -298,3 +298,53 @@ describe('contact detail section', () => {
     await waitFor(() => screen.getByText('No possible duplicates found.'));
   });
 });
+
+// ── The active policy in the review dialog (#7) ──────────────────
+//
+// The dialog must show what a book protects AND honour it in the preview it
+// puts in front of the user. Both halves are asserted: the same fixture with
+// and without the policy, so neither can pass by the field never being offered.
+
+describe('review dialog and the book policies', () => {
+  // p1 and p2 tie on field count, so the lowest id wins and p1 is kept; p1 has
+  // no organization, so p2's is genuinely an added field in the preview.
+  const policyGroup = () => findDuplicateGroups([
+    makeCard({ id: 'p1', name: 'Ada Lovelace', emails: ['ada@x.de'], notes: { n: { note: 'Friend' } } }),
+    makeCard({ id: 'p2', name: 'A. Lovelace', emails: ['ada@x.de'], organizations: { o: { name: 'ACME' } } }),
+  ], {})[0];
+
+  const openDialogWith = async (api) => {
+    const Dialog = makeReviewDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [policyGroup()], onResult: () => {} }));
+    });
+    await waitFor(() => screen.getByText(manifest.locales.en['dialog.intro']));
+    await act(async () => {}); // let the policy read settle
+  };
+
+  it('offers the donor organization when no book protects it', async () => {
+    await openDialogWith(dialogApi());
+    expect(screen.getByText('+ ACME')).toBeTruthy();
+    expect(screen.queryByText(manifest.locales.en['dialog.policyTitle'])).toBeNull();
+  });
+
+  it('drops a protected field from the preview and names it', async () => {
+    const api = dialogApi();
+    await api.storage.set('bookPolicies', { b1: { protectedFields: ['organizations'] } });
+    await openDialogWith(api);
+
+    expect(screen.queryByText('+ ACME')).toBeNull();
+    await waitFor(() => screen.getByText(manifest.locales.en['dialog.policyTitle']));
+    expect(screen.getByText(/protects Organizations/)).toBeTruthy();
+  });
+
+  it('still offers the fields the policy does not protect', async () => {
+    // The guard against the test above passing because the preview broke.
+    const api = dialogApi();
+    await api.storage.set('bookPolicies', { b1: { protectedFields: ['notes'] } });
+    await openDialogWith(api);
+    expect(screen.getByText('+ ACME')).toBeTruthy();
+    expect(screen.getByText(/protects Notes/)).toBeTruthy();
+  });
+});
+

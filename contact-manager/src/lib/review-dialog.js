@@ -9,12 +9,13 @@
 import { DialogButtons, Field, Select, Checkbox, Badge, Card, Row, Stack, Text, Chip, Section, InfoBar } from '@plugin-host/ui';
 import { contactName } from './contacts.js';
 import { mergeGroups, planMerge } from './duplicates.js';
+import { protectedFieldsFor, readPolicies } from './book-policies.js';
 import { memberLabel, mergeLabel, reasonLine, strengthKey, undoWindowMinutes } from './labels.js';
 import { previewFields, previewCounts, conflictFields, memberDetails } from './preview.js';
 import { buildEntry, saveUndo } from './undo.js';
 
 export function makeReviewDialog(React, api) {
-  const { createElement: h, useState } = React;
+  const { createElement: h, useEffect, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
 
   return function ReviewDialog(props) {
@@ -25,6 +26,12 @@ export function makeReviewDialog(React, api) {
       Object.fromEntries(groups.map((g) => [g.signature, planMerge(g).primary?.id ?? ''])));
     const [choicesBy, setChoicesBy] = useState({});
     const [busy, setBusy] = useState(false);
+    // The policies the merge will actually run under. Read here so the preview
+    // and the write cannot disagree: both derive the frozen fields from these.
+    const [policies, setPolicies] = useState({});
+    useEffect(() => {
+      readPolicies(api).then(setPolicies).catch(() => setPolicies({}));
+    }, []);
 
     const close = (value) => props.onResult?.(value);
     const chosen = groups.filter((group) => included.has(group.signature));
@@ -200,8 +207,9 @@ export function makeReviewDialog(React, api) {
         const signature = group.signature;
         const keepId = keepBy[signature] || planMerge(group).primary?.id || '';
         const choices = choicesBy[signature] ?? {};
-        const basePlan = planMerge(group, keepId);
-        const plan = planMerge(group, keepId, choices);
+        const basePlan = planMerge(group, keepId, {}, { policies });
+        const plan = planMerge(group, keepId, choices, { policies });
+        const frozenFields = plan.primary ? protectedFieldsFor(plan.primary, policies) : [];
         const nameById = Object.fromEntries(group.members.map((m) => [m.id, contactName(m) || m.id]));
         const keptName = contactName(plan.primary) || plan.primary?.id || '';
         const detailFields = plan.primary ? previewFields(plan) : [];
@@ -222,6 +230,12 @@ export function makeReviewDialog(React, api) {
               }, t(strengthKey(group))),
               h(Text, { tone: 'muted' }, t('group.members', { count: group.members.length }))),
             h(Text, { tone: 'muted' }, reasonLine(t, group)),
+            frozenFields.length
+              ? h(InfoBar, { tone: 'neutral', title: t('dialog.policyTitle') },
+                  h(Text, { tone: 'muted' }, t('dialog.policyProtected', {
+                    fields: frozenFields.map((field) => t(`policies.field.${field}`)).join(', '),
+                  })))
+              : null,
             h(Field, { label: t('dialog.keep') },
               h(Select, {
                 value: keepId,

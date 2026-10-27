@@ -248,3 +248,111 @@ describe('findGroupFor', () => {
     expect(await findGroupFor(api, { id: 'g1', kind: 'group' })).toBeNull();
   });
 });
+
+// ── Protected fields (#7) ───────────────────────────────────────
+//
+// Each test asserts BOTH readings — what a merge does by default and what it
+// does once a book protects the field — so it cannot pass by the field simply
+// never being written in the first place.
+
+describe('planMerge and the protected fields', () => {
+  const frozenBy = (fields, bookId = 'b1') => ({ [bookId]: { protectedFields: fields } });
+  const pair = () => [
+    makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@x.de'], notes: { n: { note: 'keep me' } } }),
+    makeCard({ id: 'b', name: 'A. Lovelace', emails: ['ada@x.de', 'other@x.de'], organizations: { o: { name: 'ACME' } } }),
+  ];
+  const namePair = () => [
+    makeCard({ id: 'a', name: 'Bob', emails: ['bob@x.de'] }),
+    makeCard({ id: 'b', name: 'Robert Smith', emails: ['bob@x.de'] }),
+  ];
+
+  it('will not fill a protected field from a donor', () => {
+    const [a, b] = pair();
+    expect(planMerge(groupOf([a, b]), 'a').patch.organizations).toEqual({ o: { name: 'ACME' } });
+    const plan = planMerge(groupOf([a, b]), 'a', {}, { policies: frozenBy(['organizations']) });
+    expect(plan.patch.organizations).toBeUndefined();
+  });
+
+  it('will not union entries into a protected field', () => {
+    const [a, b] = pair();
+    expect(Object.values(planMerge(groupOf([a, b]), 'a').patch.emails ?? {})).toHaveLength(2);
+    const plan = planMerge(groupOf([a, b]), 'a', {}, { policies: frozenBy(['emails']) });
+    expect(plan.patch.emails).toBeUndefined();
+  });
+
+  it('will not union keywords into a protected keywords map', () => {
+    const [a, b] = pair();
+    a.keywords = { work: true };
+    b.keywords = { family: true };
+    expect(planMerge(groupOf([a, b]), 'a').patch.keywords).toEqual({ work: true, family: true });
+    const plan = planMerge(groupOf([a, b]), 'a', {}, { policies: frozenBy(['keywords']) });
+    expect(plan.patch.keywords).toBeUndefined();
+  });
+
+  it('ignores an explicit donor choice for a protected field', () => {
+    const [a, b] = pair();
+    expect(planMerge(groupOf([a, b]), 'a', { name: 'b' }).patch.name).toEqual({ full: 'A. Lovelace' });
+    const plan = planMerge(groupOf([a, b]), 'a', { name: 'b' }, { policies: frozenBy(['name']) });
+    expect(plan.patch.name).toBeUndefined();
+  });
+
+  it('freezing the name still records the other name as a nickname', () => {
+    // Protecting `name` is not protecting `nicknames`: the name is never
+    // replaced, and the discarded name is still kept rather than lost (#49).
+    const plan = planMerge(groupOf(namePair()), 'a', {}, { policies: frozenBy(['name']) });
+    expect(plan.patch.name).toBeUndefined();
+    expect(plan.nameSuggestions.map((s) => s.value)).toContain('Robert Smith');
+  });
+
+  it('adds no nickname at all when nicknames are protected', () => {
+    const plan = planMerge(groupOf(namePair()), 'a', {}, { policies: frozenBy(['nicknames']) });
+    expect(plan.nameSuggestions).toEqual([]);
+    expect(plan.patch.nicknames).toBeUndefined();
+  });
+
+  it('protects a field when ANY of the contact’s books protects it', () => {
+    // The union, not the most permissive reading: more protection is the safe
+    // way to be wrong.
+    const [a, b] = pair();
+    a.addressBookIds = { b1: true, b2: true };
+    const policies = { b1: { protectedFields: ['organizations'] }, b2: { protectedFields: ['emails'] } };
+    const plan = planMerge(groupOf([a, b]), 'a', {}, { policies });
+    expect(plan.patch.organizations).toBeUndefined();
+    expect(plan.patch.emails).toBeUndefined();
+  });
+
+  it('ignores a book that is switched off', () => {
+    const [a, b] = pair();
+    a.addressBookIds = { b1: true, b2: true };
+    const policies = { b2: { enabled: false, protectedFields: ['organizations'] } };
+    expect(planMerge(groupOf([a, b]), 'a', {}, { policies }).patch.organizations)
+      .toEqual({ o: { name: 'ACME' } });
+  });
+});
+
+describe('mergeGroups and the protected fields', () => {
+  it('freezes the field on the write, not only in the plan', async () => {
+    const pair = () => [
+      makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@x.de'] }),
+      makeCard({ id: 'b', name: 'A. Lovelace', emails: ['ada@x.de'], organizations: { o: { name: 'ACME' } } }),
+    ];
+    const write = async (policies) => {
+      const api = fakeApi({});
+      if (policies) await api.storage.set('bookPolicies', policies);
+      const group = groupOf(pair());
+      const result = await mergeGroups(api, [group], { [group.signature]: 'a' });
+      return { patch: api.calls('contacts.update')[0]?.args[1] ?? {}, result };
+    };
+
+    const open = await write(null);
+    expect(open.patch.organizations).toEqual({ o: { name: 'ACME' } });
+    expect(open.result).toEqual({ merged: 1, removed: 1, failed: [] });
+
+    const frozen = await write({ b1: { protectedFields: ['organizations'] } });
+    expect(frozen.patch.organizations).toBeUndefined();
+    // The merge itself still happens — protection changes what is written, not
+    // whether the duplicate is removed.
+    expect(frozen.result).toEqual({ merged: 1, removed: 1, failed: [] });
+  });
+});
+
