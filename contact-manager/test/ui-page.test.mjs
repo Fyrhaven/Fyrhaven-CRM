@@ -19,9 +19,10 @@ const CARDS = [
   makeCard({ id: 'c4', name: 'Doe, John', emails: ['john@work.org'] }),
 ];
 
-function pageApi(handlers = {}) {
+function pageApi(handlers = {}, settings = {}) {
   return fakeApi({
     translations: manifest.locales,
+    settings,
     handlers: {
       'contacts.list': async () => CARDS,
       'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
@@ -141,5 +142,22 @@ describe('manager page', () => {
     fail = false;
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry' })); });
     await waitFor(() => screen.getByText(/duplicate groups/));
+  });
+
+  it('hands the address books to the policies dialog even when autoScan is off', async () => {
+    // The *Policies* button is always in the header, but the books it handed
+    // over came from the last scan. With autoScan off the page has not scanned,
+    // so the dialog opened on "No address books found." and there was nothing
+    // to configure — the one page that owns the policies could not edit them.
+    const api = pageApi({ 'ui.openDialog': async () => null }, { autoScan: false });
+    const Page = makeManagerPage(React, api);
+    await act(async () => { render(React.createElement(Page)); });
+    expect(api.calls('contacts.list')).toHaveLength(0); // it really did not scan
+
+    const policies = screen.getByRole('button', { name: 'Policies' });
+    await act(async () => { fireEvent.click(policies); });
+    await waitFor(() => expect(api.calls('ui.openDialog')).toHaveLength(1));
+    expect(api.calls('ui.openDialog')[0].args[0].extraProps.books)
+      .toEqual([{ id: 'b1', name: 'Personal' }]);
   });
 });

@@ -880,6 +880,9 @@ committed `build/` directory. Delete the feature branch once its PR has landed
 | Letting a dialog decide to write | A pure dialog that returns a draft writes nothing | Write in the `open*` funnel (`openProject`, `openEditor`) |
 | Sizing a pane with `style` on a kit component | The kit may drop the prop; the panes collapse into one column and the list runs away | Draw the skeleton with `layout.js` (plain elements) |
 | Hiding a control with `style` on a kit component | The prop may be dropped and the control appears | Wrap it in a plain element with `HIDDEN` |
+| A fixture shaped like the *code*, not like the *host* | The test passes and the feature is dead — `keywords: { k1: { label } }` ignored every real tag, because tags are the map's **keys** | Build cards with `makeCard`, and read fields through `contacts.js` |
+| A "stays silent" test with no positive twin | Silence passes for the wrong reason — a function that always returns nothing satisfies it | Assert the same path still fires when the rule does *not* apply |
+| A control drawn from one expression and toggled by another | `checked: v !== false` with `onChange(!v)` makes the first click do nothing | Derive both from the same reading of the value |
 
 ---
 
