@@ -12,7 +12,7 @@
 
 import { contactName, emailEntries, isMergeable, phoneEntries, primaryEmail } from './contacts.js';
 import { phoneKey } from './phones.js';
-import { filterForScan } from './book-policies.js';
+import { filterForScan, protectedFieldsFor, readPolicies } from './book-policies.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -312,7 +312,7 @@ export function pickPrimary(members) {
  * are therefore offered as nicknames — `[{ value, key, fromId }]`; the patch
  * adds every one the user did not drop (`choices.nicknames[key] = 'drop'`).
  */
-export function planMerge(group, keepId, choices = {}) {
+export function planMerge(group, keepId, choices = {}, { policies } = {}) {
   const members = (group?.members ?? []).filter(isMergeable);
   const primary = (keepId && members.find((m) => m.id === keepId)) || pickPrimary(members) || null;
   const others = members.filter((m) => m !== primary && m.id !== primary?.id);
@@ -321,7 +321,13 @@ export function planMerge(group, keepId, choices = {}) {
   const changed = [];
   if (!primary) return { primary: null, others: [], patch, added, changed, nameSuggestions: [] };
 
+  // The fields the kept contact's books freeze. Derived here from the policies,
+  // so the dialog's preview and the write agree by construction rather than by
+  // both being told the same thing.
+  const frozen = new Set(protectedFieldsFor(primary, policies));
+
   for (const [field, normalize] of UNION_FIELDS) {
+    if (frozen.has(field)) continue;
     const out = { ...(primary[field] ?? {}) };
     const seen = new Set(Object.values(out).map(normalize).filter(Boolean));
     let changed = false;
@@ -341,25 +347,33 @@ export function planMerge(group, keepId, choices = {}) {
   }
 
   // keywords is a plain { name: boolean } map, not keyed entries.
-  const keywords = { ...(primary.keywords ?? {}) };
-  let keywordsChanged = false;
-  for (const other of others) {
-    for (const [key, on] of Object.entries(other.keywords ?? {})) {
-      if (!(key in keywords)) {
-        keywords[key] = Boolean(on);
-        keywordsChanged = true;
-        added.push({ field: 'keywords', value: key, fromId: other.id });
+  if (!frozen.has('keywords')) {
+    const keywords = { ...(primary.keywords ?? {}) };
+    let keywordsChanged = false;
+    for (const other of others) {
+      for (const [key, on] of Object.entries(other.keywords ?? {})) {
+        if (!(key in keywords)) {
+          keywords[key] = Boolean(on);
+          keywordsChanged = true;
+          added.push({ field: 'keywords', value: key, fromId: other.id });
+        }
       }
     }
+    if (keywordsChanged) patch.keywords = keywords;
   }
-  if (keywordsChanged) patch.keywords = keywords;
 
   for (const field of FILL_FIELDS) {
+    if (frozen.has(field)) continue;
     if (populated(primary[field])) continue;
     const donor = others.find((m) => populated(m[field]));
     if (donor) {
       patch[field] = donor[field];
-      added.push({ field, value: donor[field], fromId: donor.id });
+      // One `added` entry per value — the shape the union fields already use.
+      // `name` is a single object; the rest are maps keyed by id. Reporting the
+      // whole map made the preview hand it to DISPLAY as if it were one entry,
+      // so an organisation filled from a donor was written but never shown.
+      const values = field === 'name' ? [donor[field]] : Object.values(donor[field] ?? {});
+      for (const value of values) added.push({ field, value, fromId: donor.id });
     }
   }
 
@@ -367,6 +381,7 @@ export function planMerge(group, keepId, choices = {}) {
   // The whole field is replaced (the host replaces maps wholesale), which is
   // exactly what the review dialog's value picker promises.
   for (const field of FILL_FIELDS) {
+    if (frozen.has(field)) continue;
     const donorId = choices?.[field];
     if (!donorId || donorId === primary.id) continue;
     const donor = others.find((m) => m.id === donorId && populated(m[field]));
@@ -383,7 +398,7 @@ export function planMerge(group, keepId, choices = {}) {
   // chose to discard it, so a merge never silently loses a name (#49).
   // `choices.nicknames[key]` is 'nickname' (the default) or 'drop'; 'name'
   // means the dialog reused the name as the kept contact's name instead.
-  const suggestions = nameSuggestions(primary, others);
+  const suggestions = frozen.has('nicknames') ? [] : nameSuggestions(primary, others);
   const finalNameKey = normalizeName(contactName({ name: patch.name ?? primary.name }));
   for (const suggestion of suggestions) {
     if (suggestion.key === finalNameKey) continue; // already the contact's name
@@ -420,9 +435,14 @@ export async function mergeGroups(api, groups, keepBySignature = {}, choiceBySig
   let merged = 0;
   let removed = 0;
   const failed = [];
+  // Read once, so every plan in this run freezes the same fields the dialog
+  // showed. A storage hiccup must not block every merge, so a failed read
+  // falls back to no protection — the previous behaviour — rather than
+  // refusing to merge at all.
+  const policies = await readPolicies(api).catch(() => ({}));
   for (const group of groups) {
     if (!group || !Array.isArray(group.members) || group.members.length < 2) continue;
-    const plan = planMerge(group, keepBySignature[group.signature], choiceBySignature[group.signature]);
+    const plan = planMerge(group, keepBySignature[group.signature], choiceBySignature[group.signature], { policies });
     if (!plan.primary || !plan.others.length) continue;
     if (Object.keys(plan.patch).length) {
       try {

@@ -7,6 +7,37 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.28.0] — 2026-10-27
+
+### Added
+
+- **Protected fields, per address book (#7).** A book can now freeze the fields a
+  merge must never change — name, emails, phones, organizations, notes, tags and
+  the rest. The kept contact's books decide, and a field protected by **any**
+  book the contact is in is protected: protection is a safety property, so more
+  protection is the safe way to be wrong. A protected field is not filled from a
+  donor, not unioned into, and not replaced even when the dialog offers a
+  donor's value.
+
+- **The review dialog shows the policy in force (#7).** When a book protects
+  fields, the dialog names them above the group, so a merge that deliberately
+  leaves something alone says so instead of looking like it forgot.
+
+### Fixed
+
+- **An organisation filled from a donor was written but never shown.** The merge
+  plan reported a filled map field (`organizations`, `titles`, `personalInfo`,
+  `media`) as one whole-map entry, and the preview handed that map to `DISPLAY`
+  as if it were a single entry — so the value landed on the contact with no line
+  in the dialog explaining where it came from. The plan now reports one entry per
+  value, the shape the union fields already used.
+
+### Notes
+
+`mergeGroups` reads the policies itself, so the preview and the write derive the
+frozen fields from the same source and cannot disagree. A storage failure while
+reading them falls back to no protection rather than refusing to merge.
+
 ## [1.27.2] — 2026-10-26
 
 ### Fixed

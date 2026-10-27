@@ -394,6 +394,17 @@ silence:
   card still matches on email. A book that opts out never silences a match
   another book still wants.
 
+A book can also **protect fields**. A protected field is never filled from a
+donor, never unioned into, and never replaced — not even when the dialog offers a
+specific donor's value. The union rule applies here too, but in the *opposite*
+direction: a field protected by **any** book the kept contact is in is protected,
+because protection is a safety property and more of it is the safe way to be
+wrong. `protectedFieldsFor(card, policies)` is that reading, and `planMerge`
+derives the frozen set from it, so the preview the dialog shows and the write
+`mergeGroups` performs cannot disagree about what a merge will change. The
+dialog names the fields it is holding back, so a merge that deliberately leaves
+something alone says so instead of looking like it forgot.
+
 `filterForScan(cards, { policies, ignore, globalOpts })` applies both and
 returns the surviving cards together with their per-card effective options, so
 `findDuplicateGroups` uses each contact's own strategies instead of the globals.
@@ -924,6 +935,14 @@ Book policies (#7)
   policyAwareOptions(api) assembles detection options and policies in one call
   findGroupFor honours the policies too, so the contact-details hint and the
     save-time warning agree with the scan
+  protectedFieldsFor(card, policies) — the union over the card's enabled books;
+    protection is a safety property, so the union is the safe direction
+  planMerge(group, keepId, choices, { policies }) freezes those fields: never
+    filled from a donor, never unioned into, never replaced by a donor choice
+  mergeGroups reads the policies itself, so the preview and the write cannot
+    disagree about what a merge will change
+  a filled map field (organizations, titles, personalInfo, media) reports one
+    `added` entry per value, so the preview can show every one of them
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
