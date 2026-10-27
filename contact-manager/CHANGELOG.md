@@ -7,6 +7,30 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.30.0] — 2026-10-27
+
+### Added
+
+- **A decision per contact for duplicates during import (#4).** The wizard used
+  to offer a single switch for the whole file — hold back every duplicate, or
+  import every duplicate. Each contact in the file that matches one you already
+  have now gets its own choice: *Skip*, *Merge into the existing contact*, or
+  *Import as a separate contact*, with one default that applies to the whole
+  file. The choices are kept for the batch, so a file does not have to be
+  decided twice.
+
+- **A merge chosen during import still goes through the review dialog (#4).**
+  "Merge" writes the imported contact and then hands the pair to the one review
+  dialog every merge in this plugin uses (README §9.2), pre-selected to keep the
+  contact that was already there. Nothing is merged without the user seeing the
+  plan, and the merge is undoable like any other.
+
+### Notes
+
+The detection half of #4 shipped in v1.21.0; this closes the remaining gap — the
+*clear per-group decision* the issue asked for. The import now reports what it
+wrote, what it skipped and what it queued for review instead of a single count.
+
 ## [1.29.0] — 2026-10-27
 
 ### Added
