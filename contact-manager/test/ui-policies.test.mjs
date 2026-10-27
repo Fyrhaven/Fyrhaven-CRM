@@ -240,3 +240,54 @@ describe('policies dialog: protected fields', () => {
   });
 });
 
+
+// ── Ignore rules by field (#7) ──────────────────────────────────
+//
+// The company rule. Enter is used to add, because the three "Add" buttons
+// (domain, tag, company) carry the same label and the keyboard path is the one
+// a user actually takes.
+
+describe('policies dialog: ignored companies', () => {
+  const addCompany = async (name) => {
+    const input = screen.getByPlaceholderText(en()['policies.companyPlaceholder']);
+    await act(async () => { fireEvent.change(input, { target: { value: name } }); });
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter' }); });
+  };
+
+  it('adds a company with Enter and stores it', async () => {
+    const { api, state } = await openDialog();
+    await addCompany('Acme');
+    expect(screen.getByText('Acme \u00d7')).toBeTruthy();
+    await save();
+    await waitFor(() => expect(state.result).toEqual({ saved: true }));
+    expect(await api.storage.get('bookIgnore'))
+      .toEqual({ domains: [], tags: [], companies: ['Acme'] });
+  });
+
+  it('reads stored companies back, and removes one', async () => {
+    const api = dialogApi();
+    await api.storage.set('bookIgnore', { domains: [], tags: [], companies: ['Acme', 'Initech'] });
+    const Dialog = makePoliciesDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { policiesDialog: true, books: ONE_BOOK, onResult: () => {} }));
+    });
+    await waitFor(() => screen.getByText('Acme \u00d7'));
+    expect(screen.getByText('Initech \u00d7')).toBeTruthy();
+
+    await click(screen.getByText('Acme \u00d7'));
+    await save();
+    await waitFor(() => expect(api.storage.get('bookIgnore'))
+      .resolves.toEqual({ domains: [], tags: [], companies: ['Initech'] }));
+  });
+
+  it('ignores a company twice added, rather than storing it twice', async () => {
+    const { api, state } = await openDialog();
+    await addCompany('Acme');
+    await addCompany('Acme');
+    await save();
+    await waitFor(() => expect(state.result).toEqual({ saved: true }));
+    expect(await api.storage.get('bookIgnore'))
+      .toEqual({ domains: [], tags: [], companies: ['Acme'] });
+  });
+});
+

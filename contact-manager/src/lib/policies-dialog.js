@@ -24,9 +24,10 @@ export function makePoliciesDialog(React, api) {
   return function PoliciesDialog(props) {
     const books = Array.isArray(props.books) ? props.books : [];
     const [policies, setPolicies] = useState({});
-    const [ignore, setIgnore] = useState({ domains: [], tags: [] });
+    const [ignore, setIgnore] = useState({ domains: [], tags: [], companies: [] });
     const [domainDraft, setDomainDraft] = useState('');
     const [tagDraft, setTagDraft] = useState('');
+    const [companyDraft, setCompanyDraft] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -110,6 +111,17 @@ export function makePoliciesDialog(React, api) {
 
     const removeTag = (tag) => {
       setIgnore({ ...ignore, tags: ignore.tags.filter((t) => t !== tag) });
+    };
+
+    const addCompany = () => {
+      const company = companyDraft.trim();
+      if (!company || ignore.companies.includes(company)) { setCompanyDraft(''); return; }
+      setIgnore({ ...ignore, companies: [...ignore.companies, company] });
+      setCompanyDraft('');
+    };
+
+    const removeCompany = (company) => {
+      setIgnore({ ...ignore, companies: ignore.companies.filter((c) => c !== company) });
     };
 
     const save = async () => {
@@ -201,6 +213,26 @@ export function makePoliciesDialog(React, api) {
                 onKeyDown: (event) => { if (event.key === 'Enter') addTag(); },
               }),
               h(Button, { onClick: addTag, variant: 'secondary' }, t('policies.addTag')),
+            ),
+          ),
+          h(Stack, { gap: 2 },
+            h(Text, { weight: 'semibold' }, t('policies.ignoredCompanies')),
+            h(Text, { tone: 'muted' }, t('policies.ignoredCompaniesHint')),
+            ignore.companies.length
+              ? h(Row, { gap: 2, wrap: true },
+                  ...ignore.companies.map((company) => h(Button, {
+                    key: company, size: 'small', variant: 'ghost',
+                    onClick: () => removeCompany(company),
+                  }, `${company} \u00d7`)))
+              : null,
+            h(Row, { gap: 2 },
+              h(Input, {
+                value: companyDraft,
+                onChange: (event) => setCompanyDraft(event.target.value),
+                placeholder: t('policies.companyPlaceholder'),
+                onKeyDown: (event) => { if (event.key === 'Enter') addCompany(); },
+              }),
+              h(Button, { onClick: addCompany, variant: 'secondary' }, t('policies.addCompany')),
             ),
           ),
         ),
