@@ -84,6 +84,8 @@ export function planImport(drafts, existing, { region = '' } = {}) {
       ...keys.phone.map((value) => ['p:', value]),
       ...keys.name.map((value) => ['n:', value]),
       ...keys.core.map((value) => ['c:', value]),
+      // a nickname variant shares the name namespace, like detection (#8)
+      ...keys.nickname.map((value) => ['n:', value]),
     ];
     for (const [prefix, value] of all) {
       const id = `${prefix}${value}`;
@@ -101,6 +103,7 @@ export function planImport(drafts, existing, { region = '' } = {}) {
       ...keys.phone.map((value) => [`p:${value}`, 'phone']),
       ...keys.name.map((value) => [`n:${value}`, 'name']),
       ...keys.core.map((value) => [`c:${value}`, 'name']),
+      ...keys.nickname.map((value) => [`n:${value}`, 'nickname']),
     ];
     const hit = checks.map(([id, reason]) => ({ match: byKey.get(id), reason })).find((entry) => entry.match);
     if (hit) duplicates.push({ draft, match: hit.match, reason: hit.reason });

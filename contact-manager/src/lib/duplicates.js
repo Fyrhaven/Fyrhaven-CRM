@@ -13,6 +13,7 @@
 import { contactName, emailEntries, isMergeable, phoneEntries, primaryEmail } from './contacts.js';
 import { phoneKey } from './phones.js';
 import { filterForScan, protectedFieldsFor, readPolicies } from './book-policies.js';
+import { foldName, foldVariants, nicknameKey, pairNameEvidence } from './name-match.js';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -35,13 +36,14 @@ export function normalizePhone(number, region = '') {
 
 /**
  * Case- and diacritic-insensitive name for comparisons; punctuation becomes
- * spaces and tokens are sorted, so "Doe, John" matches "John Doe". Letters of
- * any script survive (`\p{L}`), so non-Latin names never collapse to ''.
+ * spaces and tokens are sorted, so "Doe, John" matches "John Doe".
+ *
+ * Scripts are romanised (#8) as well as lower-cased and de-marked, so "Иванов"
+ * and "J. Ivanov" reach the same key. Letters of a script with no table survive
+ * untouched (`\p{L}`), so a name never collapses to ''.
  */
 export function normalizeName(value) {
-  const base = String(value ?? '').normalize('NFKD').toLowerCase().trim();
-  const noMarks = base.replace(/\p{M}/gu, '');
-  return noMarks.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return foldName(value);
 }
 
 function tokens(value) {
@@ -64,12 +66,45 @@ export function coreNameKey(card) {
   return substantial.length >= 2 ? substantial.join(' ') : '';
 }
 
+// ── Name keys, in every honest spelling (#8) ───────────────────
+//
+// A name can be written more than one way without being a different name:
+// "Müller" is "Mueller" on a passport and "Muller" on a keyboard, and "Bob" is
+// another name for Robert. Those are *equivalences*, so they belong in keys; an
+// initial or a typo is *evidence*, and is handled pairwise below.
+
+/** Every full-name key: one per honest spelling (`müller`, `mueller`). */
+export function nameKeys(card) {
+  return [...new Set(foldVariants(contactName(card))
+    .map((folded) => folded.split(' ').sort().join(' '))
+    .filter(Boolean))];
+}
+
+/** Every core key (initials dropped), one per spelling; needs two tokens. */
+export function coreNameKeys(card) {
+  return [...new Set(foldVariants(contactName(card))
+    .map((folded) => folded.split(' ').filter((token) => token.length >= 2).sort().join(' '))
+    .filter((key) => key.split(' ').length >= 2))];
+}
+
+/**
+ * Every nickname-canonical key that actually *adds* something — a spelling whose
+ * canonical form differs from the plain name key. "Bob Smith" contributes
+ * `robert smith`; "Robert Smith" contributes nothing, because it already is that.
+ */
+export function nicknameKeys(card) {
+  const plain = new Set(nameKeys(card));
+  return [...new Set(foldVariants(contactName(card))
+    .map((folded) => nicknameKey(folded))
+    .filter((key) => key && !plain.has(key)))];
+}
+
 // ── Keys of one card ───────────────────────────────────────────
 
 /**
  * The match keys of a card as `{ email: [...], phone: [...], name: [...],
- * core: [...] }`, each already normalised and filtered by `opts`
- * (a strategy set to false contributes nothing; missing opts means on).
+ * core: [...], nickname: [...] }`, each already normalised and filtered by
+ * `opts` (a strategy set to false contributes nothing; missing opts means on).
  */
 export function cardKeys(card, opts = {}) {
   const email = opts.matchByEmail === false
@@ -80,13 +115,13 @@ export function cardKeys(card, opts = {}) {
     : [...new Set(phoneEntries(card).map((p) => normalizePhone(p.number, opts.region)).filter(Boolean))];
   let name = [];
   let core = [];
+  let nickname = [];
   if (opts.matchByName !== false) {
-    const full = nameKey(card);
-    const coreOnly = coreNameKey(card);
-    if (full) name = [full];
-    if (coreOnly) core = [coreOnly];
+    name = nameKeys(card);
+    core = coreNameKeys(card);
+    nickname = nicknameKeys(card);
   }
-  return { email, phone, name, core };
+  return { email, phone, name, core, nickname };
 }
 
 function prefixedKeys(card, opts) {
@@ -96,11 +131,18 @@ function prefixedKeys(card, opts) {
     ...keys.phone.map((v) => ['p:', v]),
     ...keys.name.map((v) => ['n:', v]),
     ...keys.core.map((v) => ['c:', v]),
+    ...keys.nickname.map((v) => ['k:', v]),
   ];
 }
 
-const isStrongKey = (prefix) => prefix === 'e:' || prefix === 'p:';
-const reasonType = (prefix) => (prefix === 'e:' ? 'email' : prefix === 'p:' ? 'phone' : 'name');
+/**
+ * Name-family keys share one namespace, so a nickname variant can meet a full
+ * name: `Bob Smith`'s `k:robert smith` has to find `Robert Smith`'s
+ * `n:robert smith`. Email and phone keep namespaces of their own.
+ */
+const unionId = (prefix, value) => (prefix === 'k:' ? `n:${value}` : `${prefix}${value}`);
+
+const isStrongFamily = (family) => family === 'e:' || family === 'p:';
 
 function signatureOf(members) {
   return `g:${members.map((m) => m.id).slice().sort().join(',')}`;
@@ -152,11 +194,40 @@ export function findDuplicateGroups(cards, opts = {}, dismissed = []) {
   const owner = new Map(); // 'e:a@b.c' → first card index
   keysByCard.forEach((keys, i) => {
     for (const [prefix, value] of keys) {
-      const key = prefix + value;
+      const key = unionId(prefix, value);
       if (owner.has(key)) union(i, owner.get(key));
       else owner.set(key, i);
     }
   });
+
+  // Name evidence no shared key can express (#8): an initial, a phonetic surname
+  // or a near-miss given name. Pairwise, bucketed by phonetic surname, and only
+  // when the given name corroborates — "John Smith" and "Jane Smith" stay apart.
+  //
+  // A pair that already shares an exact key is skipped: the group is explained,
+  // and "Similar name" on top of "Same email address" is noise, not evidence.
+  const evidence = [];
+  if (globalOpts.matchByName !== false) {
+    const named = [];
+    list.forEach((card, i) => {
+      const opts = perCardOpts ? perCardOpts[i] : globalOpts;
+      if (opts.matchByName === false) return;
+      named.push({ index: i, name: contactName(card), components: card.name?.components });
+    });
+    const idSets = keysByCard.map((keys) => new Set(keys.map(([prefix, value]) => unionId(prefix, value))));
+    const sharesKey = (a, b) => [...idSets[a]].some((id) => idSets[b].has(id));
+    const threshold = Number(globalOpts.nameSimilarity);
+    const pairs = pairNameEvidence(named, {
+      threshold: Number.isFinite(threshold) && threshold > 0 ? threshold : 80,
+    });
+    for (const pair of pairs) {
+      const a = named[pair.a].index;
+      const b = named[pair.b].index;
+      union(a, b);
+      if (sharesKey(a, b)) continue;
+      evidence.push({ a, b, kind: pair.kind });
+    }
+  }
 
   const components = new Map();
   keysByCard.forEach((_, i) => {
@@ -164,6 +235,15 @@ export function findDuplicateGroups(cards, opts = {}, dismissed = []) {
     if (!components.has(root)) components.set(root, []);
     components.get(root).push(i);
   });
+
+  // Which name-evidence pairs landed in which component. Kept per root so the
+  // loop below does not have to search the whole list for every group.
+  const evidenceByRoot = new Map();
+  for (const pair of evidence) {
+    const root = find(pair.a);
+    if (!evidenceByRoot.has(root)) evidenceByRoot.set(root, []);
+    evidenceByRoot.get(root).push(pair);
+  }
 
   const hidden = new Set(dismissed.filter((s) => typeof s === 'string'));
   const groups = [];
@@ -173,26 +253,49 @@ export function findDuplicateGroups(cards, opts = {}, dismissed = []) {
     const signature = signatureOf(members);
     if (hidden.has(signature)) continue;
 
-    // Which keys do at least two members of this group share?
+    // Which keys do at least two members of this group share? Keyed by the union
+    // id, with the prefixes that produced it, so a nickname variant can be told
+    // apart from a plain name.
     const positionsByKey = new Map();
     indices.forEach((cardIndex, position) => {
       for (const [prefix, value] of keysByCard[cardIndex]) {
-        const key = prefix + value;
-        if (!positionsByKey.has(key)) positionsByKey.set(key, new Set());
-        positionsByKey.get(key).add(position);
+        const id = unionId(prefix, value);
+        if (!positionsByKey.has(id)) positionsByKey.set(id, { positions: new Set(), prefixes: new Set() });
+        const entry = positionsByKey.get(id);
+        entry.positions.add(position);
+        entry.prefixes.add(prefix);
       }
     });
 
     const reasons = [];
     let strong = false;
-    for (const [key, positions] of positionsByKey) {
-      if (positions.size < 2) continue;
-      const prefix = key.slice(0, 2);
-      const value = key.slice(2);
-      if (isStrongKey(prefix)) strong = true;
-      const type = reasonType(prefix);
+    for (const [id, entry] of positionsByKey) {
+      if (entry.positions.size < 2) continue;
+      const family = id.slice(0, 2);
+      const value = id.slice(2);
+      if (isStrongFamily(family)) strong = true;
+      // A nickname is only the *reason* when a canonical variant met a real name;
+      // two cards that both spell it "Bob" already share a plain name key.
+      const nickname = entry.prefixes.has('k:') && (entry.prefixes.has('n:') || entry.prefixes.has('c:'));
+      const type = family === 'e:' ? 'email'
+        : family === 'p:' ? 'phone'
+          : nickname ? 'nickname' : 'name';
       if (!reasons.some((r) => r.type === type && r.value === value)) reasons.push({ type, value });
     }
+
+    // A group held together by an initial, a phonetic surname or a near-miss
+    // given name says so, naming both spellings — it is evidence, not proof.
+    const soft = evidenceByRoot.get(find(indices[0]));
+    if (soft?.length) {
+      const seen = new Set();
+      for (const pair of soft) {
+        const value = `${contactName(list[pair.a])} ↔ ${contactName(list[pair.b])}`;
+        if (seen.has(value)) continue;
+        seen.add(value);
+        reasons.push({ type: 'similar', value });
+      }
+    }
+
     if (!reasons.length) continue;
     groups.push({ signature, strength: strong ? 'strong' : 'possible', reasons, members });
   }
