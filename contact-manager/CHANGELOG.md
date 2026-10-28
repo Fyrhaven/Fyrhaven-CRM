@@ -7,6 +7,33 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.32.0] — 2026-10-27
+
+### Added
+
+- **Bulk merge by company or domain (#6).** The Duplicates page now reads the
+  facets out of the duplicate groups themselves — *Acme Inc. · 2 groups*,
+  *@example.org · 3 groups*, and *All N groups*. Picking one selects every group
+  it touches, shows what the batch would do (`{groups} group(s) · {contacts}
+  contact(s) · {removals} would be removed`) and merges the whole batch through
+  the one review dialog, with its per-group *Keep* override and its confirmation.
+
+- **A safety cap on one batch.** More than 50 groups disables *Merge* and says
+  why instead of quietly trimming the selection: 50 groups removes at least 50
+  contacts, which still fits the 100-card undo record, so a capped batch can
+  always be undone.
+
+### Notes
+
+The facets are **read from the data, not typed**, so a company is matched exactly
+as it is written — the user clicks the spelling that exists. Rewriting
+`Acme Inc.` to `Acme` is #20 (normalisation) and is deliberately not duplicated
+here. A facet that covers a single group is not offered: that is *Review* on that
+group.
+
+"…or group" in the issue title is the detected duplicate group; contact groups
+(#12) do not exist as a host object yet.
+
 ## [1.31.0] — 2026-10-27
 
 ### Added

@@ -3,13 +3,14 @@
 // shared merge dialog. Scanning is a full fresh load of the address books;
 // nothing is cached (api.storage holds only the settings and hidden groups).
 
-import { List, ListRow, Page, PageHeader, InfoBar, Alert, EmptyState, Card, Badge, Checkbox, Button, Row, Stack, Text, Heading } from '@plugin-host/ui';
+import { List, ListRow, Page, PageHeader, InfoBar, Alert, EmptyState, Card, Badge, Checkbox, Button, Row, Section, Stack, Text, Heading } from '@plugin-host/ui';
 import { bookIds, bookNamesById, contactName, detectionOptions, loadBooks, loadCards } from './contacts.js';
 import { LAST_SCAN_KEY, findDuplicateGroups, planMerge, readDismissed, writeDismissed } from './duplicates.js';
 import { memberLabel, mergeLabel, reasonLine, strengthKey, toastMergeResult, undoWindowMinutes } from './labels.js';
 import { readUndo, undoLastMerge, clearUndo } from './undo.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { readPolicies, readIgnore } from './book-policies.js';
+import { BATCH_CAP, batchPlan, groupFacets, isOverCap } from './bulk-merge.js';
 
 const FOCUS_COOLDOWN_MS = 5000;
 
@@ -187,6 +188,15 @@ export function makeManagerPage(React, api) {
       return next;
     });
 
+    // Bulk merge by facet (#6): the facets select, the review dialog merges. The
+    // plan is the dry-run summary, and the cap keeps one batch inside what the
+    // undo record can hold.
+    const facets = groupFacets(groups);
+    const plan = batchPlan(groups, selected);
+    const overCap = isOverCap(plan);
+    const selectFacet = (signatures) => setSelected(new Set(signatures));
+    const selectAll = () => setSelected(new Set(groups.map((group) => group.signature)));
+
     const bookLabel = (member) => {
       const ids = bookIds(member);
       return ids.length ? (bookNames.get(ids[0]) ?? '') : '';
@@ -278,11 +288,41 @@ export function makeManagerPage(React, api) {
             h(InfoBar, { tone: groups.length ? 'warning' : 'success', title: summary },
               h(Text, { tone: 'muted' },
                 t('scan.last', { when: new Date(stats.when).toLocaleString(api.i18n.getLocale()) }))),
+            groups.length > 1
+              ? h(Section, { title: t('batch.title'), description: t('batch.hint') },
+                  h(Row, { gap: 2, wrap: true },
+                    h(Button, { size: 'sm', variant: 'secondary', onClick: selectAll },
+                      t('batch.selectAll', { count: groups.length })),
+                    ...facets.map((facet) => h(Button, {
+                      key: `${facet.kind}:${facet.key}`,
+                      size: 'sm',
+                      variant: 'secondary',
+                      onClick: () => selectFacet(facet.signatures),
+                    }, t(facet.kind === 'company' ? 'batch.company' : 'batch.domain', {
+                      name: facet.label,
+                      count: facet.signatures.length,
+                    })))))
+              : null,
             selected.size
-              ? h(Row, { gap: 2 },
-                  h(Button, { icon: 'git-merge', onClick: () => void openReview(groups.filter((g) => selected.has(g.signature))) },
-                    mergeLabel(t, selected.size)),
-                  h(Button, { variant: 'secondary', onClick: () => setSelected(new Set()) }, t('dialog.cancel')))
+              ? h(Stack, { gap: 2 },
+                  h(Row, { gap: 2 },
+                    h(Button, {
+                      icon: 'git-merge',
+                      // A batch bigger than the cap is refused here, not trimmed:
+                      // silently merging part of what was asked for is worse than
+                      // asking the user to narrow the selection.
+                      disabled: overCap,
+                      onClick: () => void openReview(groups.filter((group) => selected.has(group.signature))),
+                    }, mergeLabel(t, selected.size)),
+                    h(Button, { variant: 'secondary', onClick: () => setSelected(new Set()) }, t('dialog.cancel'))),
+                  h(Text, { tone: 'muted' }, t('batch.plan', {
+                    groups: plan.groups,
+                    contacts: plan.contacts,
+                    removals: plan.removals,
+                  })),
+                  overCap
+                    ? h(Alert, { tone: 'warning' }, t('batch.overCap', { groups: plan.groups, cap: BATCH_CAP }))
+                    : null)
               : null,
             groups.length === 0 ? h(EmptyState, { title: t('scan.clean') }) : null,
             ...groups.map(groupCard),
