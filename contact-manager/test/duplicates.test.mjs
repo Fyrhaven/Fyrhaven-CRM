@@ -29,13 +29,20 @@ describe('phone keys and the region', () => {
       makeCard({ id: 'b', name: 'A. Lovelace', phones: ['+49 176 1234567'] }),
     ];
 
-    // without a region the two forms cannot be known to be the same number
-    expect(findDuplicateGroups(cards, {})).toEqual([]);
+    // without a region the two numbers cannot be known to be the same, so the only
+    // evidence left is the name: "A." is an initial for "Ada" (#8), and that is a
+    // 'possible' match, never a strong one
+    const soft = findDuplicateGroups(cards, {});
+    expect(soft).toHaveLength(1);
+    expect(soft[0].strength).toBe('possible');
+    expect(soft[0].reasons).toEqual([{ type: 'similar', value: 'Ada Lovelace ↔ A. Lovelace' }]);
 
     const groups = findDuplicateGroups(cards, { region: 'DE' });
     expect(groups).toHaveLength(1);
     expect(groups[0].strength).toBe('strong');
     expect(groups[0].members.map((card) => card.id).sort()).toEqual(['a', 'b']);
+    // the phone number is the reason; the name pair is not repeated on top of it
+    expect(groups[0].reasons).toEqual([{ type: 'phone', value: '491761234567' }]);
   });
 
   it('still matches the international spellings with no region at all', () => {
@@ -82,7 +89,10 @@ describe('normalisation', () => {
   it('names: case, diacritics, punctuation, token order', () => {
     expect(normalizeName('  DOÈ, John!! ')).toBe('doe john');
     expect(nameKey(makeCard({ id: '1', name: 'Doe, John' }))).toBe(nameKey(makeCard({ id: '2', name: 'John Doe' })));
-    expect(normalizeName('Иванов')).toBe('иванов'); // non-Latin names survive
+    // romanised (#8), so the same name in another script reaches the same key
+    expect(normalizeName('Иванов')).toBe('ivanov');
+    // and a script with no table is kept, never collapsed to ''
+    expect(normalizeName('王')).toBe('王');
   });
 
   it('core name drops initials so "John A. Smith" ≡ "John Smith"', () => {
@@ -98,7 +108,7 @@ describe('cardKeys', () => {
   it('honours the strategy toggles', () => {
     const card = makeCard({ id: '1', name: 'Ada Lovelace', emails: ['a@x.de'], phones: ['+491761234567'] });
     expect(cardKeys(card, {})).toEqual({
-      email: ['a@x.de'], phone: ['491761234567'], name: ['ada lovelace'], core: ['ada lovelace'],
+      email: ['a@x.de'], phone: ['491761234567'], name: ['ada lovelace'], core: ['ada lovelace'], nickname: [],
     });
     expect(cardKeys(card, { matchByEmail: false }).email).toEqual([]);
     expect(cardKeys(card, { matchByPhone: false }).phone).toEqual([]);
@@ -245,5 +255,93 @@ describe('per-book policies in findDuplicateGroups', () => {
     expect(findDuplicateGroups(cards, {})).toHaveLength(1);
     // turning off name matching for b1 means no match
     expect(findDuplicateGroups(cards, { policies: { b1: { matchByName: false } } })).toEqual([]);
+  });
+});
+
+// ── Smarter name matching (#8) ──────────────────────────────────
+//
+// A precision/recall fixture set: every pair that *should* match, and the pairs
+// that must not — the second list is the one that matters, because a false
+// positive here proposes merging two different people.
+
+describe('name evidence, end to end', () => {
+  const pair = (...names) => names.map((name, i) => makeCard({ id: `p${i}`, name, emails: [`p${i}@x.test`] }));
+  const group = (cards, opts = {}) => findDuplicateGroups(cards, opts);
+
+  it('recall: the spellings that mean the same person', () => {
+    const matches = [
+      ['Ada Lovelace', 'A. Lovelace'],       // an initial
+      ['John Smith', 'John Smyth'],          // a phonetic surname
+      ['Jon Smith', 'John Smith'],           // a short form (in the nickname table)
+      ['Sara Jones', 'Sarah Jones'],         // a typo
+      ['Bob Smith', 'Robert Smith'],         // a nickname
+      ['Müller, Hans', 'Hans Mueller'],      // transliteration
+      ['Иванов Иван', 'Ivanov Ivan'],        // romanisation
+    ];
+
+    for (const names of matches) {
+      const groups = group(pair(...names));
+      expect(groups, names.join(' / ')).toHaveLength(1);
+      expect(groups[0].strength).toBe('possible');
+    }
+  });
+
+  it('precision: the pairs that are different people', () => {
+    const strangers = [
+      ['John Smith', 'Jane Smith'],
+      ['John Smith', 'Mary Smith'],
+      ['Sara Jones', 'Sara Joneson'],        // a longer surname is not the same one
+      ['Ada Lovelace', 'Ada Byron'],
+      ['Ann Lee', 'Bob Lee'],
+    ];
+
+    for (const names of strangers) {
+      expect(group(pair(...names)), names.join(' / ')).toEqual([]);
+    }
+  });
+
+  it('groups Bob and Robert as a nickname, and says so', () => {
+    const groups = group(pair('Bob Smith', 'Robert Smith'));
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].strength).toBe('possible');
+    expect(groups[0].reasons).toEqual([{ type: 'nickname', value: 'robert smith' }]);
+  });
+
+  it('names both spellings when the evidence is a pair, not a key', () => {
+    const groups = group(pair('J. Smith', 'John Smith'));
+
+    expect(groups[0].reasons).toEqual([{ type: 'similar', value: 'J. Smith ↔ John Smith' }]);
+  });
+
+  it('never makes a group strong: the merge is still the user\'s decision', () => {
+    expect(group(pair('Ada Lovelace', 'A. Lovelace'))[0].strength).toBe('possible');
+    expect(group(pair('Bob Smith', 'Robert Smith'))[0].strength).toBe('possible');
+  });
+
+  it('honours the threshold, and 0 falls back to the default', () => {
+    // "Sara"/"Sarah" is a typo, not a table entry, so only the threshold decides
+    const cards = pair('Sara Jones', 'Sarah Jones');
+
+    expect(group(cards, { nameSimilarity: 100 })).toEqual([]);
+    expect(group(cards, { nameSimilarity: 80 })).toHaveLength(1);
+    expect(group(cards, { nameSimilarity: 0 })).toHaveLength(1);
+  });
+
+  it('is off when name matching is off', () => {
+    expect(group(pair('J. Smith', 'John Smith'), { matchByName: false })).toEqual([]);
+    expect(group(pair('Bob Smith', 'Robert Smith'), { matchByName: false })).toEqual([]);
+    expect(group(pair('Müller, Hans', 'Hans Mueller'), { matchByName: false })).toEqual([]);
+  });
+
+  it('keeps an email match strong even when the names also agree', () => {
+    const cards = [
+      makeCard({ id: 'a', name: 'J. Smith', emails: ['same@x.test'] }),
+      makeCard({ id: 'b', name: 'John Smith', emails: ['same@x.test'] }),
+    ];
+
+    expect(group(cards)[0].strength).toBe('strong');
+    // the email explains the group; the name pair is not repeated on top of it
+    expect(group(cards)[0].reasons).toEqual([{ type: 'email', value: 'same@x.test' }]);
   });
 });
