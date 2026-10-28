@@ -57,6 +57,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
 | Undo banner | Top of the Contact Manager page | *Undo merge* / *Forget* for the newest merge record |
 | Duplicate digest | Contact Manager → *Overview*, above the headline | When the plugin opens, says so if no scan has run within `digestDays` days or if duplicate groups have appeared since you were last shown them, with *Review now* and *Got it* (#5) |
+| Bulk merge | Contact Manager → *Duplicates*, above the groups | Facet buttons (*All N groups*, *Acme Inc. · 2 groups*, *@example.org · 3 groups*) select every group a company or email domain touches, preview the batch and merge it in one dialog. Capped at 50 groups per batch (#6) |
 | `contact-detail-section` slot | Inside an open contact | A *Duplicate check* block with a *Review duplicates* button |
 | Create/update hooks | After a contact is saved | A non-blocking warning when the saved contact looks like an existing one |
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
@@ -121,6 +122,7 @@ contact-manager/
 │       ├── capabilities.js# which optional host APIs this instance really has
 │       ├── download.js    # hand bytes to the browser as a download (files, project export)
 │       ├── manager-page.js # the Duplicates sub-tab
+│       ├── bulk-merge.js  # facets (company/domain) and the batch plan (#6)
 │       ├── policies-dialog.js # the address-book policies dialog (#7)
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
@@ -729,7 +731,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/duplicates.test.mjs` | Normalisation, key building, union-find grouping, strength, reasons, sorting, hidden groups |
 | `test/book-policies.test.mjs` | Policy resolution: per-book overrides, the most-permissive rule, the ignore rules, and the repairs on read |
 | `test/merge.test.mjs` | `pickPrimary`, `planMerge` (unions, fills, keywords, patch shape), `mergeGroups` (update before remove, failure handling) |
-| `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection |
+| `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection, and the bulk merge by company/domain (facets, the dry-run plan, the dialog, the cap) |
+| `test/bulk-merge.test.mjs` | Bulk merge: the company and domain keys, the facets read off the groups, one group under every facet its members have, the batch plan, and the cap against the undo record |
 | `test/ui-policies.test.mjs` | The policies dialog: the book list, the ignore sections, and the save |
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
@@ -1090,6 +1093,20 @@ Duplicate digest (#5, re-scoped — there is no timer hook to schedule with)
   acknowledge(api, signatures, now) / forgetDigest(api)  in 'scanDigest'
   stores the SUMMARY and signatures only, never contacts; the home page shows it
   hidden groups are left out (a hidden group is a decision, not news)
+
+Bulk merge by facet (#6) — the facets select, the review dialog merges
+  BATCH_CAP = 50    > the cap disables Merge; it never trims the selection
+    the undo record keeps MAX_CARDS = 100, so a capped batch can be undone
+  companyKey(name) -> case/whitespace-insensitive; domainKey(address) -> '' unless it has a dot
+  cardFacets(card) -> [{ kind: 'company'|'domain', key }], de-duplicated
+  groupFacets(groups) -> [{ kind, key, label, signatures }], biggest first
+    a group is under EVERY facet any of its members has (a filter, not a partition)
+    a facet covering one group is not offered — that is Review on that group
+  batchPlan(groups, selected) -> { groups, contacts, removals, signatures }
+    removals = contacts - groups: one kept per group, the dry run before the dialog
+  isOverCap(plan, cap = BATCH_CAP) -> boolean
+  NOT a matching rule: the facets are read from the data, so there is no typing
+    to be fuzzy about; rewriting 'Acme Inc.' to 'Acme' is #20 (normalisation)
 
 Export (#19, export half)
   toCsv(rows) / escapeCell(cell)   RFC 4180 quoting, CRLF
