@@ -11,6 +11,7 @@
 import { alignRow } from './csv.js';
 import { cardFromDraft, emptyDraft } from './editor.js';
 import { cardKeys, groupFromSelection } from './duplicates.js';
+import { recordHistory } from './history.js';
 import { ADDRESS_FIELDS } from './import-fields.js';
 import { applyRulesToCard } from './rules.js';
 
@@ -187,5 +188,6 @@ export async function applyImport(api, drafts, { rules = [], region = '' } = {})
       failed += 1;
     }
   }
+  if (created) await recordHistory(api, { kind: 'import', contacts: created });
   return { created, failed, cards };
 }

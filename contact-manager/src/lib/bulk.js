@@ -11,6 +11,7 @@
 //
 // Pure api calls; no DOM.
 
+import { recordHistory } from './history.js';
 import { saveUndo } from './undo.js';
 
 /**
@@ -110,7 +111,9 @@ export async function applyBulkEdit(api, cards, { tags = {}, books = {} } = {}) 
     addBooks: [...new Set((Array.isArray(books.add) ? books.add : []).map(String).filter(Boolean))],
     removeBooks: new Set((Array.isArray(books.remove) ? books.remove : []).map(String).filter(Boolean)),
   };
-  return updateEach(api, cards, (card) => bulkPatch(card, spec));
+  const result = await updateEach(api, cards, (card) => bulkPatch(card, spec));
+  if (result.updated) await recordHistory(api, { kind: 'bulk', contacts: result.updated });
+  return result;
 }
 
 /** Tags only. */
@@ -138,6 +141,6 @@ export async function deleteContacts(api, cards) {
     }
   }
   // No kept contact: an undo of a delete only has to re-create what went away.
-  if (removed.length) await saveUndo(api, [{ keptId: '', before: {}, absent: [], removed }]);
+  if (removed.length) await saveUndo(api, [{ keptId: '', before: {}, absent: [], removed }], Date.now(), 'delete');
   return { deleted: removed.length, failed };
 }

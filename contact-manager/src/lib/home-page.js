@@ -15,6 +15,7 @@ import {
 import { bookNamesById, isGroupCard, loadBooks, loadCards, matchOptions } from './contacts.js';
 import { findDuplicateGroups, LAST_SCAN_KEY, readDismissed } from './duplicates.js';
 import { readProjects } from './projects.js';
+import { readHistory } from './history.js';
 import { healthSummary } from './health.js';
 import { readRegion } from './normalise.js';
 import { findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, undoMerge } from './actions.js';
@@ -36,7 +37,7 @@ export function makeHomePage(React, api) {
     const load = useCallback(async () => {
       setState({ status: 'loading' });
       try {
-        const [cards, bookList, projects, region, undo, lastScan, policies, ignore, dismissed, told] = await Promise.all([
+        const [cards, bookList, projects, region, undo, lastScan, policies, ignore, dismissed, told, history] = await Promise.all([
           loadCards(api),
           loadBooks(api),
           readProjects(api),
@@ -47,6 +48,7 @@ export function makeHomePage(React, api) {
           readIgnore(api),
           readDismissed(api),
           readDigestState(api),
+          readHistory(api),
         ]);
         const books = bookNamesById(bookList);
         const groups = findDuplicateGroups(cards, { ...matchOptions(api.plugin?.settings), region, policies, ignore }, []);
@@ -77,6 +79,8 @@ export function makeHomePage(React, api) {
           // The contact groups in the address books — distinct from `groups`,
           // which are the duplicate groups the scan found.
           contactGroups: cards.filter(isGroupCard),
+          // How many writes the history holds — a count, not the entries.
+          history: history.length,
           groups,
           health: healthSummary(cards, {
             books,
@@ -178,7 +182,8 @@ export function makeHomePage(React, api) {
                 row('health', t('health.title'), t('home.healthLine', {
                   average: state.health.average,
                   band: t(`health.band.${state.health.band}`),
-                }), { label: t(`health.band.${state.health.band}`) }, 'health'))),
+                }), { label: t(`health.band.${state.health.band}`) }, 'health'),
+                row('history', t('history.tab'), t('home.historyLine', { count: state.history }), null, 'history'))),
             state.lastScan
               ? h(Text, { tone: 'muted' }, t('home.lastScan', {
                   when: new Date(state.lastScan.when).toLocaleString(api.i18n.getLocale()),

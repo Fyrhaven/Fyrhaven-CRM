@@ -46,7 +46,6 @@ describe('contact editor', () => {
   it('creates a contact from the form and reports the result', async () => {
     const api = editorApi();
     const result = await renderEditor(api, { mode: 'create' });
-
     await type('First name', 'Ada');
     await type('Last name', 'Lovelace');
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add email address' })); });
@@ -202,4 +201,25 @@ describe('company editor', () => {
     await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
     expect(api.calls('contacts.update')[0].args[1].name).toEqual({ full: 'Acme Group' });
   });
+
+describe('the editor records its write (#25)', () => {
+  it('records a create and a delete in the change history', async () => {
+    const api = editorApi();
+    await renderEditor(api, { mode: 'create' });
+    await type('First name', 'Ada');
+    await type('Last name', 'Lovelace');
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create contact' })); });
+    await waitFor(() => expect(api.calls('contacts.create')).toHaveLength(1));
+
+    cleanup();
+    await renderEditor(api, { mode: 'edit', contact: makeCard({ id: 'a', name: 'Ada Lovelace' }), books: BOOKS });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete contact' })); });
+    await waitFor(() => expect(api.calls('contacts.remove')).toHaveLength(1));
+
+    const history = await api.storage.get('changeHistory');
+    expect(history.map((item) => item.kind)).toEqual(['delete', 'create']);
+    expect(history.every((item) => item.contacts === 1)).toBe(true);
+  });
+});
+
 });
