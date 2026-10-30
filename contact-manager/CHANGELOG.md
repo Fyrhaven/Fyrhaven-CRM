@@ -7,6 +7,32 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.31.0] — 2026-10-27
+
+### Added
+
+- **A duplicate digest on the Overview page (#5).** When the plugin opens it now
+  compares the last scan and the current duplicate groups against what you have
+  already been shown, and says so when either the scan is older than the
+  configured window or groups have appeared since. *Review now* opens the same
+  review dialog as everywhere else; *Got it* acknowledges what was shown, so the
+  same news is never repeated. A new `digestDays` setting (0 = off, default 7) is
+  the window, and only the summary and the group signatures are stored — never
+  contacts.
+
+### Notes
+
+This is #5 **re-scoped**. The issue asked for a *scheduled* background scan, and
+there is no timer hook in the host contract (only `onAction` and the two contact
+observers) and no server-side scheduler, so a scan cannot run while the webmail is
+closed. The digest keeps what the issue is really about — duplicates not going
+unnoticed — and needs no host change. The *"a scheduled scan runs without opening
+the page"* line is deliberately struck; the staleness signal replaces it.
+
+The digest counts exactly what a scan would, so it respects the *enabled* switch,
+the match strategies, the per-book policies and the ignore rules. Groups the user
+has **hidden** are left out: a hidden group is a decision, not news.
+
 ## [1.30.0] — 2026-10-27
 
 ### Added
