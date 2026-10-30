@@ -13,6 +13,7 @@ import { findDuplicateGroups, readDismissed } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { openProject, toastProjectResult } from './open-project.js';
+import { openGroup, toastGroupResult } from './open-group.js';
 import { undoLastMerge } from './undo.js';
 import { policyAwareOptions } from './book-policies.js';
 
@@ -78,6 +79,11 @@ export async function newCompany(api) {
 /** The project editor, in create mode. */
 export async function newProject(api) {
   toastProjectResult(api, await openProject(api, { mode: 'create' }));
+}
+
+/** The group editor, in create mode. */
+export async function newGroup(api) {
+  toastGroupResult(api, await openGroup(api, { mode: 'create' }));
 }
 
 /**

@@ -139,11 +139,20 @@ export function bookIds(card) {
 }
 
 /**
+ * A contact group — a distribution list — is a JSContact card with
+ * `kind: 'group'`. The `group` keyword is the fallback marker for a host that
+ * does not keep `kind`, exactly as `company` is for an organisation.
+ */
+export function isGroupCard(card) {
+  return card?.kind === 'group' || card?.keywords?.group === true;
+}
+
+/**
  * Whether we may merge this entry at all: it needs an id, and contact groups
- * (distribution lists, `kind: 'group'`) are never duplicates of a person.
+ * (distribution lists) are never duplicates of a person.
  */
 export function isMergeable(card) {
-  return Boolean(card && typeof card.id === 'string' && card.id && card.kind !== 'group');
+  return Boolean(card && typeof card.id === 'string' && card.id && !isGroupCard(card));
 }
 
 /** id → display name for the address books. */
