@@ -50,7 +50,7 @@ signatures, the last scan summary).
 
 | Surface | Where it appears | What it does |
 |---|---|---|
-| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Projects* and *Health* |
+| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects* and *Health* |
 | *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
@@ -66,8 +66,10 @@ signatures, the last scan summary).
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
+| *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
+| Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
-| `plugin-dialog` slot | Modal, opened by all of the above, *New contact* and *New project* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **bulk editor**, the **import wizard**, the **export choice** and the **policies** dialog |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project* and *New group* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **bulk editor**, the **import wizard**, the **export choice** and the **policies** dialog |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -116,7 +118,7 @@ contact-manager/
 │       ├── normalise-dialog.js # the cleanup preview
 │       ├── saved-searches.js # the queries a user keeps, in api.storage
 │       ├── digest.js     # the duplicate digest: the window, the baseline, staleness (#5)
-│       ├── app-shell.js   # the single app page: the Overview/Duplicates/Contacts/Projects/Health sub-tabs
+│       ├── app-shell.js   # the single app page: the Overview/Duplicates/Contacts/Groups/Projects/Health sub-tabs
 │       ├── bulk.js        # bulk edits and delete for a selection
 │       ├── bulk-dialog.js # the bulk editor: tags and address books
 │       ├── vcard.js       # contacts to vCard 3.0, for the bulk export
@@ -138,6 +140,10 @@ contact-manager/
 │       ├── projects-page.js # the Projects page (app-page slot)
 │       ├── project-dialog.js # the create/edit project form (plugin-dialog slot)
 │       ├── open-project.js # one place that opens the project editor and saves it
+│       ├── groups.js      # the group model: cards, drafts, member search, duplicates in a list (#12)
+│       ├── groups-page.js # the Groups page: lists, searches and flags the lists
+│       ├── group-dialog.js # the create/edit/delete group form (plugin-dialog slot)
+│       ├── open-group.js  # one place that opens the group editor and toasts the result
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -158,6 +164,8 @@ contact-manager/
 │   ├── ui-shell.test.mjs   # the app page sub-tabs
 │   ├── projects.test.mjs   # project model, storage and milestones
 │   ├── ui-projects.test.mjs # the Projects page and the project dialog
+│   ├── groups.test.mjs     # the group model: cards, drafts, member search, duplicates (#12)
+│   ├── ui-groups.test.mjs  # the Groups page and the group dialog
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
 │   ├── layout.test.mjs     # the plugin-owned page skeleton
 │   ├── bulk.test.mjs       # bulk edits and delete: map rules, refusals, undo
@@ -196,8 +204,8 @@ contact-manager/
 > that is what keeps the unit tests fast and the code portable. Only
 > `duplicates.js` (merge run, storage), `undo.js` (undo storage and restore),
 > `book-policies.js` (policy and ignore-rule storage), `manager-page.js`,
-> `policies-dialog.js`, `review-dialog.js` and `detail-section.js` are allowed
-> to touch the host.
+> `policies-dialog.js`, `review-dialog.js`, `detail-section.js`,
+> `groups-page.js` and `group-dialog.js` are allowed to touch the host.
 
 
 ## 4. Architecture
@@ -761,6 +769,41 @@ The pure helpers are `emptyProject`, `emptyMilestone`, `emptyTimeEntry`,
 `openMilestoneIds`, `totalMinutes`, `billableMinutes`, `billableExpenses`,
 `timeAmount`, `projectTotal`, `formatMinutes`, `formatAmount`, `exportPayload`,
 `parseExport` and `mergeProjects`.
+
+### 6.10 Contact groups (`src/lib/groups.js`, `groups-page.js`, `group-dialog.js`)
+
+A contact group — a distribution list — is **not** a local record: it is a real
+JSContact card (`kind: 'group'`) in the address books, so it is shared across
+devices, searchable and exported with the contacts, unlike Projects. The
+`group` keyword is the fallback marker for a host that does not keep `kind`,
+exactly as `company` is for an organisation (#12, v1.34.0).
+
+`isGroupCard` recognises both, and `isMergeable` excludes a group from
+detection: a distribution list is never a duplicate of a person, and two lists
+are never duplicates of each other.
+
+**Members are uids.** `groupMemberIds` reads the JSContact `members` map
+(`{ k: { kind, value } }`) and the flatter shapes a host may return, in order
+and deduplicated. The editor's draft is `{ name, memberIds, bookIds }`;
+`groupDraftFromCard` / `groupCardFromDraft` round-trip it, and the built card
+carries only a name, a members map and the books — no emails, phones or
+organisation — so a merge can never fold a person into it.
+
+**The member search reuses the contact search.** `memberCandidates` filters with
+`filterCards` (the same free-text matcher the Contacts page uses), never offers
+another group, and skips the ids already chosen. It is capped so the picker
+stays a picker.
+
+**The duplicate warning is the same detection.** `duplicatesInGroup` runs
+`findDuplicateGroups` over the group's members with the options the Duplicates
+page scans with (per-book policies and ignore rules included), so a list cannot
+hold a duplicate the rest of the plugin would not see. The Groups page flags
+such a list and the editor warns as the membership is edited; the list itself is
+never changed — the review goes through the one review dialog (§9.2).
+
+Two parts of #12 are deliberately not built because the host has no surface for
+them: groups in the composer's autocomplete, and a membership view inside the
+webmail's own group card.
 
 ---
 

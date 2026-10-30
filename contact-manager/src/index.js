@@ -26,8 +26,10 @@ import { makeAppShell } from './lib/app-shell.js';
 import { makeHomePage } from './lib/home-page.js';
 import { makeProfilePage } from './lib/profile-page.js';
 import { makeProjectsPage } from './lib/projects-page.js';
+import { makeGroupsPage } from './lib/groups-page.js';
 import { makeHealthPage } from './lib/health-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
+import { makeGroupDialog } from './lib/group-dialog.js';
 import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
 import { makeImportDialog } from './lib/import-dialog.js';
@@ -37,7 +39,7 @@ import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from './lib/capabilities.js';
 import {
-  checkServer, findDuplicates, importContacts, newCompany, newContact, newProject, undoMerge,
+  checkServer, findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, undoMerge,
 } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
@@ -51,17 +53,19 @@ const AppShell = makeAppShell(React, api, {
   home: makeHomePage(React, api),
   duplicates: makeManagerPage(React, api),
   contacts: makeProfilePage(React, api),
+  groups: makeGroupsPage(React, api),
   projects: makeProjectsPage(React, api),
   health: makeHealthPage(React, api),
 });
 
-// One dialog slot serves seven purposes: the review/merge dialog, the contact
-// editor, the project editor, the bulk editor for a selection, the cleanup
-// preview, the import wizard and the export choice. The `extraProps` marker
-// picks which component the host renders.
+// One dialog slot serves eight purposes: the review/merge dialog, the contact
+// editor, the project editor, the group editor, the bulk editor for a
+// selection, the cleanup preview, the import wizard and the export choice. The
+// `extraProps` marker picks which component the host renders.
 const ReviewDialog = makeReviewDialog(React, api);
 const EditorDialog = makeEditorDialog(React, api);
 const ProjectDialog = makeProjectDialog(React, api);
+const GroupDialog = makeGroupDialog(React, api);
 const BulkDialog = makeBulkDialog(React, api);
 const NormaliseDialog = makeNormaliseDialog(React, api);
 const ImportDialog = makeImportDialog(React, api);
@@ -70,6 +74,7 @@ const PoliciesDialog = makePoliciesDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
+  if (props?.groupEditor) return React.createElement(GroupDialog, props);
   if (props?.bulkEditor) return React.createElement(BulkDialog, props);
   if (props?.normalise) return React.createElement(NormaliseDialog, props);
   if (props?.importWizard) return React.createElement(ImportDialog, props);
@@ -114,6 +119,7 @@ export const hooks = {
     if (actionId === 'new-contact') return newContact(api);
     if (actionId === 'new-company') return newCompany(api);
     if (actionId === 'new-project') return newProject(api);
+    if (actionId === 'new-group') return newGroup(api);
     if (actionId === 'import-contacts') return importContacts(api);
     if (actionId === 'check-server') return checkServer(api);
     return undefined;
@@ -154,6 +160,7 @@ async function publish(pluginApi) {
     { id: 'new-contact', label: t('action.newContact'), icon: 'user-plus' },
     { id: 'new-company', label: t('action.newCompany'), icon: 'building' },
     { id: 'new-project', label: t('action.newProject'), icon: 'folder' },
+    { id: 'new-group', label: t('action.newGroup'), icon: 'users' },
     { id: 'import-contacts', label: t('action.importContacts'), icon: 'upload' },
     { id: 'check-server', label: t('action.checkServer'), icon: 'cloud' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
