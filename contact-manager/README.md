@@ -56,6 +56,7 @@ signatures, the last scan summary).
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
 | Undo banner | Top of the Contact Manager page | *Undo merge* / *Forget* for the newest merge record |
+| Duplicate digest | Contact Manager → *Overview*, above the headline | When the plugin opens, says so if no scan has run within `digestDays` days or if duplicate groups have appeared since you were last shown them, with *Review now* and *Got it* (#5) |
 | `contact-detail-section` slot | Inside an open contact | A *Duplicate check* block with a *Review duplicates* button |
 | Create/update hooks | After a contact is saved | A non-blocking warning when the saved contact looks like an existing one |
 | Command palette action | Ctrl+K → *New contact* | Opens the contact editor (create) |
@@ -112,6 +113,7 @@ contact-manager/
 │       ├── normalise.js   # the cleanup plan, its application and its undo record
 │       ├── normalise-dialog.js # the cleanup preview
 │       ├── saved-searches.js # the queries a user keeps, in api.storage
+│       ├── digest.js     # the duplicate digest: the window, the baseline, staleness (#5)
 │       ├── app-shell.js   # the single app page: the Overview/Duplicates/Contacts/Projects/Health sub-tabs
 │       ├── bulk.js        # bulk edits and delete for a selection
 │       ├── bulk-dialog.js # the bulk editor: tags and address books
@@ -744,7 +746,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-avatar.test.mjs` | The avatar element: lazy, no referrer, and gone the moment the image fails |
 | `test/health.test.mjs` | Every rule and its weight, the score floor, the band cutoffs, the per-book breakdown, and the drill-downs |
 | `test/ui-health.test.mjs` | The dashboard: the average, the book rows, filtering by a rule, the scores on the rows, and the fixes it offers |
-| `test/ui-home.test.mjs` | The main page: the headline numbers, the last-scan line, each row leading into its section, and that the menu runs the same actions as the palette |
+| `test/ui-home.test.mjs` | The main page: the headline numbers, the last-scan line, each row leading into its section, the menu running the same actions as the palette, and the duplicate digest (stale, new, acknowledged, hidden groups, *Review now*) |
+| `test/digest.test.mjs` | The digest: the window, staleness at every boundary, the baseline (including an empty one), what counts as new, the cap and the repairs on read |
 | `test/csv.test.mjs` | The RFC 4180 cases: quoted commas and newlines, doubled quotes, CRLF, a BOM, empty fields |
 | `test/vcard-parse.test.mjs` | vCard 3.0 and 4.0, folded lines, grouped properties, the escapes, and junk |
 | `test/import.test.mjs` | Header guessing for Google and Apple exports, row to draft, the duplicate plan by email, phone and name, the per-duplicate key, and the merge groups an import queues |
@@ -1073,6 +1076,20 @@ Retention (#21)
   the page lists from the LOWEST band, so buckets and rows cannot disagree
   'Export and delete' writes the file as part of the delete, then deletes
     through bulk.js, so it is undoable as well as archived
+
+Duplicate digest (#5, re-scoped — there is no timer hook to schedule with)
+  digestWindowDays(settings) -> days; 0 (or junk) means off   setting: digestDays
+  groupSignatures(groups) -> sorted signatures; unseenSignatures(sig, ack) -> new
+  isScanStale(at, days, now) -> boolean; a scan that never ran makes no claim
+  buildDigest({ at, signatures, acknowledged, seenAt, baseline, days, now }) ->
+    null | { at, seenAt, count, fresh, stale, changed, signatures }
+    'changed' needs a baseline: before anything is acknowledged a group is the
+      state of the address book, not news
+    a staleness nag is said once per scan age: told at/after that scan -> silent
+  readDigestState(api) -> { baseline, at, signatures }   acknowledged baseline
+  acknowledge(api, signatures, now) / forgetDigest(api)  in 'scanDigest'
+  stores the SUMMARY and signatures only, never contacts; the home page shows it
+  hidden groups are left out (a hidden group is a decision, not news)
 
 Export (#19, export half)
   toCsv(rows) / escapeCell(cell)   RFC 4180 quoting, CRLF
