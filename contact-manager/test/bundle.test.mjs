@@ -169,6 +169,33 @@ describe('built plugin', () => {
     expect(api.calls('toast.info').at(-1).args[0]).toBe('Nothing to undo.');
   });
 
+  it('the import action reviews the merges the wizard queued, then reports the outcome', async () => {
+    const api = pluginApi({}, {
+      'ui.openDialog': async (options) => (options.extraProps?.importWizard
+        ? {
+          created: 2,
+          failed: 0,
+          skipped: 1,
+          mergeGroups: [{ signature: 's', members: [{ id: 'a' }, { id: 'new' }] }],
+        }
+        : { merged: 1, removed: 1, failed: 0, undoable: 0 }),
+    });
+    const plugin = load(api);
+    await plugin.hooks.onAction({ surface: 'command-palette', actionId: 'import-contacts', context: {} });
+
+    const dialogs = api.calls('ui.openDialog');
+    expect(dialogs).toHaveLength(2);
+    expect(dialogs[0].args[0].extraProps.importWizard).toBe(true);
+    // the queued pair goes through the one review dialog every merge uses
+    expect(dialogs[1].args[0]).toMatchObject({ slot: 'plugin-dialog', title: 'Merge duplicate contacts' });
+    expect(dialogs[1].args[0].extraProps.groups).toHaveLength(1);
+    // 2 written, 1 of them folded into an existing contact: 1 stays new
+    expect(api.calls('toast.success').map((call) => call.args[0])).toEqual([
+      'Merged 1 groups, removed 1 contacts.',
+      'Imported 1 contact(s); skipped 1 that already existed.',
+    ]);
+  });
+
   it('warns about a duplicate after a create and after an edit, without blocking', async () => {
     const existing = { id: 'a', name: { full: 'Ada Lovelace' }, emails: { e0: { address: 'ada@example.org' } } };
     const api = pluginApi({}, { 'contacts.search': async () => [existing] });

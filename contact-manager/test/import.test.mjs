@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import { guessField, guessMapping, isUsableMapping, mappingKey } from '../src/lib/import-fields.js';
-import { applyImport, planImport, rowToDraft, rowsToDrafts, splitName } from '../src/lib/import.js';
+import { applyImport, duplicateKey, mergeGroupsFromImport, planImport, rowToDraft, rowsToDrafts, splitName } from '../src/lib/import.js';
+import { mergeGroups } from '../src/lib/duplicates.js';
 import { parseCsv } from '../src/lib/csv.js';
 import { makeCard } from './fixtures.mjs';
 
@@ -209,7 +210,13 @@ describe('applyImport', () => {
       [['Ada Lovelace', 'ada@example.org', '+491761234567']], ['name', 'email', 'phone'], { bookIds: ['b1'] },
     );
 
-    expect(await applyImport(subject, drafts)).toEqual({ created: 1, failed: 0 });
+    const result = await applyImport(subject, drafts);
+    expect(result).toMatchObject({ created: 1, failed: 0 });
+    // the created card comes back paired with its draft, so a merge decision
+    // can reach the id the host assigned
+    expect(result.cards).toHaveLength(1);
+    expect(result.cards[0].draft).toBe(drafts[0]);
+    expect(result.cards[0].card).toEqual({ id: 'new' });
     const card = subject.calls('contacts.create')[0].args[0];
     expect(card.name.components).toEqual([{ kind: 'given', value: 'Ada' }, { kind: 'surname', value: 'Lovelace' }]);
     expect(card.emails.e0).toEqual({ address: 'ada@example.org', pref: 1 });
@@ -219,17 +226,94 @@ describe('applyImport', () => {
   it('counts a contact the host refuses, and keeps going', async () => {
     let calls = 0;
     const subject = fakeApi({
-      handlers: { 'contacts.create': async () => { calls += 1; if (calls === 1) throw new Error('missing contacts:write'); } },
+      handlers: { 'contacts.create': async () => { calls += 1; if (calls === 1) throw new Error('missing contacts:write'); return { id: `n${calls}` }; } },
     });
     const drafts = rowsToDrafts([['Ada', 'a@x.de'], ['Grace', 'g@x.de']], ['given', 'email']);
 
-    expect(await applyImport(subject, drafts)).toEqual({ created: 1, failed: 1 });
+    const result = await applyImport(subject, drafts);
+    expect(result).toMatchObject({ created: 1, failed: 1 });
+    // only the draft that was written is paired; the refused one is not
+    expect(result.cards.map((entry) => entry.draft)).toEqual([drafts[1]]);
   });
 
   it('does nothing with nothing', async () => {
     const subject = fakeApi({});
 
-    expect(await applyImport(subject, null)).toEqual({ created: 0, failed: 0 });
+    expect(await applyImport(subject, null)).toMatchObject({ created: 0, failed: 0, cards: [] });
     expect(subject.calls('contacts.create')).toHaveLength(0);
+  });
+});
+
+describe('duplicateKey', () => {
+  const existing = makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'] });
+
+  it('is stable across rebuilt drafts, which is what a decision survives', () => {
+    const first = planImport(rowsToDrafts([['Ada Lovelace', 'ada@example.org']], ['name', 'email']), [existing]);
+    const again = planImport(rowsToDrafts([['Ada Lovelace', 'ada@example.org']], ['name', 'email']), [existing]);
+
+    expect(duplicateKey(first.duplicates[0])).toBe(duplicateKey(again.duplicates[0]));
+  });
+
+  it('separates two duplicates of the same contact by what matched and why', () => {
+    const plan = planImport(rowsToDrafts([['Ada Lovelace', 'ada@example.org']], ['name', 'email']), [existing]);
+
+    expect(duplicateKey(plan.duplicates[0])).toContain('a|email|ada@example.org');
+    expect(duplicateKey({ draft: {}, match: { id: 'b' }, reason: 'name' })).toBe('b|name|');
+  });
+});
+
+describe('mergeGroupsFromImport', () => {
+  const existing = makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'] });
+  const draft = rowsToDrafts([['Ada Lovelace', 'ada@example.org', '+491761234567']], ['name', 'email', 'phone'])[0];
+  const created = [{ draft, card: { id: 'new', name: { full: 'Ada Lovelace' } } }];
+
+  it('pairs the imported card with the contact it matched, preferring the existing one', () => {
+    const groups = mergeGroupsFromImport([{ draft, match: existing }], created);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].members.map((card) => card.id)).toEqual(['a', 'new']);
+    expect(groups[0].strength).toBe('manual');
+    // "merge" means fold the file into the contact already there
+    expect(groups[0].keepId).toBe('a');
+  });
+
+  it('drops a pair whose imported card the host refused', () => {
+    expect(mergeGroupsFromImport([{ draft, match: existing }], [])).toEqual([]);
+    expect(mergeGroupsFromImport([{ draft, match: { id: undefined } }], created)).toEqual([]);
+  });
+
+  it('survives junk', () => {
+    expect(mergeGroupsFromImport(null, null)).toEqual([]);
+    expect(mergeGroupsFromImport([null], created)).toEqual([]);
+  });
+
+  it('drives the real merge: the existing contact is patched, the imported copy removed', async () => {
+    // what the host returns from create: the whole card, with the id it assigned
+    const createdCard = {
+      id: 'new',
+      name: { full: 'Ada Lovelace' },
+      emails: { e0: { address: 'ada@example.org' } },
+      phones: { p0: { number: '+491761234567' } },
+    };
+    const api = fakeApi({
+      handlers: {
+        'contacts.create': async () => createdCard,
+        'contacts.update': async () => {},
+        'contacts.remove': async () => {},
+      },
+    });
+
+    const written = await applyImport(api, [draft]);
+    const groups = mergeGroupsFromImport([{ draft, match: existing }], written.cards);
+    // exactly what the review dialog does with a group's keepId
+    const keepBy = Object.fromEntries(groups.map((group) => [group.signature, group.keepId]));
+    const result = await mergeGroups(api, groups, keepBy);
+
+    expect(result).toMatchObject({ merged: 1, removed: 1, failed: [] });
+    // the contact that was already there gains the file's phone number...
+    expect(api.calls('contacts.update')[0].args[0]).toBe('a');
+    expect(api.calls('contacts.update')[0].args[1].phones).toBeTruthy();
+    // ...and the copy the import wrote is the one deleted
+    expect(api.calls('contacts.remove')[0].args[0]).toBe('new');
   });
 });
