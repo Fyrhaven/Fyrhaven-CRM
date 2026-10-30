@@ -7,6 +7,36 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.35.0] — 2026-10-30
+
+### Added
+
+- **A normalisation rules engine for names, organisations, phones and email
+  addresses (#20).** A *Rules…* button on the Contacts selection, and a
+  *Normalisation rules* command-palette action, open a dialog with seven
+  built-in rules — collapse whitespace, title-case a shouting name or
+  organisation, strip a trailing legal suffix, phone numbers to E.164, and trim
+  and lower-case an email address — plus your own literal find-and-replace
+  rules on one field. The exact edits are previewed before anything is written.
+
+- **One deterministic order.** The built-ins always run in the catalogue order,
+  then your rules in the order you added them, so the same input always produces
+  the same output. The order is a property of the catalogue, never of an
+  object's iteration order.
+
+- **The rules also run on import and on edit.** An imported file is normalised
+  before its duplicate plan is worked out, so the preview shows what would be
+  written (and a rule that fixes a spelling can fix the match); the editor
+  applies the enabled rules when a contact is saved.
+
+### Notes
+
+A rules batch is applied and rolled back by the same machinery as the E.164
+cleanup, so one *Undo cleanup* covers both. Two limitations are deliberate and
+said out loud in the dialog: title-casing rewrites a genuine acronym written in
+capitals — that is what title case means, and a find-and-replace rule puts one
+back — and the phone rule needs a region, which the cleanup dialog sets.
+
 ## [1.34.0] — 2026-10-30
 
 ### Added

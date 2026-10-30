@@ -383,9 +383,30 @@ describe('contacts page', () => {
 
     await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
 
-    for (const name of ['Merge selected', 'Edit selected', 'Export', 'Delete selected', 'Clear selection']) {
+    for (const name of ['Merge selected', 'Edit selected', 'Clean up', 'Rules…', 'Export', 'Delete selected', 'Clear selection']) {
       expect(screen.getByRole('button', { name })).toBeTruthy();
     }
+  });
+
+  it('opens the rules dialog over the selection and applies what it returns', async () => {
+    const plan = [{ id: 'g', name: 'Grace Hopper', patch: { name: { full: 'Grace Hopper' } }, before: {}, changes: [] }];
+    const api = profileApi({
+      'contacts.update': async () => {},
+      'ui.openDialog': async () => ({ rules: [], plan }),
+    });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name: 'Select Grace Hopper' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Rules…' })); });
+
+    await waitFor(() => expect(api.calls('ui.openDialog')).toHaveLength(1));
+    const editor = api.calls('ui.openDialog')[0].args[0].extraProps.rulesEditor;
+    expect(editor.cards.map((card) => card.id)).toEqual(['g']);
+    expect(editor.rules).toEqual([]);
+    // the plan is applied through the shared cleanup path, so it is undoable
+    await waitFor(() => expect(api.calls('contacts.update')).toHaveLength(1));
+    expect(api.calls('contacts.update')[0].args[0]).toBe('g');
+    expect(await api.storage.get('lastCleanup')).toBeTruthy();
   });
 
   it('edits tags and books through the bulk dialog and writes the result', async () => {

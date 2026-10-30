@@ -12,6 +12,7 @@ import { alignRow } from './csv.js';
 import { cardFromDraft, emptyDraft } from './editor.js';
 import { cardKeys, groupFromSelection } from './duplicates.js';
 import { ADDRESS_FIELDS } from './import-fields.js';
+import { applyRulesToCard } from './rules.js';
 
 /**
  * Best-effort split of a single "Full Name" column: the last token is the
@@ -74,7 +75,7 @@ export function rowsToDrafts(rows, mapping, options = {}) {
  *
  * @returns {{fresh: object[], duplicates: Array<{draft: object, match: object, reason: string}>}}
  */
-export function planImport(drafts, existing, { region = '' } = {}) {
+export function planImport(drafts, existing, { region = '', rules = [] } = {}) {
   const opts = { region };
   const byKey = new Map();
   for (const card of Array.isArray(existing) ? existing : []) {
@@ -96,8 +97,11 @@ export function planImport(drafts, existing, { region = '' } = {}) {
   const fresh = [];
   const duplicates = [];
   for (const draft of Array.isArray(drafts) ? drafts : []) {
-    // the same keys detection uses, so an import cannot create what detection hunts
-    const keys = cardKeys(cardFromDraft(draft, 'create'), opts);
+    // the same keys detection uses, so an import cannot create what detection hunts.
+    // The rules run *before* the keys are taken, so the preview matches what
+    // would actually be written and a rule that fixes a spelling can also fix
+    // the match.
+    const keys = cardKeys(applyRulesToCard(cardFromDraft(draft, 'create'), rules, opts), opts);
     const checks = [
       ...keys.email.map((value) => [`e:${value}`, 'email']),
       ...keys.phone.map((value) => [`p:${value}`, 'phone']),
@@ -170,13 +174,13 @@ export function mergeGroupsFromImport(merges, created) {
  *
  * @returns {Promise<{created: number, failed: number, cards: Array<{draft: object, card: object}>}>}
  */
-export async function applyImport(api, drafts) {
+export async function applyImport(api, drafts, { rules = [], region = '' } = {}) {
   let created = 0;
   let failed = 0;
   const cards = [];
   for (const draft of Array.isArray(drafts) ? drafts : []) {
     try {
-      const card = await api.contacts.create(cardFromDraft(draft, 'create'));
+      const card = await api.contacts.create(applyRulesToCard(cardFromDraft(draft, 'create'), rules, { region }));
       created += 1;
       cards.push({ draft, card });
     } catch {
