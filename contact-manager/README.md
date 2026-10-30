@@ -89,6 +89,7 @@ contact-manager/
 │   └── lib/
 │       ├── contacts.js     # JSContact readers, loaders, settings flags
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
+│       ├── name-match.js   # folding, nicknames, phonetic keys, name evidence (#8)
 │       ├── book-policies.js # per-book duplicate policies and ignore rules (#7)
 │       ├── labels.js       # shared display helpers and toasts
 │       ├── layout.js      # the plugin-owned page skeleton (the two-pane split)
@@ -330,18 +331,30 @@ members becomes a group.
 |---|---|---|---|
 | Same email address | `e:` | trimmed, lower-cased | **certain** (`strong`) |
 | Same phone number | `p:` | digits only, leading `00` dropped, fewer than 7 digits ignored | **certain** (`strong`) |
-| Same name (full) | `n:` | NFKD, diacritics stripped, punctuation → spaces, tokens sorted | possible |
+| Same name (full) | `n:` | NFKD, diacritics stripped, **script romanised**, punctuation → spaces, tokens sorted, **one key per honest spelling** | possible |
 | Same name (core) | `c:` | as above, but single-letter tokens dropped | possible |
+| Nickname | `k:` | as `n:`, then each token replaced by its canonical name (`bob` → `robert`) | possible |
+| Name evidence (#8) | — | pairwise: initials, phonetic surnames, similar given names | possible |
 
 * `normalizeEmail('  A@B.de ') → 'a@b.de'`
 * `normalizePhone('+49 176 1234567')` and `normalizePhone('0049 176 1234567')`
   agree; `'12345'` (an extension, a year) is ignored.
-* `normalizeName` keeps letters of **any** script (`\p{L}`), so non-Latin
-  names never collapse to an empty string.
+* `normalizeName` romanises Cyrillic and Greek (`Иванов` → `ivanov`), so the same
+  name in either script reaches one key. A script with no table is kept as it is
+  (`\p{L}`), so a name never collapses to an empty string.
+* A name with more than one honest spelling contributes **one key each**:
+  `Müller` gives `muller` *and* `mueller`, so it matches either.
 * The `c:` (core) key drops single-letter tokens (initials): `John A. Smith`
   ≡ `John Smith`. It needs **two** substantial tokens, so a single-word name
   never matches on its own.
 * `Doe, John` ≡ `John Doe`, because the tokens are sorted before comparison.
+* `k:` shares the **name namespace** with `n:`/`c:`, so `Bob Smith`'s
+  `k:robert smith` meets `Robert Smith`'s `n:robert smith`. A nickname variant
+  that equals the plain name is not emitted: `Robert Smith` contributes nothing.
+* **Name evidence never becomes a key.** A key for `J. Smith` would also match
+  `Jane Smith`, and those are different people. Initials, phonetic surnames and
+  near-miss given names are found **pairwise** inside a phonetic-surname bucket,
+  and only when the given name agrees — see §5.6.
 
 ### 5.2 Group strength and reasons
 
@@ -351,8 +364,9 @@ members becomes a group.
   'possible'`) — two different people can share a name, so these must always
   be reviewed by a human before merging.
 * `reasons` lists exactly which keys at least two members share, as
-  `[{ type: 'email' | 'phone' | 'name', value }]`. The UI renders them as
-  “Same email address: a@b.de · Same name”.
+  `[{ type: 'email' | 'phone' | 'name' | 'nickname' | 'similar', value }]`. The
+  UI renders them as “Same email address: a@b.de · Same name”, “Nickname:
+  robert smith” and “Similar name: J. Smith ↔ John Smith”.
 * Groups are sorted: certain first, then largest, then by the first
   member's name.
 * A group is identified by its `signature` — `g:` plus the sorted member ids.
@@ -363,6 +377,12 @@ members becomes a group.
 `matchOptions(settings)` reads three booleans from the plugin settings:
 `matchByEmail`, `matchByPhone`, `matchByName`. **A missing setting means the
 strategy is on** (`!== false`), so new strategies default to enabled.
+`matchByName: false` turns off **all** name matching, including nicknames and the
+pairwise pass in §5.6.
+
+`nameSimilarity` (60–100, default 80) is the one threshold: how alike two given
+names must be before the plugin proposes them. Initials and nicknames are
+structural and match regardless of it.
 
 Contact groups (distribution lists, `kind: 'group'`) are never treated as
 duplicates and never merged.
@@ -439,6 +459,46 @@ so a policy cannot be honoured on one page and forgotten on another.
 only the hits that share a normalised key with the contact, and groups those
 candidates among themselves. The first search that yields a candidate is
 enough. It returns `null` when there is no duplicate.
+
+### 5.6 Name evidence: initials, phonetic surnames, near misses (#8, v1.33.0)
+
+Some of the ways one name is written *cannot* be a shared key, because the key
+would also be shared by two different people: a key for `J. Smith` would have to
+match `John Smith` **and** `Jane Smith`, and only one of those is the same person.
+
+So `src/lib/name-match.js` splits the problem, and `findDuplicateGroups` runs both
+halves:
+
+| Half | Where it lives | Examples |
+|---|---|---|
+| **Equivalence** — one name, two spellings | keys (`n:`, `c:`, `k:`) | `Müller` ≡ `Mueller`, `Иванов` ≡ `Ivanov`, `Bob` ≡ `Robert` |
+| **Evidence** — probably the same person | pairwise, `pairNameEvidence` | `J.` ≡ `John`, `Smyth` ≡ `Smith`, `Sara` ≡ `Sarah` |
+
+The pairwise pass is bounded and conservative on purpose:
+
+1. **Bucket by phonetic surname** (`phoneticKey`, a compact Soundex), so it never
+   compares the whole address book. A surname needs **two letters** — a numeric
+   token like `Twin 1` has none, and allowing it collapsed a 51-group fixture
+   into one.
+2. **Skip a bucket with more than `bucketLimit` (60) members.** A surname that
+   common is a crowd, not a clue, and comparing it pairwise would be both slow and
+   noisy.
+3. **The surnames must agree** — equal letters, or both at least three letters and
+   `jaroWinkler` at or above the threshold. `Smith`/`Smyth` passes; `Li`/`Lo` does
+   not.
+4. **The given name must corroborate**: the same given name (with a different
+   surname spelling), an initial of it, or a similarity at or above
+   `nameSimilarity` (60–100, default 80). `John` vs `Jane` is 0.70 and stays apart.
+
+A pair found this way unions the two cards like any key, and the group gets a
+`{ type: 'similar', value: 'J. Smith ↔ John Smith' }` reason naming **both**
+spellings. The strength is always `possible`, never `strong` — the user is the one
+who decides. A pair that already shares an exact key (an email, or the same name)
+adds no reason: the group is already explained.
+
+> The precision fixtures in `test/duplicates.test.mjs` are the point of this
+> section: `John Smith` / `Jane Smith`, `John Smith` / `Mary Smith` and
+> `Ann Lee` / `Bob Lee` must **not** group, and they are asserted first.
 
 ---
 
@@ -728,7 +788,8 @@ plugin host are **not** bundled, the host provides them.
 | File | Covers |
 |---|---|
 | `test/contacts.test.mjs` | Name/email/phone extraction across the card shapes, `isMergeable`, `matchOptions` |
-| `test/duplicates.test.mjs` | Normalisation, key building, union-find grouping, strength, reasons, sorting, hidden groups |
+| `test/duplicates.test.mjs` | Normalisation, key building, union-find grouping, strength, reasons, sorting, hidden groups, and the precision/recall fixture set for name evidence (#8) |
+| `test/name-match.test.mjs` | Name matching: the fold (diacritics, transliteration, Cyrillic/Greek, both German spellings), the nickname table and its ambiguous aliases, the phonetic key, Jaro-Winkler, the name split, and the pairwise pass with its guards |
 | `test/book-policies.test.mjs` | Policy resolution: per-book overrides, the most-permissive rule, the ignore rules, and the repairs on read |
 | `test/merge.test.mjs` | `pickPrimary`, `planMerge` (unions, fills, keywords, patch shape), `mergeGroups` (update before remove, failure handling) |
 | `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection, and the bulk merge by company/domain (facets, the dry-run plan, the dialog, the cap) |
@@ -1107,6 +1168,22 @@ Bulk merge by facet (#6) — the facets select, the review dialog merges
   isOverCap(plan, cap = BATCH_CAP) -> boolean
   NOT a matching rule: the facets are read from the data, so there is no typing
     to be fuzzy about; rewriting 'Acme Inc.' to 'Acme' is #20 (normalisation)
+
+Name matching (#8) — equivalence by key, evidence pairwise
+  foldName(value, { german }) -> romanised, de-marked, lower, punctuation -> space
+    Cyrillic + Greek tables; letters with no decomposition (ß ø ł đ þ æ œ) mapped
+    applied TWICE: "ü" -> "ue" needs the first pass, "ώ" -> "ω" needs the second
+  foldVariants(value) -> ['muller', 'mueller']   one key per honest spelling
+  canonicalToken / nicknameKey: curated table, ambiguous aliases left alone
+  phoneticKey(token) -> compact Soundex; needs >= 2 letters to mean anything
+  jaroWinkler(a, b) -> 0..1   shared opening counts more than an edit in the middle
+  splitName(fullName, components) -> { surname, given }   components first
+  givenKind(a, b, threshold) -> 'same' | 'initial' | 'similar' | null
+  pairNameEvidence(people, { threshold, bucketLimit }) -> [{ a, b, kind, score }]
+    bucket by phonetic surname, skip a bucket over 60, surnames must agree,
+    and the given name must corroborate — 'John Smith' / 'Jane Smith' never pair
+  keys: n: c: k: share the name namespace; evidence is NEVER a key
+  every group from evidence is 'possible', with a reason naming both spellings
 
 Export (#19, export half)
   toCsv(rows) / escapeCell(cell)   RFC 4180 quoting, CRLF
