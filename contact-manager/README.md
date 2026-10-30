@@ -64,12 +64,14 @@ signatures, the last scan summary).
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Export* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
 | Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
-| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project* and *New group* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **bulk editor**, the **import wizard**, the **export choice** and the **policies** dialog |
+| *Rules…* button | Contact Manager → *Contacts*, with a selection | Opens the **normalisation rules** dialog: the built-in rules, your own find-and-replace rules, and the exact edits they would make before anything is written (#20) |
+| Command palette action | Ctrl+K → *Normalisation rules* | The same rules dialog, over every contact |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group* and *Rules…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -144,6 +146,9 @@ contact-manager/
 │       ├── groups-page.js # the Groups page: lists, searches and flags the lists
 │       ├── group-dialog.js # the create/edit/delete group form (plugin-dialog slot)
 │       ├── open-group.js  # one place that opens the group editor and toasts the result
+│       ├── rules.js       # the normalisation rules engine: the catalogue, the order, the plan (#20)
+│       ├── rules-dialog.js # the rules editor (plugin-dialog slot)
+│       ├── open-rules.js  # one place that opens the rules dialog and applies it
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -166,6 +171,8 @@ contact-manager/
 │   ├── ui-projects.test.mjs # the Projects page and the project dialog
 │   ├── groups.test.mjs     # the group model: cards, drafts, member search, duplicates (#12)
 │   ├── ui-groups.test.mjs  # the Groups page and the group dialog
+│   ├── rules.test.mjs      # the rules, their order, the plan and the storage (#20)
+│   ├── ui-rules.test.mjs   # the rules dialog
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
 │   ├── layout.test.mjs     # the plugin-owned page skeleton
 │   ├── bulk.test.mjs       # bulk edits and delete: map rules, refusals, undo
@@ -205,7 +212,8 @@ contact-manager/
 > `duplicates.js` (merge run, storage), `undo.js` (undo storage and restore),
 > `book-policies.js` (policy and ignore-rule storage), `manager-page.js`,
 > `policies-dialog.js`, `review-dialog.js`, `detail-section.js`,
-> `groups-page.js` and `group-dialog.js` are allowed to touch the host.
+> `groups-page.js`, `group-dialog.js`, `rules-dialog.js` and `open-rules.js` are
+> allowed to touch the host.
 
 
 ## 4. Architecture
@@ -805,6 +813,40 @@ Two parts of #12 are deliberately not built because the host has no surface for
 them: groups in the composer's autocomplete, and a membership view inside the
 webmail's own group card.
 
+### 6.11 Normalisation rules (`src/lib/rules.js`, `rules-dialog.js`, v1.35.0) — #20
+
+The rules engine generalises the E.164 cleanup: a rule is one transformation of
+one field, and a *batch* of them is planned, previewed, applied and rolled back
+exactly as the cleanup is — `planRules` returns the same
+`{ id, name, patch, before, changes }` shape, so `applyNormalisation` and
+`undoCleanup` are reused rather than re-implemented, and one *Undo cleanup*
+covers both.
+
+**Two kinds of rule, one order.** `BUILTIN_RULES` is a fixed catalogue
+(collapse whitespace, title case, strip a legal suffix, phone to E.164, email
+case); a user rule is a literal, case-insensitive find-and-replace on one field.
+`orderedRules` is the only place that decides the order — the enabled built-ins
+in catalogue order, then the user rules in the order they were stored — so the
+same input and the same rules always give the same output, and an object's
+iteration order can never leak into a result.
+
+**The patch is the whole field.** As in the cleanup, the host replaces a map
+wholesale, so the patch carries the complete new map and `before` carries the
+one it replaced.
+
+**Three entry points, one transform.** `applyRulesToCard` is the same function
+behind all of them: the dialog (on demand, over a selection or every contact),
+the import wizard (the rules run *before* the duplicate keys are taken, so the
+preview matches what would be written and a rule that fixes a spelling can fix
+the match) and the contact editor (a save writes the normalised card). A failed
+rule read never blocks a save — the card is written as typed.
+
+**Two limitations, said out loud.** `name.case` / `org.case` rewrite a word
+written entirely in capitals, which rewrites a genuine acronym too; a
+find-and-replace rule is the way to put one back. `phone.e164` needs a region,
+which the cleanup dialog stores — with no region there is nothing honest to do,
+so the rule leaves the number alone rather than guessing.
+
 ---
 
 ## 7. Build, test and package
@@ -820,7 +862,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **148 tests in 13 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **813 tests in 53 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -838,6 +880,10 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-page.test.mjs` | The manager page: scanning, statistics, hide/restore, selection, and the bulk merge by company/domain (facets, the dry-run plan, the dialog, the cap) |
 | `test/bulk-merge.test.mjs` | Bulk merge: the company and domain keys, the facets read off the groups, one group under every facet its members have, the batch plan, and the cap against the undo record |
 | `test/ui-policies.test.mjs` | The policies dialog: the book list, the ignore sections, and the save |
+| `test/rules.test.mjs` | The normalisation rules: what each built-in does, the order they run in, the user rules (literal, case-insensitive, deletion), the plan and its counts, and the storage repairs (#20) |
+| `test/ui-rules.test.mjs` | The rules dialog: previewing a built-in and a rule of your own, the disabled apply, storing the choice, and removing a rule |
+| `test/groups.test.mjs` | The group model: what a group card is, the member map shapes, the draft round trip, the member search, and the duplicates a list may hold (#12) |
+| `test/ui-groups.test.mjs` | The Groups page (list, flag, search, empty state, open create/edit) and the group dialog (create, validation, edit, delete, the live duplicate warning) |
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |

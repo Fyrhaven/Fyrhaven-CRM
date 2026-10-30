@@ -14,6 +14,7 @@ import { toastMergeResult } from './labels.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { openProject, toastProjectResult } from './open-project.js';
 import { openGroup, toastGroupResult } from './open-group.js';
+import { runRules } from './open-rules.js';
 import { undoLastMerge } from './undo.js';
 import { policyAwareOptions } from './book-policies.js';
 
@@ -84,6 +85,14 @@ export async function newProject(api) {
 /** The group editor, in create mode. */
 export async function newGroup(api) {
   toastGroupResult(api, await openGroup(api, { mode: 'create' }));
+}
+
+/**
+ * The normalisation rules over every contact — the command palette's entry
+ * point. The dialog shows the exact edits first; this applies and toasts them.
+ */
+export async function normalisationRules(api) {
+  return runRules(api);
 }
 
 /**
