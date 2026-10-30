@@ -161,3 +161,71 @@ describe('manager page', () => {
       .toEqual([{ id: 'b1', name: 'Personal' }]);
   });
 });
+
+// --- Bulk merge by company or domain (#6) -------------------------------------
+
+// Two groups, both at Acme Inc. and both on one.test, so a company facet and a
+// domain facet each cover more than one group.
+const BULK_CARDS = [
+  makeCard({ id: 'a1', name: 'Ann One', emails: ['ann@one.test'], organizations: { o0: { name: 'Acme Inc.' } } }),
+  makeCard({ id: 'a2', name: 'A. One', emails: ['ann@one.test'], organizations: { o0: { name: 'Acme Inc.' } } }),
+  makeCard({ id: 'b1', name: 'Bob Two', emails: ['bob@one.test'], organizations: { o0: { name: 'Acme Inc.' } } }),
+  makeCard({ id: 'b2', name: 'B. Two', emails: ['bob@one.test'], organizations: { o0: { name: 'Acme Inc.' } } }),
+];
+
+const bulkApi = (handlers = {}) => pageApi({
+  'contacts.list': async () => BULK_CARDS,
+  'ui.openDialog': async () => null,
+  ...handlers,
+});
+
+describe('bulk merge by company or domain', () => {
+  it('offers the facets the address book actually has, with counts', async () => {
+    await renderPage(bulkApi());
+
+    expect(screen.getByText('Merge by company or domain')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'All 2 groups' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Acme Inc. · 2 groups' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '@one.test · 2 groups' })).toBeTruthy();
+  });
+
+  it('selects every group a facet touches and previews the batch', async () => {
+    const api = bulkApi();
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Acme Inc. · 2 groups' })); });
+
+    expect(screen.getByRole('button', { name: 'Merge 2 groups' })).toBeTruthy();
+    // the dry run, before anything is opened or written
+    expect(screen.getByText('2 group(s) · 4 contact(s) · 2 would be removed')).toBeTruthy();
+    expect(api.calls('ui.openDialog')).toHaveLength(0);
+  });
+
+  it('merges the facet through the one review dialog', async () => {
+    const api = bulkApi({ 'ui.openDialog': async () => ({ merged: 2, removed: 2, failed: 0 }) });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '@one.test · 2 groups' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Merge 2 groups' })); });
+
+    const groups = api.calls('ui.openDialog')[0].args[0].extraProps.groups;
+    expect(groups).toHaveLength(2);
+    expect(groups.map((group) => group.members.map((member) => member.id).sort()))
+      .toEqual([['a1', 'a2'], ['b1', 'b2']]);
+  });
+
+  it('refuses a batch bigger than the cap instead of trimming it', async () => {
+    // 51 groups of two: one more than BATCH_CAP
+    const many = Array.from({ length: 102 }, (_, i) => makeCard({
+      id: `m${i}`, name: `Twin ${Math.floor(i / 2)}`, emails: [`twin${i}@x.test`],
+    }));
+    const api = pageApi({ 'contacts.list': async () => many, 'ui.openDialog': async () => null });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'All 51 groups' })); });
+
+    expect(screen.getByRole('button', { name: 'Merge 51 groups' }).disabled).toBe(true);
+    expect(screen.getByText(/more than one batch may merge \(50\)/)).toBeTruthy();
+    expect(api.calls('ui.openDialog')).toHaveLength(0);
+  });
+});
