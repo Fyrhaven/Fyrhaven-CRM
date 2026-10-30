@@ -29,6 +29,7 @@ import { contactsToFile } from './export.js';
 import { buildIndex, countsForIndex, matchIndexed, parseQuery } from './search.js';
 import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
+import { applyRulesResult, openRules } from './open-rules.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
@@ -350,6 +351,19 @@ export function makeProfilePage(React, api) {
       void load();
     };
 
+    // The rules dialog over the selection: the user picks the rules, sees the
+    // exact edits, and the batch goes through the same apply and the same undo
+    // as the cleanup — one rollback button covers both.
+    const rulesPicked = async () => {
+      if (!pickedCards.length) return;
+      const result = await openRules(api, { cards: pickedCards });
+      if (!result) return;
+      await applyRulesResult(api, result);
+      setPicked(new Set());
+      setCleanup(await readCleanup(api));
+      void load();
+    };
+
     const undoSingleCleanup = async () => {
       const outcome = await undoCleanup(api);
       if (outcome.failed) api.toast.warning(t('cleanup.undoPartial', { restored: outcome.restored, failed: outcome.failed }));
@@ -433,6 +447,12 @@ export function makeProfilePage(React, api) {
                       icon: 'wand',
                       onClick: () => void cleanPicked(),
                     }, t('cleanup.action')),
+                    h(Button, {
+                      size: 'sm',
+                      variant: 'secondary',
+                      icon: 'shield',
+                      onClick: () => void rulesPicked(),
+                    }, t('rules.action')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',

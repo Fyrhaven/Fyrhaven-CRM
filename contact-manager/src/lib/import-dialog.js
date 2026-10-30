@@ -16,6 +16,7 @@ import { IMPORT_FIELDS, guessMapping, isUsableMapping } from './import-fields.js
 import { findTemplate, saveTemplate } from './import-templates.js';
 import { applyImport, duplicateKey, mergeGroupsFromImport, planImport, rowsToDrafts } from './import.js';
 import { parseCsv } from './csv.js';
+import { readRules } from './rules.js';
 import { looksLikeVCard, parseVCards } from './vcard-parse.js';
 import { PREVIEW_AREA } from './layout.js';
 
@@ -59,11 +60,11 @@ export function makeImportDialog(React, api) {
       let live = true;
       (async () => {
         try {
-          const [cards, books, options] = await Promise.all([
-            loadCards(api), loadBooks(api), detectionOptions(api),
+          const [cards, books, options, rules] = await Promise.all([
+            loadCards(api), loadBooks(api), detectionOptions(api), readRules(api),
           ]);
           if (!live) return;
-          setReady({ status: 'ready', cards, books, names: bookNamesById(books), region: options.region ?? '' });
+          setReady({ status: 'ready', cards, books, names: bookNamesById(books), region: options.region ?? '', rules });
           setBookId(books[0]?.id ?? '');
         } catch {
           if (live) setReady({ status: 'error' });
@@ -108,7 +109,7 @@ export function makeImportDialog(React, api) {
 
     const plan = useMemo(
       () => (ready.status === 'ready'
-        ? planImport(drafts, ready.cards, { region: ready.region })
+        ? planImport(drafts, ready.cards, { region: ready.region, rules: ready.rules })
         : { fresh: [], duplicates: [] }),
       [drafts, ready],
     );
@@ -136,7 +137,7 @@ export function makeImportDialog(React, api) {
         if (source?.kind === 'csv' && remember && isUsableMapping(mapping)) {
           await saveTemplate(api, source.headers, mapping);
         }
-        const result = await applyImport(api, toWrite);
+        const result = await applyImport(api, toWrite, { rules: ready.rules, region: ready.region });
         // A merge is not finished here: the pair goes back to the caller, which
         // opens the one review dialog every merge in the plugin goes through.
         close({

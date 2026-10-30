@@ -12,9 +12,26 @@ import {
   Stack, Text, Textarea,
 } from '@plugin-host/ui';
 import { loadBooks, text } from './contacts.js';
+import { readRegion } from './region.js';
+import { applyRulesToCard, readRules } from './rules.js';
 import {
   cardFromDraft, companyCardFromDraft, companyDraftFromCard, draftFromCard, emptyCompanyDraft,
   emptyDraft, isDirty, validateCompanyDraft, validateDraft, draftWarnings } from './editor.js';
+
+/**
+ * The card with the stored normalisation rules applied — the "run the rules on
+ * edit" half of #20. Rules are a convenience, never a gate: a failed read or an
+ * unusable rule set leaves the card exactly as the user typed it, so a save can
+ * never be blocked by them.
+ */
+async function withStoredRules(api, card) {
+  try {
+    const [rules, region] = await Promise.all([readRules(api), readRegion(api)]);
+    return applyRulesToCard(card, rules, { region });
+  } catch {
+    return card;
+  }
+}
 
 export function makeEditorDialog(React, api) {
   const { createElement: h, useEffect, useState } = React;
@@ -102,9 +119,10 @@ export function makeEditorDialog(React, api) {
       setFailure('');
       const card = (company ? companyCardFromDraft : cardFromDraft)(draft, mode);
       try {
-        if (mode === 'create') await api.contacts.create(card);
-        else await api.contacts.update(contact.id, card);
-        close({ saved: mode === 'create' ? 'created' : 'updated', contact: card });
+        const written = await withStoredRules(api, card);
+        if (mode === 'create') await api.contacts.create(written);
+        else await api.contacts.update(contact.id, written);
+        close({ saved: mode === 'create' ? 'created' : 'updated', contact: written });
       } catch (err) {
         setFailure(String(err?.message ?? err));
         setBusy(false);
