@@ -83,8 +83,11 @@ describe('the main page', () => {
     await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[0]); });
     expect(seen).toEqual(['duplicates']);
 
-    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[3]); });
-    expect(seen).toEqual(['duplicates', 'health']);
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[2]); });
+    expect(seen).toEqual(['duplicates', 'groups']);
+
+    await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Open' })[4]); });
+    expect(seen).toEqual(['duplicates', 'groups', 'health']);
   });
 
   it('offers the palette tasks in its menu, and runs them', async () => {
@@ -95,6 +98,7 @@ describe('the main page', () => {
     expect(screen.getByRole('button', { name: 'New contact' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'New company' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'New project' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'New group' })).toBeTruthy();
 
     // the menu calls the same code the palette does
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'New project' })); });

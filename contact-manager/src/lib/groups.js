@@ -39,11 +39,12 @@ export function groupMemberIds(card) {
 export function groupDraftFromCard(card, books = []) {
   const draft = emptyGroupDraft();
   if (!card) return draft;
+  const list = Array.isArray(books) ? books : [];
   draft.name = text(card.name?.full) || text(card.name);
   draft.memberIds = groupMemberIds(card);
-  const known = new Set((Array.isArray(books) ? books : []).map((book) => book.id));
+  const known = new Set(list.map((book) => book.id));
   const owned = bookIds(card);
-  draft.bookIds = known.size ? books.filter((book) => owned.includes(book.id)).map((book) => book.id) : owned;
+  draft.bookIds = known.size ? list.filter((book) => owned.includes(book.id)).map((book) => book.id) : owned;
   return draft;
 }
 

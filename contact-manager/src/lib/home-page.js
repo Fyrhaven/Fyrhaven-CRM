@@ -12,12 +12,12 @@
 import {
   Badge, Button, Card, EmptyState, Heading, InfoBar, List, ListRow, Page, PageHeader, Row, Section, Stack, Text,
 } from '@plugin-host/ui';
-import { bookNamesById, loadBooks, loadCards, matchOptions } from './contacts.js';
+import { bookNamesById, isGroupCard, loadBooks, loadCards, matchOptions } from './contacts.js';
 import { findDuplicateGroups, LAST_SCAN_KEY, readDismissed } from './duplicates.js';
 import { readProjects } from './projects.js';
 import { healthSummary } from './health.js';
 import { readRegion } from './normalise.js';
-import { findDuplicates, importContacts, newCompany, newContact, newProject, undoMerge } from './actions.js';
+import { findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, undoMerge } from './actions.js';
 import { undoWindowMinutes } from './labels.js';
 import { readUndo } from './undo.js';
 import { ACTION_BAR } from './layout.js';
@@ -74,6 +74,9 @@ export function makeHomePage(React, api) {
           cards,
           books,
           projects,
+          // The contact groups in the address books — distinct from `groups`,
+          // which are the duplicate groups the scan found.
+          contactGroups: cards.filter(isGroupCard),
           groups,
           health: healthSummary(cards, {
             books,
@@ -130,6 +133,7 @@ export function makeHomePage(React, api) {
       h(Button, { variant: 'secondary', icon: 'user-plus', onClick: () => void newContact(api).then(() => onDataChanged?.()) }, t('action.newContact')),
       h(Button, { variant: 'secondary', icon: 'building', onClick: () => void newCompany(api).then(() => onDataChanged?.()) }, t('action.newCompany')),
       h(Button, { variant: 'secondary', icon: 'folder', onClick: () => void newProject(api).then(() => onDataChanged?.()) }, t('action.newProject')),
+      h(Button, { variant: 'secondary', icon: 'users', onClick: () => void newGroup(api).then(() => onDataChanged?.()) }, t('action.newGroup')),
       h(Button, { variant: 'secondary', icon: 'upload', onClick: () => void importContacts(api).then(() => onDataChanged?.()) }, t('action.importContacts')),
       undoWindowMinutes(api.plugin?.settings) > 0 && state.undoable
         ? h(Button, { variant: 'secondary', icon: 'undo', onClick: () => void undoMerge(api).then(() => onDataChanged?.()) }, t('action.undoCommand'))
@@ -169,6 +173,7 @@ export function makeHomePage(React, api) {
                 row('duplicates', t('tab.duplicates'), duplicateLine(),
                   state.groups.length ? null : { label: t('home.clear'), tone: 'success' }, 'duplicates'),
                 row('contacts', t('page.contactsTitle'), t('home.contactsLine', { count: state.cards.length }), null, 'contacts'),
+                row('groups', t('groups.tab'), t('home.groupsLine', { count: state.contactGroups.length }), null, 'groups'),
                 row('projects', t('page.projectsTitle'), t('home.projectsLine', { count: state.projects.length }), null, 'projects'),
                 row('health', t('health.title'), t('home.healthLine', {
                   average: state.health.average,
