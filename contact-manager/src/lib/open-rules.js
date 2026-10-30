@@ -27,7 +27,7 @@ export async function openRules(api, { cards = null } = {}) {
 /** Applies a dialog result and toasts the outcome. Null when it was cancelled. */
 export async function applyRulesResult(api, result) {
   if (!result) return null;
-  const outcome = await applyNormalisation(api, result.plan);
+  const outcome = await applyNormalisation(api, result.plan, { kind: 'rules' });
   if (outcome.failed) {
     api.toast.warning(api.i18n.t('rules.appliedPartial', { updated: outcome.updated, failed: outcome.failed }));
   } else if (outcome.updated) {

@@ -13,6 +13,7 @@ import {
   SearchInput, Section, Stack, Text,
 } from '@plugin-host/ui';
 import { contactName, loadBooks } from './contacts.js';
+import { recordHistory } from './history.js';
 import {
   duplicatesInGroup, emptyGroupDraft, groupCardFromDraft, groupDraftFromCard,
   groupMemberLabel, memberCandidates, validateGroupDraft,
@@ -87,6 +88,7 @@ export function makeGroupDialog(React, api) {
       try {
         if (mode === 'create') await api.contacts.create(card);
         else await api.contacts.update(group.id, card);
+        await recordHistory(api, { kind: 'group', contacts: 1 });
         close({ saved: mode === 'create' ? 'created' : 'updated', group: card });
       } catch (err) {
         setFailure(String(err?.message ?? err));
@@ -108,6 +110,7 @@ export function makeGroupDialog(React, api) {
       setFailure('');
       try {
         await api.contacts.remove(group.id);
+        await recordHistory(api, { kind: 'group', contacts: 1 });
         close({ deleted: true });
       } catch (err) {
         setFailure(String(err?.message ?? err));

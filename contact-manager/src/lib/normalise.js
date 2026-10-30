@@ -8,6 +8,7 @@
 // so undoing is one patch per contact — no guessing, no re-deriving.
 
 import { contactName, text } from './contacts.js';
+import { recordHistory } from './history.js';
 import { toE164 } from './phones.js';
 import { undoWindowMs } from './undo.js';
 
@@ -132,7 +133,10 @@ async function saveCleanup(api, entries, now = Date.now()) {
  * replaced. A contact the host refuses is counted in `failed` and left out of
  * the record, so undoing never reverts a change that was never made.
  */
-export async function applyNormalisation(api, plan, now = Date.now()) {
+export async function applyNormalisation(api, plan, options = {}) {
+  // `now` used to be the third positional argument; a plain number still means
+  // "the time", so older callers keep working.
+  const { now = Date.now(), kind = 'cleanup' } = typeof options === 'number' ? { now: options } : options;
   const entries = [];
   let failed = 0;
   for (const item of Array.isArray(plan) ? plan : []) {
@@ -144,6 +148,9 @@ export async function applyNormalisation(api, plan, now = Date.now()) {
     }
   }
   const undoable = await saveCleanup(api, entries, now);
+  if (entries.length) {
+    await recordHistory(api, { kind, contacts: entries.length, undoable: undoable > 0 }, now);
+  }
   return { updated: entries.length, failed, undoable };
 }
 

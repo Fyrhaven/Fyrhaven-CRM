@@ -50,7 +50,7 @@ signatures, the last scan summary).
 
 | Surface | Where it appears | What it does |
 |---|---|---|
-| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects* and *Health* |
+| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health* and *History* |
 | *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
@@ -71,6 +71,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
 | *Rules…* button | Contact Manager → *Contacts*, with a selection | Opens the **normalisation rules** dialog: the built-in rules, your own find-and-replace rules, and the exact edits they would make before anything is written (#20) |
 | Command palette action | Ctrl+K → *Normalisation rules* | The same rules dialog, over every contact |
+| *History* sub-tab | Contact Manager → *History* | What this plugin wrote — merges, cleanups, rules, imports, bulk edits, creates/updates/deletes and group changes — newest first, with the rollback that is still live (#25, the local half) |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group* and *Rules…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
 
 All four entry points open the same review dialog. One place decides what is
@@ -149,6 +150,8 @@ contact-manager/
 │       ├── rules.js       # the normalisation rules engine: the catalogue, the order, the plan (#20)
 │       ├── rules-dialog.js # the rules editor (plugin-dialog slot)
 │       ├── open-rules.js  # one place that opens the rules dialog and applies it
+│       ├── history.js     # the change history of the plugin's own writes (#25)
+│       ├── history-page.js # the History page
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -173,6 +176,8 @@ contact-manager/
 │   ├── ui-groups.test.mjs  # the Groups page and the group dialog
 │   ├── rules.test.mjs      # the rules, their order, the plan and the storage (#20)
 │   ├── ui-rules.test.mjs   # the rules dialog
+│   ├── history.test.mjs    # the change-history store and the paths that record into it (#25)
+│   ├── ui-history.test.mjs # the History page
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
 │   ├── layout.test.mjs     # the plugin-owned page skeleton
 │   ├── bulk.test.mjs       # bulk edits and delete: map rules, refusals, undo
@@ -212,8 +217,8 @@ contact-manager/
 > `duplicates.js` (merge run, storage), `undo.js` (undo storage and restore),
 > `book-policies.js` (policy and ignore-rule storage), `manager-page.js`,
 > `policies-dialog.js`, `review-dialog.js`, `detail-section.js`,
-> `groups-page.js`, `group-dialog.js`, `rules-dialog.js` and `open-rules.js` are
-> allowed to touch the host.
+> `groups-page.js`, `group-dialog.js`, `rules-dialog.js`, `open-rules.js` and
+> `history-page.js` are allowed to touch the host.
 
 
 ## 4. Architecture
@@ -847,6 +852,32 @@ find-and-replace rule is the way to put one back. `phone.e164` needs a region,
 which the cleanup dialog stores — with no region there is nothing honest to do,
 so the rule leaves the number alone rather than guessing.
 
+### 6.12 The change history (`src/lib/history.js`, `history-page.js`, v1.36.0) — #25
+
+The History tab is the local half of #25: a record of **the plugin's own
+writes**. It is deliberately not an audit log of the address book — a plugin
+cannot see who else changed a contact — and the page says so, because a
+compliance surface that overstates what it knows is worse than one that does
+not exist.
+
+An entry is `{ at, kind, contacts, detail, undoable }`, kept newest first in
+`api.storage` under `changeHistory` (per account and per browser), capped at
+100, repaired on read, and removed rather than written when it would be empty.
+`recordHistory` **never throws at its caller**: a change that was made must not
+be reported as failed because the note about it could not be stored.
+
+**Recording is a by-product, not a second code path.** `saveUndo` and
+`applyNormalisation` are the choke points every batch already passes through, so
+a merge, a delete batch, a cleanup and a rules batch all record themselves, and
+a future batch task will too without being told to. The single-contact paths
+(editor create/update/delete, group create/update/delete) and the import and
+bulk paths call `recordHistory` directly, one line each.
+
+**One rollback, in one place.** `liveRollback` picks the newest of the two
+records that can still be undone — a merge batch or a cleanup/rules record — and
+the page offers exactly that, through `undoLastMerge` / `undoCleanup`. The
+history never invents a second undo: it points at the one that exists.
+
 ---
 
 ## 7. Build, test and package
@@ -862,7 +893,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **813 tests in 53 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **832 tests in 55 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -884,6 +915,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-rules.test.mjs` | The rules dialog: previewing a built-in and a rule of your own, the disabled apply, storing the choice, and removing a rule |
 | `test/groups.test.mjs` | The group model: what a group card is, the member map shapes, the draft round trip, the member search, and the duplicates a list may hold (#12) |
 | `test/ui-groups.test.mjs` | The Groups page (list, flag, search, empty state, open create/edit) and the group dialog (create, validation, edit, delete, the live duplicate warning) |
+| `test/history.test.mjs` | The change-history store (repairs, the newest-first cap, a failed note never reaching the caller) and that every write path records itself — merge, delete, cleanup, rules, import, bulk (#25) |
+| `test/ui-history.test.mjs` | The History page: the list, the counts, the live rollback and running it, and the clear |
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
