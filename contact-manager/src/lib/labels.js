@@ -10,13 +10,20 @@ export const strengthKey = (group) => {
   return 'group.possibleBadge';
 };
 
-const REASON_KEYS = { email: 'group.reasonEmail', phone: 'group.reasonPhone', name: 'group.reasonName' };
+const REASON_KEYS = {
+  email: 'group.reasonEmail',
+  phone: 'group.reasonPhone',
+  name: 'group.reasonName',
+  nickname: 'group.reasonNickname',
+  similar: 'group.reasonSimilar',
+};
 
-/** "Same email address: a@b.de · Same name" — what made this a group. */
+/** "Same email address: a@b.de · Nickname: robert smith" — what made this a group. */
 export function reasonLine(t, group) {
   const parts = (group?.reasons ?? []).map((reason) => {
     const label = t(REASON_KEYS[reason.type] ?? 'group.reasonName');
-    return reason.type === 'name' ? label : `${label}: ${reason.value}`;
+    // a plain name match names itself; anything else names the value it matched on
+    return reason.type === 'name' || !reason.value ? label : `${label}: ${reason.value}`;
   });
   return parts.join(' · ');
 }

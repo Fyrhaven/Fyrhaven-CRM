@@ -7,6 +7,44 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.33.0] — 2026-10-27
+
+### Added
+
+- **Smarter name matching (#8).** The same person written differently now reaches
+  the same key: scripts are romanised (`Иванов` ≡ `Ivanov`, `Γιώργος` ≡ `Giorgos`),
+  German umlauts match **both** honest spellings (`Müller` ≡ `Mueller` and
+  `Müller` ≡ `Muller`), and a curated nickname table pairs `Bob`/`Robert`,
+  `Bill`/`William`, `Peggy`/`Margaret` and more. An ambiguous alias is left alone
+  rather than guessed at — `Alex` is both Alexander and Alexandra.
+
+- **Initials, phonetic surnames and near-miss given names.** A second, pairwise
+  pass finds `J. Smith` ≡ `John Smith`, `John Smyth` ≡ `John Smith` and
+  `Sara` ≡ `Sarah`. It only looks inside a bucket that already shares a phonetic
+  surname, and **the given name has to corroborate** — so `John Smith` and
+  `Jane Smith` stay two people, which matters more than any recall.
+
+- **A `nameSimilarity` setting** (60–100, default 80) is how alike two given names
+  must be. Initials and nicknames are structural and always match; the threshold
+  governs typos and short forms only.
+
+### Fixed
+
+- **`normalizeName` now romanises instead of leaving a script alone.** It kept
+  Cyrillic as Cyrillic, so `Иванов` and `Ivanov` could never match. A script with
+  no table is still kept as it is, so a name never collapses to `''`.
+
+### Notes
+
+Every group these rules produce is **`possible`**, never `strong`, and its reason
+names both spellings (`Similar name: J. Smith ↔ John Smith`) so the user decides.
+
+A guard the tests found on the first run: the phonetic key of `1` and `10` is the
+same, which collapsed a 51-group fixture into groups of 22, 4 and 2. A surname now
+needs at least two letters, and two different surnames must be *similar*, not
+merely bucketed. A bucket with more than 60 members is skipped entirely — a
+surname that common is a crowd, not a clue.
+
 ## [1.32.0] — 2026-10-27
 
 ### Added
