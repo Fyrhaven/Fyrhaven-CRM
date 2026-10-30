@@ -172,5 +172,19 @@ describe('the group editor dialog', () => {
     expect(screen.getByText('1 possible duplicate(s) in this list')).toBeTruthy();
     expect(screen.getAllByText('Possible duplicate').length).toBeGreaterThan(0);
   });
+
+  it('records the write in the change history', async () => {
+    const api = editApi();
+    await renderDialog(api, {
+      groupEditor: { mode: 'create' }, cards: CARDS, books: BOOKS, detectOptions: {},
+    });
+
+    await act(async () => { fireEvent.change(screen.getByLabelText('Group name'), { target: { value: 'Team' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create group' })); });
+
+    expect(await api.storage.get('changeHistory')).toEqual([
+      expect.objectContaining({ kind: 'group', contacts: 1 }),
+    ]);
+  });
 });
 

@@ -7,6 +7,33 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.36.0] — 2026-10-30
+
+### Added
+
+- **A change history of the plugin's own writes (#25, the local half).** A new
+  *History* tab lists what this plugin wrote — merges, cleanups, rules batches,
+  imports, bulk edits, contact creates/updates/deletes and group changes —
+  newest first, with how many contacts each touched and whether it can still be
+  rolled back. It says out loud that it is a record of the plugin's own writes,
+  not an audit log of the address book: a plugin cannot see who else changed a
+  contact, and a compliance surface should not pretend otherwise.
+
+- **The rollback that is still live, in one place.** The tab offers the newest
+  batch that can still be undone — a merge record or a cleanup/rules record —
+  through the same undo the other pages offer, so a change made from anywhere
+  can be taken back from the history.
+
+### Notes
+
+The history lives in `api.storage` (per account and per browser, like the
+projects and the saved searches), keeps the newest 100 entries and repairs
+itself on read. It never blocks a write: a change that was made is not reported
+as failed because the note about it could not be stored. Recording is a
+by-product of the write path rather than a second code path — `saveUndo` and
+`applyNormalisation` are the choke points every batch already passes through, so
+a future batch task records itself without being told to.
+
 ## [1.35.0] — 2026-10-30
 
 ### Added

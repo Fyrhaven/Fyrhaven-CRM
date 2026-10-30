@@ -10,6 +10,8 @@
 //   * the page shows the retained records, and undo deletes them.
 // Pure functions plus api.storage / api.contacts calls; no DOM.
 
+import { recordHistory } from './history.js';
+
 export const UNDO_KEY = 'undoBatches';
 export const DEFAULT_UNDO_MINUTES = 15;
 export const MAX_UNDO_MINUTES = 1440;
@@ -74,7 +76,7 @@ export async function purgeUndo(api, now = Date.now()) {
  * entries were kept (0 when undo is off, there was nothing to keep or the
  * run is bigger than the size limits).
  */
-export async function saveUndo(api, entries, now = Date.now()) {
+export async function saveUndo(api, entries, now = Date.now(), kind = 'merge') {
   const windowMs = undoWindowMs(api.plugin?.settings);
   const useful = (entries ?? []).filter((e) => e.removed.length);
   if (!windowMs || !useful.length) {
@@ -88,6 +90,9 @@ export async function saveUndo(api, entries, now = Date.now()) {
   }
   const kept = enforceLimits([...(await readUndo(api, now)), batch]);
   await api.storage.set(UNDO_KEY, kept);
+  // The change history (#25) records the write, not the rollback: this is the
+  // one place every batch that leaves an undo record passes through.
+  await recordHistory(api, { kind, contacts: useful.length, undoable: true }, now);
   return useful.length;
 }
 
