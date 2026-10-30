@@ -43,6 +43,23 @@ describe('review dialog', () => {
     expect(screen.queryByText('Possible match')).toBeNull();
   });
 
+  it('opens on the keep choice the group carries, ahead of the field score', async () => {
+    const api = dialogApi();
+    const Dialog = makeReviewDialog(React, api);
+    // the richer card would win pickPrimary; the caller (the import wizard,
+    // folding a file into the contact already there) says otherwise
+    const picked = groupFromSelection([
+      makeCard({ id: 'a', name: 'Ada Lovelace' }),
+      makeCard({ id: 'g', name: 'Grace Hopper', notes: { n: { note: 'longer, richer' } } }),
+    ]);
+    picked.keepId = 'a';
+    await act(async () => {
+      render(React.createElement(Dialog, { groups: [picked], onResult: () => {} }));
+    });
+
+    expect(screen.getByLabelText('Keep').value).toBe('a');
+  });
+
   it('hands Cancel and Merge to the host footer, no buttons in the body', async () => {
     const api = dialogApi();
     const Dialog = makeReviewDialog(React, api);

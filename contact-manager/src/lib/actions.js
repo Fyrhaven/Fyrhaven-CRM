@@ -82,22 +82,41 @@ export async function newProject(api) {
 
 /**
  * The import wizard: it reads the file, shows what would happen, and returns
- * what it wrote. The page toasts that; the palette has no page to toast from, so
- * this does it here.
+ * what it wrote. Duplicates the user chose to merge come back as review-dialog
+ * groups — every merge goes through that dialog (README §9.2) — so the action
+ * opens it here, then toasts the whole outcome. The page toasts that; the
+ * palette has no page to toast from, so this does it here.
  */
 export async function importContacts(api) {
+  const t = (key, vars) => api.i18n.t(key, vars);
   const result = await api.ui.openDialog({
-    title: api.i18n.t('import.title'),
+    title: t('import.title'),
     slot: 'plugin-dialog',
     extraProps: { importWizard: true },
   });
   if (!result) return;
+
+  let merged = 0;
+  if (result.mergeGroups?.length) {
+    const review = await api.ui.openDialog({
+      title: t('dialog.title'),
+      slot: 'plugin-dialog',
+      extraProps: { groups: result.mergeGroups },
+    });
+    merged = review?.merged ?? 0;
+    toastMergeResult(api, review);
+  }
+
+  // A merge decision was written as a contact and then folded into an existing
+  // one, so it is no longer new; a merge that was skipped in the review dialog
+  // leaves that contact in place, so it still counts.
+  const created = Math.max(0, (result.created ?? 0) - merged);
   if (result.failed) {
-    api.toast.warning(api.i18n.t('import.partial', { created: result.created, failed: result.failed }));
+    api.toast.warning(t('import.partial', { created, failed: result.failed }));
   } else if (result.skipped) {
-    api.toast.success(api.i18n.t('import.doneSkipped', { created: result.created, skipped: result.skipped }));
-  } else {
-    api.toast.success(api.i18n.t('import.done', { created: result.created }));
+    api.toast.success(t('import.doneSkipped', { created, skipped: result.skipped }));
+  } else if (created) {
+    api.toast.success(t('import.done', { created }));
   }
 }
 
