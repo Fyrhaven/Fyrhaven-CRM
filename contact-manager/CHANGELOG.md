@@ -7,6 +7,36 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.34.0] — 2026-10-30
+
+### Added
+
+- **Contact groups: distribution lists as first-class records (#12).** A new
+  *Groups* tab lists the group cards in your address books and lets you create,
+  rename, search and delete them, and add or remove members with a contact
+  search. A group is an ordinary JSContact card (`kind: 'group'`) written
+  through `api.contacts`, not a local record — so it is shared across devices,
+  searchable and exported with your contacts, unlike the local-only Projects.
+
+- **A duplicate warning inside a list (#12).** The Groups tab flags a group
+  whose members contain two contacts that look like the same person, using the
+  same detection and policies as the Duplicates page, and the editor warns as
+  the membership is edited. The list itself is never changed — the review
+  happens where every other merge does.
+
+### Fixed
+
+- **A group card can never be merged as a person (#12).** The group marker is
+  now recognised by its keyword as well as `kind`, so a host that does not keep
+  `kind: 'group'` still leaves a distribution list out of duplicate detection.
+
+### Notes
+
+The command palette gains *New group*. Two parts of #12 are deliberately not
+built because the host has no surface for them: using groups in the composer's
+autocomplete, and a membership view inside the webmail's own group card. Both
+are host changes, like #11 and the command-palette half of #13.
+
 ## [1.33.0] — 2026-10-27
 
 ### Added
