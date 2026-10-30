@@ -1,6 +1,6 @@
 // The single app page: one navigation-rail entry — *Contact Manager* — whose
 // body is split into sub-tabs (Overview, Duplicates, Contacts, Groups, Projects,
-// Health) with the host's own `Tabs` kit component. Each sub-page mounts the first time
+// Health, History) with the host's own `Tabs` kit component. Each sub-page mounts the first time
 // it is opened and then stays mounted but hidden, so switching tabs keeps a scan
 // result or a selected contact instead of throwing the work away.
 //
@@ -9,7 +9,7 @@
 // `onDataChanged()` (bump it after a task that wrote something).
 import { Tabs } from '@plugin-host/ui';
 
-export function makeAppShell(React, api, { home, duplicates, contacts, groups, projects, health }) {
+export function makeAppShell(React, api, { home, duplicates, contacts, groups, projects, health, history }) {
   const { createElement: h, useEffect, useState } = React;
   const t = (key) => api.i18n.t(key);
   const tabs = [
@@ -19,6 +19,7 @@ export function makeAppShell(React, api, { home, duplicates, contacts, groups, p
     { id: 'groups', label: t('groups.tab'), component: groups },
     { id: 'projects', label: t('page.projectsTitle'), component: projects },
     { id: 'health', label: t('health.title'), component: health },
+    { id: 'history', label: t('history.tab'), component: history },
   ];
 
   return function AppShell() {

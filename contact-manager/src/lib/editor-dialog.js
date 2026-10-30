@@ -12,6 +12,7 @@ import {
   Stack, Text, Textarea,
 } from '@plugin-host/ui';
 import { loadBooks, text } from './contacts.js';
+import { recordHistory } from './history.js';
 import { readRegion } from './region.js';
 import { applyRulesToCard, readRules } from './rules.js';
 import {
@@ -122,6 +123,7 @@ export function makeEditorDialog(React, api) {
         const written = await withStoredRules(api, card);
         if (mode === 'create') await api.contacts.create(written);
         else await api.contacts.update(contact.id, written);
+        await recordHistory(api, { kind: mode === 'create' ? 'create' : 'update', contacts: 1 });
         close({ saved: mode === 'create' ? 'created' : 'updated', contact: written });
       } catch (err) {
         setFailure(String(err?.message ?? err));
@@ -142,6 +144,7 @@ export function makeEditorDialog(React, api) {
       setBusy(true);
       try {
         await api.contacts.remove(contact.id);
+        await recordHistory(api, { kind: 'delete', contacts: 1 });
         close({ deleted: true });
       } catch (err) {
         setFailure(String(err?.message ?? err));

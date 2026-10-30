@@ -28,6 +28,7 @@ import { makeProfilePage } from './lib/profile-page.js';
 import { makeProjectsPage } from './lib/projects-page.js';
 import { makeGroupsPage } from './lib/groups-page.js';
 import { makeHealthPage } from './lib/health-page.js';
+import { makeHistoryPage } from './lib/history-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { makeGroupDialog } from './lib/group-dialog.js';
 import { makeBulkDialog } from './lib/bulk-dialog.js';
@@ -58,6 +59,7 @@ const AppShell = makeAppShell(React, api, {
   groups: makeGroupsPage(React, api),
   projects: makeProjectsPage(React, api),
   health: makeHealthPage(React, api),
+  history: makeHistoryPage(React, api),
 });
 
 // One dialog slot serves nine purposes: the review/merge dialog, the contact
