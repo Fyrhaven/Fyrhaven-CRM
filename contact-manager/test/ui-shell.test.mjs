@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The single app page: one navigation-rail entry whose body is split into
-// sub-tabs (Duplicates, Contacts, Projects).
+// sub-tabs (Duplicates, Contacts, Groups, Projects).
 import { afterEach, describe, expect, it } from 'vitest';
 import * as React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -20,6 +20,7 @@ function renderShell() {
     home: Stub('Overview body'),
     duplicates: Stub('Duplicates body'),
     contacts: Stub('Contacts body'),
+    groups: Stub('Groups body'),
     projects: Stub('Projects body'),
     health: Stub('Health body'),
   });
@@ -28,14 +29,15 @@ function renderShell() {
 }
 
 describe('app shell', () => {
-  it('shows the five sub-tabs, the overview first, and mounts only that one', () => {
+  it('shows the six sub-tabs, the overview first, and mounts only that one', () => {
     renderShell();
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-      .toEqual(['Overview', 'Duplicates', 'Contacts', 'Projects', 'Health']);
+      .toEqual(['Overview', 'Duplicates', 'Contacts', 'Groups', 'Projects', 'Health']);
     // the plugin lands on its main page, not on Duplicates
     expect(screen.getByText('Overview body')).toBeTruthy();
     expect(screen.queryByText('Duplicates body')).toBeNull();
     expect(screen.queryByText('Contacts body')).toBeNull();
+    expect(screen.queryByText('Groups body')).toBeNull();
     expect(screen.queryByText('Projects body')).toBeNull();
     expect(screen.queryByText('Health body')).toBeNull();
   });
