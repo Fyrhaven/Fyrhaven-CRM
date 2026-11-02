@@ -1421,15 +1421,25 @@ An *How to read this* legend above the groups explains every indicator.
 The roadmap lives on GitHub, not in this file:
 
 - **Milestones** — https://github.com/zyntrax/bulwark-plugins/milestones
-  track the planned releases (`v1.2.0` … `v2.0.0`).
+  group the feature issues. Their titles (`v1.2.0` … `v2.0.0`) are the
+  **originally planned releases**, not the current release train — the plugin is
+  at v1.43.0. Read them as phases, and read each milestone's description, which
+  records what has shipped and what remains.
 - **Feature issues** — https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap
   are the individual todos, grouped by area and milestone.
 - **Pinned roadmap issue** — https://github.com/zyntrax/bulwark-plugins/issues/40
-  is the top-level vision with links to every planned feature.
+  is the top-level vision with links to every planned feature; its checkboxes
+  mirror the issues (ticked when the issue is **closed**).
 
-When a feature ships, close its issue in the release commit/PR. New ideas go
-into a new issue with the `roadmap` label and a milestone — never into a local
-todo list.
+When a feature ships, close its issue in the release commit/PR — that is what
+ticks the roadmap box and moves the milestone count. New ideas go into a new
+issue with the `roadmap` label and a milestone — never into a local todo list.
+
+**Milestone hygiene (2026-11-02):** five features whose code shipped in an
+earlier release (#4, #6, #8, #12, #20) had stayed open, so their milestone counts
+and roadmap boxes were wrong; they were closed and the boxes ticked. #5 (a
+*scheduled* scan) stays open — it needs a host timer hook the plugin does not
+have, so only its digest half shipped.
 
 ## Open Findings (2026-10-21)
 
@@ -1716,8 +1726,11 @@ bodies — `api.email` is optional and its shape is what #75 waits on. The one o
   short. Deleting one loses nothing: its commits are in `main` through the
   merge, and the PR keeps the discussion.
 - **Roadmap**: https://github.com/zyntrax/bulwark-plugins/issues/40 is the
-  single roadmap issue; it links every feature issue. Milestones
-  `Contact Manager v1.2.0` … `v2.0.0` group them by release.
+  single roadmap issue; it links every feature issue, and its checkboxes mirror
+  the issues (ticked when closed). Milestones `Contact Manager v1.2.0` …
+  `v2.0.0` group them — the titles are the originally planned releases (the
+  plugin is at v1.43.0), so read them as phases and read each description for
+  what has shipped and what remains.
 - **Releases**: tagged `contact-manager-vX.Y.Z`; installable ZIPs are the
   release assets. The newest release is `contact-manager-v1.39.0`.
 - **Cutting a release**: merge the feature PR(s) into `main`, keep
