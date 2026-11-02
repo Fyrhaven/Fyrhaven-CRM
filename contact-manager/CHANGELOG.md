@@ -7,6 +7,27 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.43.0] — 2026-11-02
+
+### Added
+
+- **Smart lists in the command palette (#13, the palette half).** A new
+  *Smart lists* action (Ctrl+K) opens the saved searches with their **live
+  counts**, shows the contacts a list holds, and exports the chosen list as a
+  vCard. The saved searches were reachable only from the Contacts page until
+  now; this is the palette half the issue asked for.
+
+### Notes
+
+The dialog is honest about where the data lives: a saved search is stored in
+`api.storage` per account and per browser, so the list is the one you saved on
+this browser. It reads and returns a *choice* — the export happens in
+`lib/actions.js` after the dialog closes — so the dialog never opens a dialog of
+its own, and the export falls back to showing the file when the sandbox refuses
+the download, exactly as the Contacts page does. The list is paged with the same
+`paging.js` the Contacts page uses, so a very large list does not build a very
+large DOM.
+
 ## [1.42.0] — 2026-11-02
 
 ### Added
