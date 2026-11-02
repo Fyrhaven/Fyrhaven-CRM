@@ -50,7 +50,7 @@ signatures, the last scan summary).
 
 | Surface | Where it appears | What it does |
 |---|---|---|
-| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health* and *History* |
+| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* |
 | *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
@@ -72,7 +72,8 @@ signatures, the last scan summary).
 | *Rules…* button | Contact Manager → *Contacts*, with a selection | Opens the **normalisation rules** dialog: the built-in rules, your own find-and-replace rules, and the exact edits they would make before anything is written (#20) |
 | Command palette action | Ctrl+K → *Normalisation rules* | The same rules dialog, over every contact |
 | *History* sub-tab | Contact Manager → *History* | What this plugin wrote — merges, cleanups, rules, imports, bulk edits, creates/updates/deletes and group changes — newest first, with the rollback that is still live (#25, the local half) |
-| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group* and *Rules…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
+| *Privacy* sub-tab | Contact Manager → *Privacy* | The GDPR toolkit (#26): pick a person, export everything held about them (JSON subject-access export, vCard, CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -121,7 +122,7 @@ contact-manager/
 │       ├── normalise-dialog.js # the cleanup preview
 │       ├── saved-searches.js # the queries a user keeps, in api.storage
 │       ├── digest.js     # the duplicate digest: the window, the baseline, staleness (#5)
-│       ├── app-shell.js   # the single app page: the Overview/Duplicates/Contacts/Groups/Projects/Health sub-tabs
+│       ├── app-shell.js   # the single app page: the Overview/Duplicates/Contacts/Groups/Projects/Health/History/Privacy sub-tabs
 │       ├── bulk.js        # bulk edits and delete for a selection
 │       ├── bulk-dialog.js # the bulk editor: tags and address books
 │       ├── vcard.js       # contacts to vCard 3.0, for the bulk export
@@ -152,6 +153,10 @@ contact-manager/
 │       ├── open-rules.js  # one place that opens the rules dialog and applies it
 │       ├── history.js     # the change history of the plugin's own writes (#25)
 │       ├── history-page.js # the History page
+│       ├── consent.js     # the consent records: the store, the lawful bases, the expiry (#26)
+│       ├── privacy.js     # the subject export, anonymisation, erasure and the deletion log (#26)
+│       ├── privacy-page.js # the Privacy page (app-page slot)
+│       ├── consent-dialog.js # the consent editor (plugin-dialog slot)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -178,6 +183,9 @@ contact-manager/
 │   ├── ui-rules.test.mjs   # the rules dialog
 │   ├── history.test.mjs    # the change-history store and the paths that record into it (#25)
 │   ├── ui-history.test.mjs # the History page
+│   ├── consent.test.mjs    # the consent store: records, expiry status, repairs (#26)
+│   ├── privacy.test.mjs    # the subject export, anonymisation, erasure, the deletion log (#26)
+│   ├── ui-privacy.test.mjs # the Privacy page and the consent editor (#26)
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
 │   ├── layout.test.mjs     # the plugin-owned page skeleton
 │   ├── bulk.test.mjs       # bulk edits and delete: map rules, refusals, undo
@@ -215,10 +223,12 @@ contact-manager/
 > `src/lib/*.js` must stay free of `api` and DOM access wherever possible —
 > that is what keeps the unit tests fast and the code portable. Only
 > `duplicates.js` (merge run, storage), `undo.js` (undo storage and restore),
-> `book-policies.js` (policy and ignore-rule storage), `manager-page.js`,
+> `book-policies.js` (policy and ignore-rule storage), `consent.js` (consent
+> storage), `privacy.js` (the erasure and the deletion log), `manager-page.js`,
 > `policies-dialog.js`, `review-dialog.js`, `detail-section.js`,
-> `groups-page.js`, `group-dialog.js`, `rules-dialog.js`, `open-rules.js` and
-> `history-page.js` are allowed to touch the host.
+> `groups-page.js`, `group-dialog.js`, `rules-dialog.js`, `open-rules.js`,
+> `history-page.js`, `privacy-page.js` and `consent-dialog.js` are allowed to
+> touch the host.
 
 
 ## 4. Architecture
@@ -878,6 +888,60 @@ records that can still be undone — a merge batch or a cleanup/rules record —
 the page offers exactly that, through `undoLastMerge` / `undoCleanup`. The
 history never invents a second undo: it points at the one that exists.
 
+### 6.13 The GDPR and consent toolkit (`src/lib/consent.js`, `privacy.js`, `privacy-page.js`, `consent-dialog.js`, v1.37.0) — #26
+
+The *Privacy* tab answers a data-subject request. #26 asked for four things —
+export everything held about a person, erase or anonymise them, a consent basis
+per contact and source with an expiry, and proof-of-deletion reports — and the
+first and the last already had machinery to reuse: the export is `contactsToFile`
+(#22) and the delete is `deleteContacts` (#14, v1.14.0).
+
+**Consent is a record *about* a contact, not a field on it.** The host has no
+consent field, and inventing one would put data the user did not type into their
+address book, so `consent.js` keeps records in `api.storage` — per account and
+per browser, like the projects, the saved searches and the history. A record is
+`{ contactId, source, basis, grantedAt, expiresAt, note }`, one per
+(contact, source) with the source folded to lower case, and the basis is one of
+the six lawful bases of GDPR Art. 6. The plugin does not judge which applies —
+that is the controller's call — so the list is exactly the regulation's.
+
+**An expiry is a status, not a filter.** `consentStatus` is `active`, `expiring`
+(within 30 days of the date), `expired` or `none`, and `daysUntilExpiry` is the
+number behind it. A record with no expiry never expires. Dates are stored as
+`YYYY-MM-DD`, the shape an `<input type=date>` uses, so what is written is what
+the user picked.
+
+**Erase and anonymise are two different promises.** *Erase* deletes the card
+through `deleteContacts`, so it leaves the same undo record every other delete
+does — a data-subject erasure is still recoverable inside the undo window — and
+then drops the contact's consent records. *Anonymise* keeps the card as an empty
+tombstone (`anonymisePatch` clears every field in `PERSONAL_FIELDS` with
+`undefined`, the way undo clears a field) so nothing that pointed at the id
+dangles. Both write a proof-of-deletion entry.
+
+**A tombstone is never a duplicate.** `isMergeable` already kept a group out of
+detection; it now keeps an anonymised card out too, through the same single
+gate, so an anonymised contact is never offered as a duplicate of a person.
+
+**The proof-of-deletion log holds no personal data.** An entry is
+`{ at, id, method, fields, books }` — the id, whether it was erased or
+anonymised, and which fields were cleared. It deliberately does **not** keep the
+name: a log that did would put back the data the erasure was for. The page
+exports it as a CSV report. `recordDeletion` never throws at its caller, for the
+same reason `recordHistory` does not.
+
+**The subject-access export is the whole card, plus the records about it.**
+`buildSubjectExport` returns `{ generatedAt, subject, data, consents, changes }`,
+where `data` is the card in full (completeness is the point) and `changes` are
+the plugin's own history entries whose `subject` is this person — the field
+`history.js` grew so a consent change or an erasure can be tied to the contact
+it was about.
+
+**Consent changes are audited.** `saveConsent` and `deleteConsent` write the
+record and then a `consent` history entry, one line each, so the *History* tab
+shows who consented and when — the same by-product rule as the rest of the
+history.
+
 ---
 
 ## 7. Build, test and package
@@ -893,7 +957,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **832 tests in 55 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **866 tests in 58 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -917,6 +981,9 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-groups.test.mjs` | The Groups page (list, flag, search, empty state, open create/edit) and the group dialog (create, validation, edit, delete, the live duplicate warning) |
 | `test/history.test.mjs` | The change-history store (repairs, the newest-first cap, a failed note never reaching the caller) and that every write path records itself — merge, delete, cleanup, rules, import, bulk (#25) |
 | `test/ui-history.test.mjs` | The History page: the list, the counts, the live rollback and running it, and the clear |
+| `test/consent.test.mjs` | The consent store: the record repair, one per (contact, source), the expiry status and days left, the summary, and the storage repairs (#26) |
+| `test/privacy.test.mjs` | The subject export (completeness, subject filtering), the anonymisation patch and the tombstone marker, erasure leaving an undo record and a proof of deletion, the deletion log and its CSV report, and the consent audit (#26) |
+| `test/ui-privacy.test.mjs` | The Privacy page (subject picker, export through the host download, anonymise, erase, the deletion log) and the consent editor (save, status, remove, refusal) (#26) |
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
