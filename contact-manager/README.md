@@ -71,9 +71,10 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
 | *Rules…* button | Contact Manager → *Contacts*, with a selection | Opens the **normalisation rules** dialog: the built-in rules, your own find-and-replace rules, and the exact edits they would make before anything is written (#20) |
 | Command palette action | Ctrl+K → *Normalisation rules* | The same rules dialog, over every contact |
+| Command palette action / *Automation rules* button | Ctrl+K → *Automation rules*, or the Overview menu | Opens the **automation rules** builder (#33): rules that run on a contact being created, changed or imported, with a condition (a search query) and actions (add/remove tag, add to a group, propose a merge), a priority order, an enable/disable toggle and a *Test* dry run |
 | *History* sub-tab | Contact Manager → *History* | What this plugin wrote — merges, cleanups, rules, imports, bulk edits, creates/updates/deletes and group changes — newest first, with the rollback that is still live (#25, the local half) |
 | *Privacy* sub-tab | Contact Manager → *Privacy* | The GDPR toolkit (#26): pick a person, export everything held about them (JSON subject-access export, vCard, CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report |
-| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…*, *Automation rules* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **automation editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -157,6 +158,9 @@ contact-manager/
 │       ├── privacy.js     # the subject export, anonymisation, erasure and the deletion log (#26)
 │       ├── privacy-page.js # the Privacy page (app-page slot)
 │       ├── consent-dialog.js # the consent editor (plugin-dialog slot)
+│       ├── automation.js  # the automation rules engine: the model, the plan, the write (#33)
+│       ├── automation-dialog.js # the rule builder and its dry run (plugin-dialog slot)
+│       ├── open-automation.js # one place that opens the rule builder and toasts the result
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -186,6 +190,8 @@ contact-manager/
 │   ├── consent.test.mjs    # the consent store: records, expiry status, repairs (#26)
 │   ├── privacy.test.mjs    # the subject export, anonymisation, erasure, the deletion log (#26)
 │   ├── ui-privacy.test.mjs # the Privacy page and the consent editor (#26)
+│   ├── automation.test.mjs # the automation engine: the model, the plan, the dry run, the write (#33)
+│   ├── ui-automation.test.mjs # the rule builder (#33)
 │   ├── optional.test.mjs   # optional host calls degrade instead of throwing
 │   ├── layout.test.mjs     # the plugin-owned page skeleton
 │   ├── bulk.test.mjs       # bulk edits and delete: map rules, refusals, undo
@@ -224,10 +230,12 @@ contact-manager/
 > that is what keeps the unit tests fast and the code portable. Only
 > `duplicates.js` (merge run, storage), `undo.js` (undo storage and restore),
 > `book-policies.js` (policy and ignore-rule storage), `consent.js` (consent
-> storage), `privacy.js` (the erasure and the deletion log), `manager-page.js`,
+> storage), `privacy.js` (the erasure and the deletion log), `automation.js`
+> (the rule store and the write), `manager-page.js`,
 > `policies-dialog.js`, `review-dialog.js`, `detail-section.js`,
 > `groups-page.js`, `group-dialog.js`, `rules-dialog.js`, `open-rules.js`,
-> `history-page.js`, `privacy-page.js` and `consent-dialog.js` are allowed to
+> `history-page.js`, `privacy-page.js`, `consent-dialog.js`,
+> `automation-dialog.js` and `open-automation.js` are allowed to
 > touch the host.
 
 
@@ -950,6 +958,44 @@ record and then a `consent` history entry, one line each, so the *History* tab
 shows who consented and when — the same by-product rule as the rest of the
 history.
 
+### 6.14 The automation rules engine (`src/lib/automation.js`, `automation-dialog.js`, v1.39.0) — #33
+
+A rule is *when* + *if* + *then*: a **trigger** (a contact is created, changed,
+or imported), a **condition** (a search query, empty for every contact) and
+**actions** (add tag, remove tag, add to group, propose a merge).
+
+**Only the events the host actually emits.** The triage on #33 is the design:
+the host fires `onAfterContactCreate` / `onAfterContactUpdate`, the plugin owns
+the import flow, and there is **no** event for a tag change or an arriving
+message — so the trigger list is exactly those three and grows with the host
+rather than promising what it cannot do. `assign owner` is absent because there
+is no owner concept (#23), and a shared execution log needs the server tier
+(#68); the local run is recorded in the change history instead.
+
+**The plan is pure, so the dry run cannot lie.** `planAutomation(rules, {trigger,
+card}, {books})` returns `{ matched, keywords, groups, proposeMerge }` and writes
+nothing; `applyAutomation` applies exactly that plan. The builder's *Test* calls
+`previewRule`, which uses the same per-rule delta folding, so what the preview
+shows is what a run would do.
+
+**Idempotency is what makes a save-triggered rule safe.** A tag already present
+folds to no change, so `keywords` is `null` and nothing is written — a rule that
+fires on `update` cannot loop with the write it just made. A group membership
+that already exists is likewise a no-op (`withMember` returns `null`). Rules run
+in **priority order** (then by id, so the order is total and stable), and the
+later rule wins when two touch the same tag.
+
+**A rule can never break a save.** The hooks are observers; `runAutomationForCard`
+reads the rules first and returns before any other read when none match the
+trigger, every write is wrapped, and `applyAutomation` never throws at its
+caller. A group card or an anonymised tombstone is skipped (`isMergeable`), so
+the group write cannot re-trigger the rules on the group itself.
+
+**The import trigger runs once per batch.** `runAutomationForCards` reads the
+rules and the address books once, and `importContacts` calls it over the cards
+the wizard created, before any merge is reviewed — the import is the one event
+the plugin owns.
+
 ---
 
 ## 7. Build, test and package
@@ -965,7 +1011,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **878 tests in 58 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **906 tests in 60 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -992,6 +1038,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/consent.test.mjs` | The consent store: the record repair, one per (contact, source), the expiry status and days left, the summary, and the storage repairs (#26) |
 | `test/privacy.test.mjs` | The subject export (completeness, subject filtering), the anonymisation patch and the tombstone marker, erasure leaving an undo record and a proof of deletion, the deletion log and its CSV report, and the consent audit (#26) |
 | `test/ui-privacy.test.mjs` | The Privacy page (subject picker, export through the host download, anonymise, erase, the deletion log) and the consent editor (save, status, remove, refusal) (#26) |
+| `test/automation.test.mjs` | The automation engine: the rule repair and ordering, the store, the condition, the pure plan (trigger, condition, priority, idempotency, groups, merge proposal), the dry run, and the write path (tag patch, group membership, merge proposal, a refused write) (#33) |
+| `test/ui-automation.test.mjs` | The rule builder: the empty state, saving a rule, the dry run count, removing a rule, and toggling one off (#33) |
 | `test/preview.test.mjs` | The complete details of the kept contact, added and changed values with their source, not-merged conflicts, conflict options and the summary counts |
 | `test/ui-dialog.test.mjs` | The review dialog (complete details, colour-coded merge preview, footer buttons, keep-selector, confirm, cancel) and the contact detail section |
 | `test/optional.test.mjs` | `optionalCall`: a value, a synchronous throw, a non-promise, a rejection |
