@@ -7,6 +7,29 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.44.0] — 2026-11-02
+
+### Added
+
+- **In-app help and keyboard shortcuts (#39).** A new *Help* action (Ctrl+K, and
+  a *Help* button on the Overview menu) opens a dialog with the **search
+  operator cheatsheet** — every field operator, what `has:` and `is:` accept,
+  and worked AND / OR / grouping / exclusion examples — plus the **keyboard
+  shortcuts** and a short **what's new**.
+- **Keyboard shortcuts on the Contacts page:** `/` jumps to the contact search
+  box and `Esc` clears it.
+
+### Notes
+
+The cheatsheet is derived from the search box's own constants (`FIELDS`,
+`HAS_FLAGS`, `IS_VALUES`), so a new operator cannot ship without appearing in the
+help, and every worked example is asserted to parse in the test suite — a help
+line cannot describe syntax the box rejects. Both shortcuts are scoped to the
+Contacts page's own search box: `/` is ignored while a field has focus, and `Esc`
+only clears when the search box is focused, so a dialog's own `Esc` still reaches
+the host. This completes #39's third bullet (*in-app help, changelog and keyboard
+shortcuts*); the scale bullets shipped in v1.41.0–v1.42.0.
+
 ## [1.43.0] — 2026-11-02
 
 ### Added
