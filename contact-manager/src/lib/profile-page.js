@@ -51,6 +51,9 @@ export function makeProfilePage(React, api) {
     const [saved, setSaved] = useState([]);
     const [cleanup, setCleanup] = useState(null);
     const [roles, setRoles] = useState({}); // per-address-book roles (#23), advisory
+    // A handle on the list pane, so the `/` shortcut can reach its search box
+    // (#39) without adding a wrapper element to the pane skeleton.
+    const listPane = useRef(null);
 
     const load = useCallback(async () => {
       setStatus('loading');
@@ -106,6 +109,33 @@ export function makeProfilePage(React, api) {
     // A new query starts at the first page; a shrinking list is clamped by
     // pageSlice, so a page index can never point past the end.
     useEffect(() => { setPage(0); }, [query]);
+
+    // Keyboard shortcuts (#39): `/` jumps to the search box, Esc clears it.
+    // Scoped to this page's own search box, so it never swallows a keystroke
+    // meant for a dialog or another field.
+    useEffect(() => {
+      const onKeyDown = (event) => {
+        const target = event.target;
+        const typing = Boolean(target && (
+          target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+        ));
+        if (event.key === '/' && !typing) {
+          const input = listPane.current?.querySelector('input');
+          if (input) {
+            event.preventDefault();
+            input.focus();
+          }
+          return;
+        }
+        // Esc clears the search only when the search box has the focus, so a
+        // dialog's own Esc still reaches the host.
+        if (event.key === 'Escape' && target?.tagName === 'INPUT' && listPane.current?.contains(target)) {
+          setQuery('');
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
     const chipCounts = useMemo(
       () => countsForIndex(searchIndex, saved.map((entry) => entry.query)),
       [searchIndex, saved],
@@ -441,7 +471,7 @@ export function makeProfilePage(React, api) {
       status === 'error' ? h(EmptyState, { title: t('profile.unavailable') }) : null,
       status === 'ready'
         ? h('div', { 'data-pane': 'split', style: SPLIT },
-            h('div', { 'data-pane': 'list', style: sidePane(320) },
+            h('div', { 'data-pane': 'list', style: sidePane(320), ref: listPane },
               picked.size
                 ? h('div', { 'data-pane': 'actions', style: ACTION_BAR },
                     h(Text, { tone: 'muted' }, t('contacts.selected', { count: picked.size })),

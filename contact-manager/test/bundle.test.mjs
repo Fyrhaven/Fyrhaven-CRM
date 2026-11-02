@@ -66,6 +66,7 @@ describe('built plugin', () => {
         { id: 'automation-rules', label: 'Automation rules', icon: 'wand' },
         { id: 'import-contacts', label: 'Import contacts', icon: 'upload' },
         { id: 'smart-lists', label: 'Smart lists', icon: 'filter' },
+        { id: 'help', label: 'Help', icon: 'book-user' },
         { id: 'check-server', label: 'Check the server', icon: 'cloud' },
       ]);
     expect(api.calls('ui.setActions')[1].args[1])
@@ -84,7 +85,7 @@ describe('built plugin', () => {
     await plugin.activate(api);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.calls('ui.setActions')[0].args[1].map((action) => action.id))
-      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'new-group', 'normalisation-rules', 'automation-rules', 'import-contacts', 'smart-lists', 'check-server', 'undo-merge']);
+      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'new-group', 'normalisation-rules', 'automation-rules', 'import-contacts', 'smart-lists', 'help', 'check-server', 'undo-merge']);
 
     // with the undo window turned off the entry disappears and records are dropped
     const offApi = pluginApi({ undoMinutes: 0 });
@@ -93,7 +94,7 @@ describe('built plugin', () => {
     await offPlugin.activate(offApi);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(offApi.calls('ui.setActions')[0].args[1].map((action) => action.id))
-      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'new-group', 'normalisation-rules', 'automation-rules', 'import-contacts', 'smart-lists', 'check-server']);
+      .toEqual(['scan', 'new-contact', 'new-company', 'new-project', 'new-group', 'normalisation-rules', 'automation-rules', 'import-contacts', 'smart-lists', 'help', 'check-server']);
   });
 
   it('the new-contact action opens the editor dialog', async () => {
@@ -196,6 +197,16 @@ describe('built plugin', () => {
     expect(saved[0].args[0]).toBe('vip.vcf');
     expect(String(saved[0].args[1])).toContain('BEGIN:VCARD');
     expect(api.calls('toast.success').at(-1).args[0]).toBe('Exported 1 contact(s) as vCard.');
+  });
+
+  it('the help action opens the help dialog', async () => {
+    const api = pluginApi({}, { 'ui.openDialog': async () => null });
+    const plugin = load(api);
+    await plugin.hooks.onAction({ surface: 'command-palette', actionId: 'help', context: {} });
+
+    expect(api.calls('ui.openDialog')).toHaveLength(1);
+    expect(api.calls('ui.openDialog')[0].args[0]).toMatchObject({ slot: 'plugin-dialog', title: 'Help' });
+    expect(api.calls('ui.openDialog')[0].args[0].extraProps.help).toBe(true);
   });
 
   it('the import action reviews the merges the wizard queued, then reports the outcome', async () => {
