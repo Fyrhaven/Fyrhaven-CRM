@@ -43,6 +43,7 @@ import { makePoliciesDialog } from './lib/policies-dialog.js';
 import { makeRolesDialog } from './lib/roles-dialog.js';
 import { makeSmartListsDialog } from './lib/smart-lists-dialog.js';
 import { makeHelpDialog } from './lib/help-dialog.js';
+import { makeTaskDialog } from './lib/task-dialog.js';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from './lib/capabilities.js';
@@ -90,6 +91,7 @@ const PoliciesDialog = makePoliciesDialog(React, api);
 const RolesDialog = makeRolesDialog(React, api);
 const SmartListsDialog = makeSmartListsDialog(React, api);
 const HelpDialog = makeHelpDialog(React, api);
+const TaskDialog = makeTaskDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
@@ -105,6 +107,7 @@ function DialogSlot(props) {
   if (props?.rolesDialog) return React.createElement(RolesDialog, props);
   if (props?.smartLists) return React.createElement(SmartListsDialog, props);
   if (props?.help) return React.createElement(HelpDialog, props);
+  if (props?.taskEditor) return React.createElement(TaskDialog, { ...props, ...props.taskEditor });
   return React.createElement(ReviewDialog, props);
 }
 
