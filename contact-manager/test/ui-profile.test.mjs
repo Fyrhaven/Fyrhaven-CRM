@@ -651,3 +651,280 @@ describe('an export the sandbox will not download', () => {
     expect(result.body).toContain('BEGIN:VCARD');
   });
 });
+
+// ── Advisory per-address-book roles (#23) ───────────────────────
+//
+// The role is not enforced by the host, but the page disables the actions the
+// role does not allow, so the convention is visible where it matters.
+
+describe('contacts page: advisory roles', () => {
+  const select = async (name) => {
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name })); });
+  };
+
+  it('a viewer role disables merge, edit, cleanup, rules and delete for the selection', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'viewer' });
+    await renderPage(api);
+
+    await select('Select Ada Lovelace');
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Merge selected' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit selected' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clean up' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Rules…' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(true);
+    // and the line says which role is holding it back
+    expect(screen.getByText(/Role: Viewer/)).toBeTruthy();
+  });
+
+  it('an editor role allows editing but not merging or deleting', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'editor' });
+    await renderPage(api);
+
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Edit selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Merge selected' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(true);
+  });
+
+  it('a merger role allows merging and deleting', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'merger' });
+    await renderPage(api);
+
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Edit selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(false);
+  });
+
+  it('a viewer role disables creating a contact and editing the open one', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'viewer' });
+    await renderPage(api);
+
+    expect(screen.getByRole('button', { name: 'New contact' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'New company' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit contact' }).disabled).toBe(true);
+  });
+
+  it('with no roles stored, every action stays enabled', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    // two selected, so the merge button is not disabled for being a single one
+    await select('Select Ada Lovelace');
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Merge selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'New contact' }).disabled).toBe(false);
+  });
+});
+
+// ── Paging a long contact list (#39) ────────────────────────────
+//
+// The list renders one page at a time, so a large address book cannot turn the
+// whole match set into DOM at once. The counts and *Select all* still work over
+// the whole match set — the page is a view of the results, not a limit on them.
+
+describe('contacts page: paging a long list', () => {
+  const many = (n) => Array.from({ length: n }, (_, i) => makeCard({
+    id: `c${String(i).padStart(4, '0')}`,
+    name: `Person ${String(i).padStart(4, '0')}`,
+    emails: [`p${i}@example.org`],
+  }));
+
+  const rows = () => screen.getAllByRole('checkbox');
+
+  async function renderMany(count) {
+    const api = profileApi({ 'contacts.list': async () => many(count) });
+    const Page = makeProfilePage(React, api);
+    await act(async () => { render(React.createElement(Page)); });
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    return api;
+  }
+
+  const click = async (name) => { await act(async () => { fireEvent.click(screen.getByRole('button', { name })); }); };
+
+  it('renders one page of a long list, and says where it is', async () => {
+    await renderMany(250);
+
+    expect(rows()).toHaveLength(100);
+    expect(screen.getByText('Page 1 of 3 · 1–100 of 250')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Previous' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Next' }).disabled).toBe(false);
+  });
+
+  it('walks to the next page, to the last, and back', async () => {
+    await renderMany(250);
+
+    await click('Next');
+    expect(rows()).toHaveLength(100);
+    expect(screen.getByText('Page 2 of 3 · 101–200 of 250')).toBeTruthy();
+
+    await click('Next');
+    expect(rows()).toHaveLength(50);
+    expect(screen.getByText('Page 3 of 3 · 201–250 of 250')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Next' }).disabled).toBe(true);
+
+    await click('Previous');
+    expect(screen.getByText('Page 2 of 3 · 101–200 of 250')).toBeTruthy();
+  });
+
+  it('shows no pager when the list fits on one page', async () => {
+    await renderMany(20);
+
+    expect(rows()).toHaveLength(20);
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+  });
+
+  it('starts a new query at the first page', async () => {
+    await renderMany(250);
+    await click('Next');
+    expect(screen.getByText(/Page 2 of 3/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'has:email' } });
+    });
+
+    expect(screen.getByText('Page 1 of 3 · 1–100 of 250')).toBeTruthy();
+  });
+
+  it('Select all still takes the whole match set, not just the page', async () => {
+    await renderMany(250);
+
+    await click('Select all 250');
+
+    expect(screen.getByText('250 selected')).toBeTruthy();
+  });
+
+  it('renders a bounded page for a very large address book', async () => {
+    await renderMany(5000);
+
+    // the DOM holds one page, not the whole book
+    expect(rows()).toHaveLength(100);
+    expect(screen.getByText('Page 1 of 50 · 1–100 of 5000')).toBeTruthy();
+  });
+});
+
+// ── Keyboard shortcuts (#39) ────────────────────────────────────
+//
+// `/` focuses this page's own search box and Esc clears it. Both are scoped to
+// the box, so a keystroke meant for something else is left alone — a negative
+// twin for each positive.
+
+describe('contacts page: keyboard shortcuts', () => {
+  const search = () => screen.getByLabelText('Search contacts');
+  const press = (target, key) => {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    act(() => { target.dispatchEvent(event); });
+    return event;
+  };
+
+  it('/ focuses the contact search box', async () => {
+    await renderPage(profileApi());
+    expect(document.activeElement).not.toBe(search());
+
+    const event = press(document.body, '/');
+
+    expect(document.activeElement).toBe(search());
+    // it took the keystroke, so the browser does not also type a slash
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('leaves / alone when a field already has focus', async () => {
+    await renderPage(profileApi());
+    await act(async () => { fireEvent.change(search(), { target: { value: 'ada' } }); });
+    search().focus();
+
+    const event = press(search(), '/');
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(search().value).toBe('ada');
+  });
+
+  it('Esc clears the search box', async () => {
+    await renderPage(profileApi());
+    await act(async () => { fireEvent.change(search(), { target: { value: 'grace' } }); });
+    expect(search().value).toBe('grace');
+
+    await act(async () => { fireEvent.keyDown(search(), { key: 'Escape' }); });
+
+    expect(search().value).toBe('');
+  });
+
+  it('Esc outside the search box is left for the host', async () => {
+    await renderPage(profileApi());
+    await act(async () => { fireEvent.change(search(), { target: { value: 'grace' } }); });
+
+    await act(async () => { fireEvent.keyDown(document.body, { key: 'Escape' }); });
+
+    expect(search().value).toBe('grace');
+  });
+});
+
+// ── Follow-up tasks (#36) ───────────────────────────────────────
+//
+// The editor is a draft; open-task.js writes it. These drive the whole funnel:
+// the button, the dialog's answer, the host write and the reload.
+
+describe('contacts page: follow-up tasks', () => {
+  it('creates a follow-up task for the open contact and reloads its tasks', async () => {
+    const draft = { title: 'Follow up with Ada Lovelace', description: 'ada@example.org' };
+    const api = profileApi({
+      'tasks.create': async () => ({ id: 't-new' }),
+      'ui.openDialog': async () => ({ draft }),
+    });
+    await renderPage(api);
+    await waitFor(() => expect(api.calls('tasks.list')).toHaveLength(1));
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Follow up' })); });
+
+    await waitFor(() => expect(api.calls('tasks.create')).toHaveLength(1));
+    expect(api.calls('tasks.create')[0].args[0]).toEqual(draft);
+    // the editor was opened for the contact that is on screen
+    expect(api.calls('ui.openDialog')[0].args[0].extraProps.taskEditor.contact.id).toBe('a');
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Task created: Follow up with Ada Lovelace');
+    // and the open contact's task list reloads, so the new task is shown
+    await waitFor(() => expect(api.calls('tasks.list')).toHaveLength(2));
+  });
+
+  it('reports a task the host refused instead of claiming success', async () => {
+    const api = profileApi({
+      'tasks.create': async () => { throw new Error('refused'); },
+      'ui.openDialog': async () => ({ draft: { title: 'Follow up' } }),
+    });
+    await renderPage(api);
+    await waitFor(() => expect(api.calls('tasks.list')).toHaveLength(1));
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Follow up' })); });
+
+    await waitFor(() => expect(api.calls('ui.alert')).toHaveLength(1));
+    expect(api.calls('toast.success')).toHaveLength(0);
+    // nothing was created, so the task list is not reloaded
+    expect(api.calls('tasks.list')).toHaveLength(1);
+  });
+
+  it('marks an overdue task, and lists it before the others', async () => {
+    const api = profileApi({
+      'tasks.list': async () => [
+        { id: 't9', title: 'Later with Ada Lovelace', due: '2999-01-01' },
+        { id: 't8', title: 'Past with Ada Lovelace', due: '2000-01-01' },
+      ],
+    });
+    await renderPage(api);
+
+    await waitFor(() => expect(screen.getByText('Overdue')).toBeTruthy());
+    // only the past-due one is badged
+    expect(screen.getAllByText('Overdue')).toHaveLength(1);
+
+    const late = screen.getByText('Past with Ada Lovelace');
+    const later = screen.getByText('Later with Ada Lovelace');
+    expect(late.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

@@ -51,7 +51,9 @@ signatures, the last scan summary).
 | Surface | Where it appears | What it does |
 |---|---|---|
 | `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* |
+| Getting started guide | Contact Manager → *Overview*, on first run | A short card that walks a first clean-up — import, scan (which opens the review dialog), set policies — running the same actions the menu and the palette run. It records that it is done, and the Overview menu re-opens it (#39, the onboarding half) |
 | *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
+| *Roles* button | Contact Manager → *Duplicates* header | Opens the **address-book roles** dialog (#23): the role held on each book — *Viewer* / *Editor* / *Merger* / *Admin* — which disables the actions it does not allow. Advisory only; the host is not enforcing it |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
@@ -64,7 +66,8 @@ signatures, the last scan summary).
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
+| *Follow up* button | Contact Manager → *Contacts*, on the open contact | Opens the **follow-up task** editor (#36): title (prefilled), due date, priority and notes, created as a real host task. The profile's task list shows the contact's tasks with anything past due badged *Overdue*, first |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
 | Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
@@ -72,9 +75,11 @@ signatures, the last scan summary).
 | *Rules…* button | Contact Manager → *Contacts*, with a selection | Opens the **normalisation rules** dialog: the built-in rules, your own find-and-replace rules, and the exact edits they would make before anything is written (#20) |
 | Command palette action | Ctrl+K → *Normalisation rules* | The same rules dialog, over every contact |
 | Command palette action / *Automation rules* button | Ctrl+K → *Automation rules*, or the Overview menu | Opens the **automation rules** builder (#33): rules that run on a contact being created, changed or imported, with a condition (a search query) and actions (add/remove tag, add to a group, propose a merge), a priority order, an enable/disable toggle and a *Test* dry run |
+| Command palette action | Ctrl+K → *Smart lists* | Opens the **Smart lists** dialog (#13, the palette half): the saved searches with live counts, the contacts a list holds (paged), and a vCard export of the chosen list |
+| Command palette action / *Help* button | Ctrl+K → *Help*, or the Overview menu | Opens the **Help** dialog (#39): the search operator cheatsheet (every field, what `has:`/`is:` take, worked AND/OR/grouping/exclusion examples), the keyboard shortcuts, and a short *what's new* |
 | *History* sub-tab | Contact Manager → *History* | What this plugin wrote — merges, cleanups, rules, imports, bulk edits, creates/updates/deletes and group changes — newest first, with the rollback that is still live (#25, the local half) |
 | *Privacy* sub-tab | Contact Manager → *Privacy* | The GDPR toolkit (#26): pick a person, export everything held about them (JSON subject-access export, vCard, CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report |
-| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…*, *Automation rules* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **automation editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…*, *Automation rules* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **automation editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice**, the **policies** dialog and the **roles** dialog |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -132,6 +137,8 @@ contact-manager/
 │       ├── manager-page.js # the Duplicates sub-tab
 │       ├── bulk-merge.js  # facets (company/domain) and the batch plan (#6)
 │       ├── policies-dialog.js # the address-book policies dialog (#7)
+│       ├── book-roles.js  # per-address-book roles: the ladder, the store, the reading (#23)
+│       ├── roles-dialog.js # the address-book roles dialog (#23)
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
 │       ├── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
@@ -161,6 +168,16 @@ contact-manager/
 │       ├── automation.js  # the automation rules engine: the model, the plan, the write (#33)
 │       ├── automation-dialog.js # the rule builder and its dry run (plugin-dialog slot)
 │       ├── open-automation.js # one place that opens the rule builder and toasts the result
+│       ├── onboarding.js  # the first-run guide's steps and its storage (#39)
+│       ├── onboarding-card.js # the Getting started card on the Overview tab (#39)
+│       ├── paging.js      # the pure page math for a long contact list (#39)
+│       ├── smart-lists.js # saved searches as smart lists: counts, members, file name (#13)
+│       ├── smart-lists-dialog.js # the Smart lists dialog (plugin-dialog slot, #13)
+│       ├── help.js        # the help model: operators, examples, shortcuts, what's new (#39)
+│       ├── help-dialog.js # the Help dialog (plugin-dialog slot, #39)
+│       ├── tasks.js       # follow-up tasks: the payload, the due date, the overdue split (#36)
+│       ├── task-dialog.js # the follow-up task editor (plugin-dialog slot, #36)
+│       ├── open-task.js   # one place that opens the task editor and creates the task (#36)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -168,10 +185,21 @@ contact-manager/
 │   ├── contacts.test.mjs   # readers, name/email/phone extraction
 │   ├── duplicates.test.mjs # normalisation, keys, grouping
 │   ├── book-policies.test.mjs # policy resolution, ignore rules, storage repairs
+│   ├── book-roles.test.mjs # the role ladder, the store, the role that applies (#23)
 │   ├── merge.test.mjs      # merge planning, conflict choices and the merge run
 │   ├── preview.test.mjs    # complete details, added/changed values, conflicts, counts
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-policies.test.mjs # the policies dialog
+│   ├── ui-roles.test.mjs   # the roles dialog (#23)
+│   ├── onboarding.test.mjs # the guide's step order and storage (#39)
+│   ├── ui-onboarding.test.mjs # the Getting started card (#39)
+│   ├── paging.test.mjs     # the page math and its budget (#39)
+│   ├── smart-lists.test.mjs # the smart-list model and its file name (#13)
+│   ├── ui-smart-lists.test.mjs # the Smart lists dialog (#13)
+│   ├── help.test.mjs       # the help model: the cheatsheet can't drift (#39)
+│   ├── ui-help.test.mjs    # the Help dialog (#39)
+│   ├── tasks.test.mjs      # the follow-up payload, due dates and the overdue split (#36)
+│   ├── ui-task.test.mjs    # the follow-up task editor (#36)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -996,6 +1024,197 @@ rules and the address books once, and `importContacts` calls it over the cards
 the wizard created, before any merge is reviewed — the import is the one event
 the plugin owns.
 
+### 6.15 Per-address-book roles (`src/lib/book-roles.js`, `roles-dialog.js`, v1.40.0) — #23
+
+`src/lib/book-roles.js` is the model and `src/lib/roles-dialog.js` the dialog
+behind the *Roles…* button on the Duplicates page. A role is stored in
+`api.storage` (per account and per browser, like the policies) and repaired on
+read; an install that never opens the dialog behaves exactly as before.
+
+**The four roles are a strict ladder**, each step adding a capability and never
+taking one away:
+
+| Role | May |
+|---|---|
+| *Viewer* | view only |
+| *Editor* | also create and edit contacts, groups, projects, import, normalise |
+| *Merger* | also merge duplicates, undo a merge and delete contacts |
+| *Admin* | also change the roles and the duplicate policies |
+
+`roleAllows(role, capability)` is the one place that reads the table, and
+`ROLE_CAPABILITIES` is the table, so the pages and the tests cannot disagree
+about what a role may do.
+
+**It is advisory, and the dialog says so.** The host grants the plugin write
+access once at install, all-or-nothing; it has no per-book permission and no
+shared member list. So a role cannot be enforced — the pages read it and
+**disable** the actions it does not allow, and the dialog states plainly that the
+webmail is not enforcing it. Enforced permissions, ownership transfer and safe
+removal of a member's access need the server tier (#68).
+
+**A contact's role is the weakest across every book it lives in.**
+`roleForCard(card, roles)` folds the roles of the card's books with
+`weakestRole`, so a contact in a book where the user is only a viewer stays
+read-only even if another book would allow more. It is the opposite direction to
+the match strategies in `book-policies.js` (which take the most permissive
+reading, so a book that opts out never silences another): a limit on what the
+user may do is the safe direction *inwards*. A card in **no** book — and a book
+with no stored role — grants `admin`, the default.
+
+**A global action uses the most permissive configured role.** Creating a contact
+or opening the roles or policies dialog is not tied to one contact, so
+`mostPermissiveRole(roles)` decides it: the action is available if any book
+allows it. `canPerform(cards, capability, roles)` and `canManage(capability,
+roles)` are the two calls the pages make.
+
+The role gates the Duplicates page (*Review…*, the batch merge, *New contact*,
+*Policies*, *Roles*, *Undo merge*) and the Contacts page (*New contact*, *New
+company*, the per-contact *Edit*, and the selection's *Merge selected* / *Edit
+selected* / *Clean up* / *Rules…* / *Delete selected*). Each page shows a muted
+line naming the role when one is set.
+
+### 6.16 The Getting started guide (`src/lib/onboarding.js`, `onboarding-card.js`, v1.41.0) — #39
+
+`src/lib/onboarding.js` is the step model and `src/lib/onboarding-card.js` the
+card at the top of the *Overview* tab. It is the onboarding half of #39: a new
+install should not have to guess the order of things.
+
+**The steps are data, and each one runs a shared action.** The order is
+`welcome → import → scan → policies → done`. A step that has something to do
+carries an action, and every action is the same function the command palette and
+the Overview menu run (`importContacts`, `findDuplicates`, `managePolicies`), so
+the guide cannot describe a different change from the one a task would make.
+
+**It records that it is done, and re-opens on demand.** The state is a single
+`{ done, at }` record in `api.storage` (per account and per browser, like the
+projects). `readOnboarding` repairs junk on read, `completeOnboarding` writes the
+flag and `resetOnboarding` forgets it. The Overview menu's *Getting started*
+button re-opens the card without rewriting what was stored (the page keeps a
+local flag), and *Finish* / *Skip the guide* writes the flag and hides the card.
+
+**A failing step never traps the user.** Each action is awaited inside a
+`try/finally`, and a step that throws (a refused dialog, a failed read) still
+advances — the action reported its own failure, and the guide is a help surface,
+not a gate. `managePolicies(api, { fallbackBooks })` is the one place the
+policies dialog is opened from, so the guide and the Duplicates page cannot
+disagree about which address books it lists; the Duplicates page passes its last
+scan as the fallback for when the read fails.
+
+### 6.17 Paging a long contact list (`src/lib/paging.js`, v1.42.0) — #39
+
+`src/lib/paging.js` is the pure page math and the Contacts page is its only
+caller. It is the scale half of #39's first bullet: the list used to render
+**every** contact a query matched, so a large address book became a large DOM at
+once.
+
+**A page is a view of the results, not a limit on them.** `pageSlice(list, page,
+size)` returns `{ items, page, pages, from, to, total }` for one page of
+`PAGE_SIZE` (100), and the page renders `items` while the match count and *Select
+all N* keep reading the whole `visible` list. So a paged list is still a bulk
+scope: *Select all* after a search takes everything the query matches, not the
+100 on screen. A new query resets to the first page, and `clampPage` keeps the
+index in range, so a list that shrinks under the user (a delete, a narrower
+query) can never leave a blank page.
+
+**The pager is drawn with plain elements**, like the rest of the skeleton, and
+sits **above** the scroll area so it does not scroll away with a long list. It is
+shown only when there is more than one page, so a small address book looks
+exactly as it did before.
+
+**The budget is pinned.** `test/paging.test.mjs` slices one page out of 100k
+contacts and asserts it stays well inside a budget — the cost of showing a page
+must not grow with the size of the book — and `test/ui-profile.test.mjs` renders
+5000 contacts and asserts the DOM holds one page.
+
+Still to come for full scale (#39): virtualised rows, worker-based duplicate
+matching and incremental search indexes.
+
+### 6.18 Smart lists in the command palette (`src/lib/smart-lists.js`, `smart-lists-dialog.js`, v1.43.0) — #13
+
+`src/lib/smart-lists.js` is the model and `src/lib/smart-lists-dialog.js` the
+dialog behind the *Smart lists* palette action. It is the palette half of #13:
+the issue asked for saved searches and smart lists "usable from the page **and
+command palette**", and the page half shipped in v1.16.0.
+
+**A smart list is a saved search with a live count.** `smartLists(saved, { total,
+counts })` returns "everything" first and then one entry per saved search, with
+the counts `countsForIndex` produced — positionally aligned, so the list and its
+counts cannot drift out of order. `matchesFor(index, entry)` is the members,
+using the **same** matcher the Contacts page uses (`isBlankQuery` /
+`matchIndexed`), so a list's count and its members cannot disagree.
+
+**The dialog reads and returns a choice; the action does the work.** The dialog
+loads the cards, books and saved searches, and returns `{ export: { cards,
+format, name } }`; `lib/actions.js` builds the file, names it after the list
+(`fileNameFor`), hands it to the host and falls back to showing the file when the
+download is refused. That keeps the dialog from ever opening a dialog of its own
+— a nested dialog is a host behaviour this plugin does not rely on.
+
+**It reuses the paging from v1.42.0**, so a list with thousands of members shows
+one page of 100, and it is honest that the saved searches live in `api.storage`
+per account and per browser.
+
+### 6.19 In-app help and keyboard shortcuts (`src/lib/help.js`, `help-dialog.js`, v1.44.0) — #39
+
+This is #39's third bullet: *in-app help, changelog and keyboard shortcuts*. The
+search operators are the least discoverable part of the plugin, so the cheatsheet
+is the point of the dialog.
+
+**The cheatsheet cannot drift.** `help.js` derives the operator list from
+`search.js`'s own `FIELDS`, and the `has:` / `is:` values from `HAS_FLAGS` /
+`IS_VALUES` directly — so a new operator appears in the help without anyone
+remembering to add it. Every worked example is asserted in
+`test/help.test.mjs` to parse **without an error**, so a help line can never
+describe syntax the box rejects.
+
+**The shortcuts are scoped to the page's own search box.** On the Contacts page,
+`/` focuses the search box and `Esc` clears it. `/` is ignored while a field has
+focus (so typing a slash still types a slash), and `Esc` only acts when the
+search box itself is focused (so a dialog's own `Esc` still reaches the host).
+Both cases have a negative twin in `test/ui-profile.test.mjs` — a shortcut that
+steals a keystroke meant for something else is the failure mode here.
+
+The dialog also carries a short **what's new**, newest first; its entries are
+translation keys and the test pins that the versions descend and every note
+exists in both locales. Prepend an entry when a release has something a user
+would want to read.
+
+### 6.20 Follow-up tasks per contact (`src/lib/tasks.js`, `task-dialog.js`, `open-task.js`, v1.45.0) — #36
+
+The task-creation half of #36. A *Follow up* button on the open contact opens
+`task-dialog.js`; `open-task.js` creates the task through `api.tasks.create` and
+the profile's task list reloads.
+
+**A follow-up *is* a host task, not a record the plugin keeps.** So it shows in
+the webmail's own task list, survives a reload and is searchable there — nothing
+is cached in `api.storage`. The plugin already creates host tasks for project
+milestones, so this is the proven path rather than a new one.
+
+**The host task has no contact field, so the contact rides in the description** —
+its email first, because `tasksForContact` matches a task by the words in its
+title and description (`test/ui-profile` drives the whole funnel and asserts the
+created payload). For the same reason the **priority is carried at the end of the
+title** (`· High`): the known task shape is `{ title, description, due }`, there
+is no priority field to set, and the title is the one part every task list shows.
+The milestone draft's rule is kept for the due date — it is omitted, never `''`,
+so the host keeps "no due date" and "due today" apart.
+
+**Overdue is computed locally and conservatively.** `isOverdue` compares the due
+date against **today in the user's own time zone** (`todayIso`, never UTC, which
+can be a day off), and a task with no due date is never overdue.
+`taskBuckets` splits a contact's tasks into the overdue ones and the rest, each in
+due-date order with undated tasks last, and the profile badges the overdue ones
+and lists them first. The tasks themselves come from `api.tasks.list` through
+`optionalCall`, so a host without tasks simply shows the existing "unavailable"
+note.
+
+**A failing create is reported, never toasted as a success.** The `api.tasks`
+access happens *inside* the `try`, so a host with no tasks namespace fails there
+rather than at the call site.
+
+Still to come from #36: a cross-contact *My tasks* view with overdue/upcoming
+filters, and reminders — which need a timer hook the plugin does not have.
+
 ---
 
 ## 7. Build, test and package
@@ -1274,6 +1493,81 @@ Book policies (#7)
   a filled map field (organizations, titles, personalInfo, media) reports one
     `added` entry per value, so the preview can show every one of them
 
+Book roles (#23)
+  ROLES = ['viewer', 'editor', 'merger', 'admin']; DEFAULT_ROLE = 'admin'
+  ROLE_CAPABILITIES is the ladder: view; edit; merge + delete; + manage
+  roleAllows(role, capability) is the ONE place that reads the table
+  an unknown role reads as the default, so it never weakens an answer
+  normalizeRoles / readRoles / writeRoles, key 'bookRoles', one role per book id
+    junk is dropped and storage rewritten; an empty map removes the key
+  roleForBook(roles, bookId) — the stored role, else the default
+  roleForCard(card, roles) — the WEAKEST role across the card's books; a card in
+    no book (or a book with no role) is unrestricted (the default)
+  effectiveRole(cards, roles) — the weakest role across a selection
+  mostPermissiveRole(roles) — the strongest configured role, for a global action
+  canPerform(cards, capability, roles) / canManage(capability, roles)
+  an empty roles map allows everything: the previous behaviour
+  the role is ADVISORY — the pages disable what it forbids; the host enforces
+    nothing (per-book permissions need the server tier, #68)
+
+Onboarding (#39)
+  STEPS = ['welcome', 'import', 'scan', 'policies', 'done']
+  isStep / stepIndex / isFirstStep / isLastStep / nextStep / previousStep
+    nextStep of the last step stays put; previousStep of the first does too
+  normalizeOnboarding(raw) -> { done: boolean, at: string|null }; only
+    `done === true` counts as done
+  readOnboarding / writeOnboarding, key 'onboarding'; junk is dropped and
+    storage rewritten, and a not-done state removes the key
+  completeOnboarding(api) records done; resetOnboarding(api) forgets it
+  the card runs the shared actions (importContacts / findDuplicates /
+    managePolicies), so the guide cannot describe a different change
+  a step whose action throws still advances: the guide is help, not a gate
+
+Paging (#39)
+  PAGE_SIZE = 100
+  pageCount(total, size) -> at least 1, even for an empty list
+  clampPage(page, total, size) -> in range, so a shrinking list never blanks
+  isPaged(total, size) -> only true when there is more than one page
+  pageSlice(list, page, size) -> { items, page, pages, from, to, total }
+    from/to are 0/0 for an empty list; the slice is one page, never the list
+  the page is a VIEW of the results: counts and Select all still read the whole
+    match set, so a paged list is still a bulk scope
+  a budget test pins that slicing one page of 100k does not walk the list
+
+Smart lists (#13, the palette half)
+  smartLists(saved, { total, counts }) -> [everything, ...one per saved search]
+    counts are positionally aligned with `saved`, so the two cannot drift
+  matchesFor(index, entry) uses isBlankQuery / matchIndexed — the SAME matcher
+    the Contacts page uses, so a list's count and its members cannot disagree
+  fileNameFor(name, format) -> a safe `<list>.vcf` / `<list>.csv`
+  the dialog reads and returns a choice; actions.js does the export after it
+    closes, so the dialog never opens a dialog of its own
+  the export falls back to showing the file when the download is refused
+
+Help (#39)
+  QUERY_OPERATORS / HAS_VALUES / IS_VALUES_LIST are DERIVED from search.js's own
+    FIELDS / HAS_FLAGS / IS_VALUES, so the cheatsheet cannot drift from the box
+  every QUERY_EXAMPLES entry parses with NO errors (test/help.test.mjs)
+  SHORTCUTS: Ctrl+K (the host palette), / (focus the search box), Esc (clear it)
+  WHATS_NEW is newest first; each note is a key present in en AND de
+  / is ignored while a field has focus; Esc clears only when the search box has
+    it, so a dialog's own Esc still reaches the host
+
+Follow-up tasks (#36)
+  a follow-up IS a host task: api.tasks.create({ title, description, due? }) —
+    nothing cached in api.storage, so it survives a reload and is searchable
+  followUpDraft omits `due` when it is not a real date (never ''), so the host
+    keeps "no due date" and "due today" apart
+  the contact rides in the description (its email first) because the host task
+    has no contact field and tasksForContact matches on title/description
+  the priority rides at the END OF THE TITLE (`· High`): no host priority field
+  isDate accepts only `YYYY-MM-DD`; todayIso is LOCAL, never UTC
+  isOverdue: a due date before today, in local time; no due date is never overdue
+  taskBuckets(tasks, now) -> { overdue, rest }, each in due-date order, undated last
+  openFollowUpTask(api, card) opens the editor and creates the task; a failure is
+    reported (api.tasks is reached INSIDE the try, so an absent namespace is caught)
+  the profile badges overdue tasks and lists them first
+
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
   planMerge(group, keepId, choices) -> { primary, others, patch, added, changed }
@@ -1519,8 +1813,10 @@ plan without changing anything; `--no-release` stops after the merge.
 
 There is **no local todo file**. The roadmap lives in GitHub:
 
-* [Milestones](https://github.com/zyntrax/bulwark-plugins/milestones) — one per
-  planned release.
+* [Milestones](https://github.com/zyntrax/bulwark-plugins/milestones) — group the
+  feature issues. Their titles (`v1.2.0` … `v2.0.0`) are the **originally planned
+  releases**, not the current release train; read them as phases and read each
+  milestone's description for what has shipped and what remains.
 * [Issues labelled `roadmap`](https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap)
   — the individual features and tasks.
 * The pinned roadmap issue — the top-level vision linking every milestone.

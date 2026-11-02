@@ -16,6 +16,8 @@ import {
   calendarRange, formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
+import { openFollowUpTask } from './open-task.js';
+import { taskBuckets } from './tasks.js';
 import { saveFile } from './download.js';
 import { reportError } from './report.js';
 import { optionalCall } from './optional.js';
@@ -30,6 +32,8 @@ import { buildIndex, countsForIndex, isBlankQuery, matchIndexed, parseQuery } fr
 import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
 import { applyRulesResult, openRules } from './open-rules.js';
+import { canManage, canPerform, effectiveRole, hasRoles, readRoles } from './book-roles.js';
+import { PAGE_SIZE, isPaged, pageSlice } from './paging.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
@@ -45,19 +49,28 @@ export function makeProfilePage(React, api) {
     const [selectedId, setSelectedId] = useState('');
     const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: [] });
     const [picked, setPicked] = useState(() => new Set());
+    const [page, setPage] = useState(0);
     const [saved, setSaved] = useState([]);
     const [cleanup, setCleanup] = useState(null);
+    const [roles, setRoles] = useState({}); // per-address-book roles (#23), advisory
+    // A handle on the list pane, so the `/` shortcut can reach its search box
+    // (#39) without adding a wrapper element to the pane skeleton.
+    const listPane = useRef(null);
+    // Bumped after a follow-up task is created, so the open contact's task list
+    // reloads — the context effect is keyed on the contact, not on its tasks.
+    const [taskTick, setTaskTick] = useState(0);
 
     const load = useCallback(async () => {
       setStatus('loading');
       try {
-        const [list, addressBooks, savedList, cleanupRecord] = await Promise.all([
-          loadCards(api), loadBooks(api), readSaved(api), readCleanup(api),
+        const [list, addressBooks, savedList, cleanupRecord, bookRoles] = await Promise.all([
+          loadCards(api), loadBooks(api), readSaved(api), readCleanup(api), readRoles(api),
         ]);
         setCards(list);
         setBookList(addressBooks);
         setSaved(savedList);
         setCleanup(cleanupRecord);
+        setRoles(bookRoles);
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : list[0]?.id ?? ''));
         // A deleted or no-longer-matching contact must not stay selected.
         setPicked((current) => {
@@ -95,6 +108,39 @@ export function makeProfilePage(React, api) {
         : searchIndex.filter((entry) => matchIndexed(entry, parsed)).map((entry) => entry.card)),
       [searchIndex, parsed, cards],
     );
+    // The rendered page (#39): a view of the match set, never a limit on it.
+    // The counts and *Select all* still read `visible`.
+    const paged = useMemo(() => pageSlice(visible, page, PAGE_SIZE), [visible, page]);
+    // A new query starts at the first page; a shrinking list is clamped by
+    // pageSlice, so a page index can never point past the end.
+    useEffect(() => { setPage(0); }, [query]);
+
+    // Keyboard shortcuts (#39): `/` jumps to the search box, Esc clears it.
+    // Scoped to this page's own search box, so it never swallows a keystroke
+    // meant for a dialog or another field.
+    useEffect(() => {
+      const onKeyDown = (event) => {
+        const target = event.target;
+        const typing = Boolean(target && (
+          target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable
+        ));
+        if (event.key === '/' && !typing) {
+          const input = listPane.current?.querySelector('input');
+          if (input) {
+            event.preventDefault();
+            input.focus();
+          }
+          return;
+        }
+        // Esc clears the search only when the search box has the focus, so a
+        // dialog's own Esc still reaches the host.
+        if (event.key === 'Escape' && target?.tagName === 'INPUT' && listPane.current?.contains(target)) {
+          setQuery('');
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+    }, []);
     const chipCounts = useMemo(
       () => countsForIndex(searchIndex, saved.map((entry) => entry.query)),
       [searchIndex, saved],
@@ -148,7 +194,14 @@ export function makeProfilePage(React, api) {
       });
       return () => { live = false; };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selected?.id, cards]);
+    }, [selected?.id, cards, taskTick]);
+
+    // Create a follow-up task for the open contact, then reload its task list.
+    const followUp = async () => {
+      if (!selected) return;
+      const created = await openFollowUpTask(api, selected);
+      if (created) setTaskTick((tick) => tick + 1);
+    };
 
     const edit = async () => {
       if (!selected) return;
@@ -163,6 +216,17 @@ export function makeProfilePage(React, api) {
 
     const bookLabel = (card) => Object.keys(card.addressBookIds ?? {})
       .map((id) => books.get(id)).filter(Boolean).join(', ');
+
+    // The open contact's tasks, overdue first (#36): a task whose due date has
+    // passed is badged, so it is visible without opening the task itself.
+    const taskRows = () => {
+      const { overdue, rest } = taskBuckets(context.tasks);
+      return [...overdue.map((task) => [task, true]), ...rest.map((task) => [task, false])]
+        .map(([task, late]) => h(Row, { key: task.id, gap: 2, wrap: true },
+          h(Text, null, task.title),
+          late ? h(Badge, { tone: 'danger' }, t('profile.taskOverdue')) : null,
+          task.due ? h(Text, { tone: 'muted' }, formatDate(task.due, api.i18n.getLocale())) : null));
+    };
 
     const createCompany = async () => {
       toastEditorResult(api, await openEditor(api, { mode: 'create', company: true }));
@@ -422,45 +486,56 @@ export function makeProfilePage(React, api) {
         description: t('page.contactsDescription'),
         actions: h(Row, { gap: 2 },
           h(Button, { variant: 'secondary', icon: 'download', onClick: () => void exportPicked() }, t('contacts.exportSelected')),
-          h(Button, { icon: 'user-plus', onClick: () => void create() }, t('action.newContact')),
-          h(Button, { icon: 'building', variant: 'secondary', onClick: () => void createCompany() },
+          h(Button, { icon: 'user-plus', disabled: !canManage('edit', roles), onClick: () => void create() }, t('action.newContact')),
+          h(Button, { icon: 'building', variant: 'secondary', disabled: !canManage('edit', roles), onClick: () => void createCompany() },
             t('action.newCompany'))),
       }),
       status === 'loading' ? h(Text, { tone: 'muted' }, t('profile.loading')) : null,
       status === 'error' ? h(EmptyState, { title: t('profile.unavailable') }) : null,
       status === 'ready'
         ? h('div', { 'data-pane': 'split', style: SPLIT },
-            h('div', { 'data-pane': 'list', style: sidePane(320) },
+            h('div', { 'data-pane': 'list', style: sidePane(320), ref: listPane },
               picked.size
                 ? h('div', { 'data-pane': 'actions', style: ACTION_BAR },
                     h(Text, { tone: 'muted' }, t('contacts.selected', { count: picked.size })),
+                    // The advisory role of the selection (#23): the buttons the
+                    // role does not allow are disabled, and the line says why.
+                    hasRoles(roles)
+                      ? h(Text, { tone: 'muted' }, t('roles.limited', {
+                          role: t(`roles.role.${effectiveRole(pickedCards, roles)}`),
+                        }))
+                      : null,
                     h(Button, {
                       size: 'sm',
                       icon: 'git-merge',
-                      disabled: picked.size < 2,
+                      disabled: picked.size < 2 || !canPerform(pickedCards, 'merge', roles),
                       onClick: () => void mergePicked(),
                     }, t('contacts.mergeSelected')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
                       icon: 'edit',
+                      disabled: !canPerform(pickedCards, 'edit', roles),
                       onClick: () => void editPicked(),
                     }, t('contacts.editSelected')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
                       icon: 'wand',
+                      disabled: !canPerform(pickedCards, 'edit', roles),
                       onClick: () => void cleanPicked(),
                     }, t('cleanup.action')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
                       icon: 'shield',
+                      disabled: !canPerform(pickedCards, 'edit', roles),
                       onClick: () => void rulesPicked(),
                     }, t('rules.action')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
+                      disabled: !canPerform(pickedCards, 'delete', roles),
                       onClick: () => void deletePicked(),
                     }, t('contacts.deleteSelected')),
                     h(Button, {
@@ -490,9 +565,30 @@ export function makeProfilePage(React, api) {
                 h(Button, {
                   size: 'sm', variant: 'secondary', icon: 'undo', onClick: () => void undoSingleCleanup(),
                 }, t('cleanup.undo'))) : null,
+              // The pager (#39) sits above the scroll area, so it does not
+              // scroll away with a long list. Shown only when there is more
+              // than one page.
+              isPaged(visible.length)
+                ? h('div', { 'data-pane': 'pager', style: ACTION_BAR },
+                    h(Button, {
+                      size: 'sm', variant: 'secondary', disabled: paged.page === 0,
+                      onClick: () => setPage(paged.page - 1),
+                    }, t('contacts.prevPage')),
+                    h(Text, { tone: 'muted' }, t('contacts.pageRange', {
+                      page: paged.page + 1,
+                      pages: paged.pages,
+                      from: paged.from,
+                      to: paged.to,
+                      total: paged.total,
+                    })),
+                    h(Button, {
+                      size: 'sm', variant: 'secondary', disabled: paged.page >= paged.pages - 1,
+                      onClick: () => setPage(paged.page + 1),
+                    }, t('contacts.nextPage')))
+                : null,
               h('div', { 'data-pane': 'list-scroll', style: SCROLL_AREA },
                 visible.length
-                  ? h(List, { label: t('page.contactsTitle') }, ...visible.map((card) => h(ListRow, {
+                  ? h(List, { label: t('page.contactsTitle') }, ...paged.items.map((card) => h(ListRow, {
                     key: card.id,
                     title: avatarTitle(card, 24),
                     subtitle: bookLabel(card),
@@ -529,7 +625,8 @@ export function makeProfilePage(React, api) {
                       addressLine(selected) ? h(Text, { tone: 'muted' }, addressLine(selected)) : null,
                       notesLine(selected) ? h(Text, null, notesLine(selected)) : null,
                       h(Row, { gap: 2 },
-                        h(Button, { size: 'sm', icon: 'edit', onClick: () => void edit() }, t('detail.edit'))))),
+                        h(Button, { size: 'sm', icon: 'edit', disabled: !canPerform([selected], 'edit', roles), onClick: () => void edit() }, t('detail.edit')),
+                        h(Button, { size: 'sm', variant: 'secondary', icon: 'plus', onClick: () => void followUp() }, t('profile.followUp'))))),
                   company ? peopleSection() : null,
                   company ? null : h(Duplicates, { contact: selected }),
                   h(Section, { title: t('profile.meetings') },
@@ -565,9 +662,7 @@ export function makeProfilePage(React, api) {
                     context.status === 'ready' && !context.tasks.length
                       ? h(Text, { tone: 'muted' }, t('profile.noTasks'))
                       : null,
-                    ...context.tasks.map((task) => h(Row, { key: task.id, gap: 2, wrap: true },
-                      h(Text, null, task.title),
-                      task.due ? h(Text, { tone: 'muted' }, formatDate(task.due, api.i18n.getLocale())) : null))),
+                    ...taskRows()),
                   context.degraded.length
                     ? h(Text, { tone: 'muted' }, t('profile.degraded', {
                         parts: context.degraded.map((part) => t(`profile.degraded.${part}`)).join(', '),
