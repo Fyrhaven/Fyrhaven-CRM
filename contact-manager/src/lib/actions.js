@@ -8,7 +8,7 @@
 //
 // They read the api and write through it; no DOM.
 
-import { loadCards } from './contacts.js';
+import { loadBooks, loadCards } from './contacts.js';
 import { findDuplicateGroups, readDismissed } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
@@ -103,6 +103,30 @@ export async function normalisationRules(api) {
  */
 export async function automationRules(api) {
   return manageAutomation(api);
+}
+
+/**
+ * The address-book policies dialog (#7) — shared by the Duplicates page, the
+ * command palette and the Getting started guide, so the three cannot disagree
+ * about which books it lists. The books are read here rather than trusted from
+ * a page's last scan: with autoScan off there may be no scan to trust, and the
+ * dialog would open on "No address books found."
+ *
+ * `fallbackBooks` is what the caller already knows, used only when the read
+ * fails; the dialog then still shows something instead of nothing.
+ */
+export async function managePolicies(api, { fallbackBooks = [] } = {}) {
+  let books = fallbackBooks;
+  try {
+    books = await loadBooks(api);
+  } catch {
+    // keep the fallback; the dialog still shows what we know
+  }
+  return api.ui.openDialog({
+    title: api.i18n.t('policies.title'),
+    slot: 'plugin-dialog',
+    extraProps: { policiesDialog: true, books },
+  });
 }
 
 /**
