@@ -30,6 +30,7 @@ import { buildIndex, countsForIndex, isBlankQuery, matchIndexed, parseQuery } fr
 import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
 import { applyRulesResult, openRules } from './open-rules.js';
+import { canManage, canPerform, effectiveRole, hasRoles, readRoles } from './book-roles.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
@@ -47,17 +48,19 @@ export function makeProfilePage(React, api) {
     const [picked, setPicked] = useState(() => new Set());
     const [saved, setSaved] = useState([]);
     const [cleanup, setCleanup] = useState(null);
+    const [roles, setRoles] = useState({}); // per-address-book roles (#23), advisory
 
     const load = useCallback(async () => {
       setStatus('loading');
       try {
-        const [list, addressBooks, savedList, cleanupRecord] = await Promise.all([
-          loadCards(api), loadBooks(api), readSaved(api), readCleanup(api),
+        const [list, addressBooks, savedList, cleanupRecord, bookRoles] = await Promise.all([
+          loadCards(api), loadBooks(api), readSaved(api), readCleanup(api), readRoles(api),
         ]);
         setCards(list);
         setBookList(addressBooks);
         setSaved(savedList);
         setCleanup(cleanupRecord);
+        setRoles(bookRoles);
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : list[0]?.id ?? ''));
         // A deleted or no-longer-matching contact must not stay selected.
         setPicked((current) => {
@@ -422,8 +425,8 @@ export function makeProfilePage(React, api) {
         description: t('page.contactsDescription'),
         actions: h(Row, { gap: 2 },
           h(Button, { variant: 'secondary', icon: 'download', onClick: () => void exportPicked() }, t('contacts.exportSelected')),
-          h(Button, { icon: 'user-plus', onClick: () => void create() }, t('action.newContact')),
-          h(Button, { icon: 'building', variant: 'secondary', onClick: () => void createCompany() },
+          h(Button, { icon: 'user-plus', disabled: !canManage('edit', roles), onClick: () => void create() }, t('action.newContact')),
+          h(Button, { icon: 'building', variant: 'secondary', disabled: !canManage('edit', roles), onClick: () => void createCompany() },
             t('action.newCompany'))),
       }),
       status === 'loading' ? h(Text, { tone: 'muted' }, t('profile.loading')) : null,
@@ -434,33 +437,44 @@ export function makeProfilePage(React, api) {
               picked.size
                 ? h('div', { 'data-pane': 'actions', style: ACTION_BAR },
                     h(Text, { tone: 'muted' }, t('contacts.selected', { count: picked.size })),
+                    // The advisory role of the selection (#23): the buttons the
+                    // role does not allow are disabled, and the line says why.
+                    hasRoles(roles)
+                      ? h(Text, { tone: 'muted' }, t('roles.limited', {
+                          role: t(`roles.role.${effectiveRole(pickedCards, roles)}`),
+                        }))
+                      : null,
                     h(Button, {
                       size: 'sm',
                       icon: 'git-merge',
-                      disabled: picked.size < 2,
+                      disabled: picked.size < 2 || !canPerform(pickedCards, 'merge', roles),
                       onClick: () => void mergePicked(),
                     }, t('contacts.mergeSelected')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
                       icon: 'edit',
+                      disabled: !canPerform(pickedCards, 'edit', roles),
                       onClick: () => void editPicked(),
                     }, t('contacts.editSelected')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
                       icon: 'wand',
+                      disabled: !canPerform(pickedCards, 'edit', roles),
                       onClick: () => void cleanPicked(),
                     }, t('cleanup.action')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
                       icon: 'shield',
+                      disabled: !canPerform(pickedCards, 'edit', roles),
                       onClick: () => void rulesPicked(),
                     }, t('rules.action')),
                     h(Button, {
                       size: 'sm',
                       variant: 'secondary',
+                      disabled: !canPerform(pickedCards, 'delete', roles),
                       onClick: () => void deletePicked(),
                     }, t('contacts.deleteSelected')),
                     h(Button, {
@@ -529,7 +543,7 @@ export function makeProfilePage(React, api) {
                       addressLine(selected) ? h(Text, { tone: 'muted' }, addressLine(selected)) : null,
                       notesLine(selected) ? h(Text, null, notesLine(selected)) : null,
                       h(Row, { gap: 2 },
-                        h(Button, { size: 'sm', icon: 'edit', onClick: () => void edit() }, t('detail.edit'))))),
+                        h(Button, { size: 'sm', icon: 'edit', disabled: !canPerform([selected], 'edit', roles), onClick: () => void edit() }, t('detail.edit'))))),
                   company ? peopleSection() : null,
                   company ? null : h(Duplicates, { contact: selected }),
                   h(Section, { title: t('profile.meetings') },

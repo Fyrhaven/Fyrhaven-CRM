@@ -40,6 +40,7 @@ import { makeRulesDialog } from './lib/rules-dialog.js';
 import { makeImportDialog } from './lib/import-dialog.js';
 import { makeExportDialog } from './lib/export-dialog.js';
 import { makePoliciesDialog } from './lib/policies-dialog.js';
+import { makeRolesDialog } from './lib/roles-dialog.js';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from './lib/capabilities.js';
@@ -84,6 +85,7 @@ const RulesDialog = makeRulesDialog(React, api);
 const ImportDialog = makeImportDialog(React, api);
 const ExportDialog = makeExportDialog(React, api);
 const PoliciesDialog = makePoliciesDialog(React, api);
+const RolesDialog = makeRolesDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
@@ -96,6 +98,7 @@ function DialogSlot(props) {
   if (props?.importWizard) return React.createElement(ImportDialog, props);
   if (props?.exportSelection) return React.createElement(ExportDialog, props);
   if (props?.policiesDialog) return React.createElement(PoliciesDialog, props);
+  if (props?.rolesDialog) return React.createElement(RolesDialog, props);
   return React.createElement(ReviewDialog, props);
 }
 

@@ -651,3 +651,77 @@ describe('an export the sandbox will not download', () => {
     expect(result.body).toContain('BEGIN:VCARD');
   });
 });
+
+// ── Advisory per-address-book roles (#23) ───────────────────────
+//
+// The role is not enforced by the host, but the page disables the actions the
+// role does not allow, so the convention is visible where it matters.
+
+describe('contacts page: advisory roles', () => {
+  const select = async (name) => {
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox', { name })); });
+  };
+
+  it('a viewer role disables merge, edit, cleanup, rules and delete for the selection', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'viewer' });
+    await renderPage(api);
+
+    await select('Select Ada Lovelace');
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Merge selected' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit selected' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clean up' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Rules…' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(true);
+    // and the line says which role is holding it back
+    expect(screen.getByText(/Role: Viewer/)).toBeTruthy();
+  });
+
+  it('an editor role allows editing but not merging or deleting', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'editor' });
+    await renderPage(api);
+
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Edit selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Merge selected' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(true);
+  });
+
+  it('a merger role allows merging and deleting', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'merger' });
+    await renderPage(api);
+
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Edit selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(false);
+  });
+
+  it('a viewer role disables creating a contact and editing the open one', async () => {
+    const api = profileApi();
+    await api.storage.set('bookRoles', { b1: 'viewer' });
+    await renderPage(api);
+
+    expect(screen.getByRole('button', { name: 'New contact' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'New company' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Edit contact' }).disabled).toBe(true);
+  });
+
+  it('with no roles stored, every action stays enabled', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    // two selected, so the merge button is not disabled for being a single one
+    await select('Select Ada Lovelace');
+    await select('Select Grace Hopper');
+
+    expect(screen.getByRole('button', { name: 'Merge selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Delete selected' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'New contact' }).disabled).toBe(false);
+  });
+});
