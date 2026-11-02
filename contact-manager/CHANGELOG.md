@@ -7,6 +7,31 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.38.0] — 2026-11-02
+
+### Added
+
+- **OR and grouping in the search box (#34).** A query can now say *either*:
+  `tag:vip OR tag:customer`, or group with parentheses —
+  `(tag:vip OR tag:customer) has:email`. Adjacent terms are still AND, `OR`
+  binds looser than AND, and `OR` is case-insensitive. An unbalanced parenthesis
+  or a dangling `OR` is reported under the box, and the rest of the query is
+  still parsed so a typo never throws the search away.
+
+- **A saved search — or any query — as a bulk scope (#34).** A *Select all N*
+  button under the search box turns everything the list currently shows into the
+  selection, so *Merge*, *Edit*, *Clean up*, *Rules*, *Export* and *Delete*
+  apply to the whole set rather than to hand-picked rows. Click a saved search,
+  then *Select all*, to act on exactly what it matches.
+
+### Fixed
+
+- **A query that is only a negation now filters the list.** `-tag:vip` (or
+  `not:tag:vip`) used to be parsed correctly but the page showed the whole
+  address book, because it decided "is there a query?" from the positive terms
+  and filters alone. It asks `isBlankQuery` now, the same rule the matcher uses,
+  so the list and the match count agree.
+
 ## [1.37.0] — 2026-11-02
 
 ### Added

@@ -154,7 +154,7 @@ describe('contacts page', () => {
     const api = profileApi();
     await renderPage(api);
 
-    expect(screen.getByText('Operators: tag: has: company: is: · a leading - excludes')).toBeTruthy();
+    expect(screen.getByText(manifest.locales.en['search.hint'])).toBeTruthy();
   });
 
   it('saves a search, counts it, applies it from its button and removes it', async () => {
@@ -187,6 +187,47 @@ describe('contacts page', () => {
     await renderPage(api);
 
     expect(screen.getByRole('button', { name: 'Has email · 2' })).toBeTruthy();
+  });
+
+  it('selects everything the list shows, so a query is a bulk scope (#34)', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    // with no query, the whole list
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Select all 2' })); });
+    expect(screen.getByText('2 selected')).toBeTruthy();
+
+    // clear, then a saved search narrows the list and Select all follows it
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Clear selection' })); });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'tag:maths' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Select all 1' })); });
+    expect(screen.getByText('1 selected')).toBeTruthy();
+  });
+
+  it('applies an OR query from the box', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'tag:maths OR name:nobody' } });
+    });
+
+    // AND would match nothing; OR matches Ada on her tag
+    expect(screen.getByText('1 of 2 contacts')).toBeTruthy();
+  });
+
+  it('filters on a query that is only a negation', async () => {
+    const api = profileApi();
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: '-tag:maths' } });
+    });
+
+    // Ada has the maths tag, so only Grace is left
+    expect(screen.getByText('1 of 2 contacts')).toBeTruthy();
   });
 
   it('switches the profile when another contact is chosen', async () => {

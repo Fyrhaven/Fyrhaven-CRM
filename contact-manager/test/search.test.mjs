@@ -238,4 +238,55 @@ describe('not:', () => {
   it('is not a field of its own', () => {
     expect(parseQuery('not:tag:vip').errors).toEqual([]);
   });
+
+describe('OR and grouping', () => {
+  it('matches either side of an OR', () => {
+    expect(ids(searchCards(CARDS, 'tag:vip OR tag:maths').results)).toEqual(['a', 'g']);
+    expect(ids(searchCards(CARDS, 'tag:maths OR company:acme').results)).toEqual(['a', 'co']);
+  });
+
+  it('reads OR case-insensitively', () => {
+    expect(ids(searchCards(CARDS, 'tag:maths or company:acme').results)).toEqual(['a', 'co']);
+  });
+
+  it('binds AND tighter than OR, so `a b OR c` is `(a AND b) OR c`', () => {
+    // maths AND has:email -> Ada; OR is:company -> Acme
+    expect(ids(searchCards(CARDS, 'tag:maths has:email OR is:company').results)).toEqual(['a', 'co']);
+  });
+
+  it('groups with parentheses', () => {
+    // (vip OR maths) AND has:email -> Ada and Grace (both have email); Acme has none
+    expect(ids(searchCards(CARDS, '(tag:vip OR tag:maths) has:email').results)).toEqual(['a', 'g']);
+  });
+
+  it('excludes inside a group', () => {
+    // vip OR (no email) -> Ada, Grace, Acme
+    expect(ids(searchCards(CARDS, '(tag:vip OR -has:email)').results)).toEqual(['a', 'g', 'co']);
+  });
+
+  it('only attaches the ast when the query is not a plain AND', () => {
+    expect(parseQuery('tag:vip has:email').ast).toBeUndefined();
+    expect(parseQuery('(tag:vip)').ast).toBeUndefined();
+    expect(parseQuery('tag:vip OR tag:maths').ast).toMatchObject({ type: 'or' });
+  });
+
+  it('still fills the flat lists, for the error line and the chips', () => {
+    const parsed = parseQuery('(tag:vip OR tag:maths) has:email');
+    expect(parsed.filters).toEqual([{ field: 'tag', value: 'vip' }, { field: 'tag', value: 'maths' }, { field: 'has', value: 'email' }]);
+    expect(parsed.errors).toEqual([]);
+  });
+
+  it('reports unbalanced parentheses', () => {
+    expect(parseQuery('(tag:vip').errors[0]).toMatchObject({ reason: 'unbalanced' });
+    expect(parseQuery('tag:vip)').errors[0]).toMatchObject({ reason: 'unbalanced' });
+    // the atoms are still parsed, so the query is not thrown away
+    expect(parseQuery('(tag:vip').filters).toEqual([{ field: 'tag', value: 'vip' }]);
+  });
+
+  it('reports a dangling OR', () => {
+    expect(parseQuery('tag:vip OR').errors[0]).toMatchObject({ reason: 'dangling-or' });
+    expect(parseQuery('OR tag:vip').errors[0]).toMatchObject({ reason: 'dangling-or' });
+  });
+});
+
 });
