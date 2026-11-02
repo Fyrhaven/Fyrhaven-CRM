@@ -51,6 +51,7 @@ signatures, the last scan summary).
 | Surface | Where it appears | What it does |
 |---|---|---|
 | `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* |
+| Getting started guide | Contact Manager → *Overview*, on first run | A short card that walks a first clean-up — import, scan (which opens the review dialog), set policies — running the same actions the menu and the palette run. It records that it is done, and the Overview menu re-opens it (#39, the onboarding half) |
 | *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
 | *Roles* button | Contact Manager → *Duplicates* header | Opens the **address-book roles** dialog (#23): the role held on each book — *Viewer* / *Editor* / *Merger* / *Admin* — which disables the actions it does not allow. Advisory only; the host is not enforcing it |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
@@ -164,6 +165,8 @@ contact-manager/
 │       ├── automation.js  # the automation rules engine: the model, the plan, the write (#33)
 │       ├── automation-dialog.js # the rule builder and its dry run (plugin-dialog slot)
 │       ├── open-automation.js # one place that opens the rule builder and toasts the result
+│       ├── onboarding.js  # the first-run guide's steps and its storage (#39)
+│       ├── onboarding-card.js # the Getting started card on the Overview tab (#39)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -177,6 +180,8 @@ contact-manager/
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-policies.test.mjs # the policies dialog
 │   ├── ui-roles.test.mjs   # the roles dialog (#23)
+│   ├── onboarding.test.mjs # the guide's step order and storage (#39)
+│   ├── ui-onboarding.test.mjs # the Getting started card (#39)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -1050,6 +1055,33 @@ company*, the per-contact *Edit*, and the selection's *Merge selected* / *Edit
 selected* / *Clean up* / *Rules…* / *Delete selected*). Each page shows a muted
 line naming the role when one is set.
 
+### 6.16 The Getting started guide (`src/lib/onboarding.js`, `onboarding-card.js`, v1.41.0) — #39
+
+`src/lib/onboarding.js` is the step model and `src/lib/onboarding-card.js` the
+card at the top of the *Overview* tab. It is the onboarding half of #39: a new
+install should not have to guess the order of things.
+
+**The steps are data, and each one runs a shared action.** The order is
+`welcome → import → scan → policies → done`. A step that has something to do
+carries an action, and every action is the same function the command palette and
+the Overview menu run (`importContacts`, `findDuplicates`, `managePolicies`), so
+the guide cannot describe a different change from the one a task would make.
+
+**It records that it is done, and re-opens on demand.** The state is a single
+`{ done, at }` record in `api.storage` (per account and per browser, like the
+projects). `readOnboarding` repairs junk on read, `completeOnboarding` writes the
+flag and `resetOnboarding` forgets it. The Overview menu's *Getting started*
+button re-opens the card without rewriting what was stored (the page keeps a
+local flag), and *Finish* / *Skip the guide* writes the flag and hides the card.
+
+**A failing step never traps the user.** Each action is awaited inside a
+`try/finally`, and a step that throws (a refused dialog, a failed read) still
+advances — the action reported its own failure, and the guide is a help surface,
+not a gate. `managePolicies(api, { fallbackBooks })` is the one place the
+policies dialog is opened from, so the guide and the Duplicates page cannot
+disagree about which address books it lists; the Duplicates page passes its last
+scan as the fallback for when the read fails.
+
 ---
 
 ## 7. Build, test and package
@@ -1344,6 +1376,19 @@ Book roles (#23)
   an empty roles map allows everything: the previous behaviour
   the role is ADVISORY — the pages disable what it forbids; the host enforces
     nothing (per-book permissions need the server tier, #68)
+
+Onboarding (#39)
+  STEPS = ['welcome', 'import', 'scan', 'policies', 'done']
+  isStep / stepIndex / isFirstStep / isLastStep / nextStep / previousStep
+    nextStep of the last step stays put; previousStep of the first does too
+  normalizeOnboarding(raw) -> { done: boolean, at: string|null }; only
+    `done === true` counts as done
+  readOnboarding / writeOnboarding, key 'onboarding'; junk is dropped and
+    storage rewritten, and a not-done state removes the key
+  completeOnboarding(api) records done; resetOnboarding(api) forgets it
+  the card runs the shared actions (importContacts / findDuplicates /
+    managePolicies), so the guide cannot describe a different change
+  a step whose action throws still advances: the guide is help, not a gate
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
