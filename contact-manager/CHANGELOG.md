@@ -7,6 +7,27 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.42.0] — 2026-11-02
+
+### Added
+
+- **A paged Contacts list (#39, the scale half).** The Contacts tab used to
+  render every contact a query matched, which is fine for a few hundred and a
+  freeze for tens of thousands — the whole match set became DOM at once. It now
+  renders one page of 100 at a time, with *Previous* / *Next* and a
+  `Page X of Y · A–B of N` line above the list. A new query starts at the first
+  page, and a shrinking list is clamped so a page index can never point past the
+  end.
+
+### Notes
+
+The page is a view of the results, not a limit on them: the match counts and
+*Select all N* still work over the whole match set, so a paged list is still a
+bulk scope. `src/lib/paging.js` is the pure page math (`pageCount`, `clampPage`,
+`isPaged`, `pageSlice`) and a budget test pins that slicing one page out of 100k
+contacts does not walk the list. Still to come for full scale (#39): virtualised
+rows, worker-based duplicate matching and incremental search indexes.
+
 ## [1.41.0] — 2026-11-02
 
 ### Added

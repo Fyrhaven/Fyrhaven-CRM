@@ -66,7 +66,7 @@ signatures, the last scan summary).
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
 | Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
@@ -167,6 +167,7 @@ contact-manager/
 │       ├── open-automation.js # one place that opens the rule builder and toasts the result
 │       ├── onboarding.js  # the first-run guide's steps and its storage (#39)
 │       ├── onboarding-card.js # the Getting started card on the Overview tab (#39)
+│       ├── paging.js      # the pure page math for a long contact list (#39)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -182,6 +183,7 @@ contact-manager/
 │   ├── ui-roles.test.mjs   # the roles dialog (#23)
 │   ├── onboarding.test.mjs # the guide's step order and storage (#39)
 │   ├── ui-onboarding.test.mjs # the Getting started card (#39)
+│   ├── paging.test.mjs     # the page math and its budget (#39)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -1082,6 +1084,35 @@ policies dialog is opened from, so the guide and the Duplicates page cannot
 disagree about which address books it lists; the Duplicates page passes its last
 scan as the fallback for when the read fails.
 
+### 6.17 Paging a long contact list (`src/lib/paging.js`, v1.42.0) — #39
+
+`src/lib/paging.js` is the pure page math and the Contacts page is its only
+caller. It is the scale half of #39's first bullet: the list used to render
+**every** contact a query matched, so a large address book became a large DOM at
+once.
+
+**A page is a view of the results, not a limit on them.** `pageSlice(list, page,
+size)` returns `{ items, page, pages, from, to, total }` for one page of
+`PAGE_SIZE` (100), and the page renders `items` while the match count and *Select
+all N* keep reading the whole `visible` list. So a paged list is still a bulk
+scope: *Select all* after a search takes everything the query matches, not the
+100 on screen. A new query resets to the first page, and `clampPage` keeps the
+index in range, so a list that shrinks under the user (a delete, a narrower
+query) can never leave a blank page.
+
+**The pager is drawn with plain elements**, like the rest of the skeleton, and
+sits **above** the scroll area so it does not scroll away with a long list. It is
+shown only when there is more than one page, so a small address book looks
+exactly as it did before.
+
+**The budget is pinned.** `test/paging.test.mjs` slices one page out of 100k
+contacts and asserts it stays well inside a budget — the cost of showing a page
+must not grow with the size of the book — and `test/ui-profile.test.mjs` renders
+5000 contacts and asserts the DOM holds one page.
+
+Still to come for full scale (#39): virtualised rows, worker-based duplicate
+matching and incremental search indexes.
+
 ---
 
 ## 7. Build, test and package
@@ -1389,6 +1420,17 @@ Onboarding (#39)
   the card runs the shared actions (importContacts / findDuplicates /
     managePolicies), so the guide cannot describe a different change
   a step whose action throws still advances: the guide is help, not a gate
+
+Paging (#39)
+  PAGE_SIZE = 100
+  pageCount(total, size) -> at least 1, even for an empty list
+  clampPage(page, total, size) -> in range, so a shrinking list never blanks
+  isPaged(total, size) -> only true when there is more than one page
+  pageSlice(list, page, size) -> { items, page, pages, from, to, total }
+    from/to are 0/0 for an empty list; the slice is one page, never the list
+  the page is a VIEW of the results: counts and Select all still read the whole
+    match set, so a paged list is still a bulk scope
+  a budget test pins that slicing one page of 100k does not walk the list
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
