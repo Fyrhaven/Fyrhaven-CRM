@@ -74,6 +74,7 @@ signatures, the last scan summary).
 | *Rules…* button | Contact Manager → *Contacts*, with a selection | Opens the **normalisation rules** dialog: the built-in rules, your own find-and-replace rules, and the exact edits they would make before anything is written (#20) |
 | Command palette action | Ctrl+K → *Normalisation rules* | The same rules dialog, over every contact |
 | Command palette action / *Automation rules* button | Ctrl+K → *Automation rules*, or the Overview menu | Opens the **automation rules** builder (#33): rules that run on a contact being created, changed or imported, with a condition (a search query) and actions (add/remove tag, add to a group, propose a merge), a priority order, an enable/disable toggle and a *Test* dry run |
+| Command palette action | Ctrl+K → *Smart lists* | Opens the **Smart lists** dialog (#13, the palette half): the saved searches with live counts, the contacts a list holds (paged), and a vCard export of the chosen list |
 | *History* sub-tab | Contact Manager → *History* | What this plugin wrote — merges, cleanups, rules, imports, bulk edits, creates/updates/deletes and group changes — newest first, with the rollback that is still live (#25, the local half) |
 | *Privacy* sub-tab | Contact Manager → *Privacy* | The GDPR toolkit (#26): pick a person, export everything held about them (JSON subject-access export, vCard, CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…*, *Automation rules* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **automation editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice**, the **policies** dialog and the **roles** dialog |
@@ -168,6 +169,8 @@ contact-manager/
 │       ├── onboarding.js  # the first-run guide's steps and its storage (#39)
 │       ├── onboarding-card.js # the Getting started card on the Overview tab (#39)
 │       ├── paging.js      # the pure page math for a long contact list (#39)
+│       ├── smart-lists.js # saved searches as smart lists: counts, members, file name (#13)
+│       ├── smart-lists-dialog.js # the Smart lists dialog (plugin-dialog slot, #13)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -184,6 +187,8 @@ contact-manager/
 │   ├── onboarding.test.mjs # the guide's step order and storage (#39)
 │   ├── ui-onboarding.test.mjs # the Getting started card (#39)
 │   ├── paging.test.mjs     # the page math and its budget (#39)
+│   ├── smart-lists.test.mjs # the smart-list model and its file name (#13)
+│   ├── ui-smart-lists.test.mjs # the Smart lists dialog (#13)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -1113,6 +1118,31 @@ must not grow with the size of the book — and `test/ui-profile.test.mjs` rende
 Still to come for full scale (#39): virtualised rows, worker-based duplicate
 matching and incremental search indexes.
 
+### 6.18 Smart lists in the command palette (`src/lib/smart-lists.js`, `smart-lists-dialog.js`, v1.43.0) — #13
+
+`src/lib/smart-lists.js` is the model and `src/lib/smart-lists-dialog.js` the
+dialog behind the *Smart lists* palette action. It is the palette half of #13:
+the issue asked for saved searches and smart lists "usable from the page **and
+command palette**", and the page half shipped in v1.16.0.
+
+**A smart list is a saved search with a live count.** `smartLists(saved, { total,
+counts })` returns "everything" first and then one entry per saved search, with
+the counts `countsForIndex` produced — positionally aligned, so the list and its
+counts cannot drift out of order. `matchesFor(index, entry)` is the members,
+using the **same** matcher the Contacts page uses (`isBlankQuery` /
+`matchIndexed`), so a list's count and its members cannot disagree.
+
+**The dialog reads and returns a choice; the action does the work.** The dialog
+loads the cards, books and saved searches, and returns `{ export: { cards,
+format, name } }`; `lib/actions.js` builds the file, names it after the list
+(`fileNameFor`), hands it to the host and falls back to showing the file when the
+download is refused. That keeps the dialog from ever opening a dialog of its own
+— a nested dialog is a host behaviour this plugin does not rely on.
+
+**It reuses the paging from v1.42.0**, so a list with thousands of members shows
+one page of 100, and it is honest that the saved searches live in `api.storage`
+per account and per browser.
+
 ---
 
 ## 7. Build, test and package
@@ -1431,6 +1461,16 @@ Paging (#39)
   the page is a VIEW of the results: counts and Select all still read the whole
     match set, so a paged list is still a bulk scope
   a budget test pins that slicing one page of 100k does not walk the list
+
+Smart lists (#13, the palette half)
+  smartLists(saved, { total, counts }) -> [everything, ...one per saved search]
+    counts are positionally aligned with `saved`, so the two cannot drift
+  matchesFor(index, entry) uses isBlankQuery / matchIndexed — the SAME matcher
+    the Contacts page uses, so a list's count and its members cannot disagree
+  fileNameFor(name, format) -> a safe `<list>.vcf` / `<list>.csv`
+  the dialog reads and returns a choice; actions.js does the export after it
+    closes, so the dialog never opens a dialog of its own
+  the export falls back to showing the file when the download is refused
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
