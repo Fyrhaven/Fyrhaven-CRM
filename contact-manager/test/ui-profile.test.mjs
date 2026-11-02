@@ -811,3 +811,59 @@ describe('contacts page: paging a long list', () => {
     expect(screen.getByText('Page 1 of 50 · 1–100 of 5000')).toBeTruthy();
   });
 });
+
+// ── Keyboard shortcuts (#39) ────────────────────────────────────
+//
+// `/` focuses this page's own search box and Esc clears it. Both are scoped to
+// the box, so a keystroke meant for something else is left alone — a negative
+// twin for each positive.
+
+describe('contacts page: keyboard shortcuts', () => {
+  const search = () => screen.getByLabelText('Search contacts');
+  const press = (target, key) => {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    act(() => { target.dispatchEvent(event); });
+    return event;
+  };
+
+  it('/ focuses the contact search box', async () => {
+    await renderPage(profileApi());
+    expect(document.activeElement).not.toBe(search());
+
+    const event = press(document.body, '/');
+
+    expect(document.activeElement).toBe(search());
+    // it took the keystroke, so the browser does not also type a slash
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('leaves / alone when a field already has focus', async () => {
+    await renderPage(profileApi());
+    await act(async () => { fireEvent.change(search(), { target: { value: 'ada' } }); });
+    search().focus();
+
+    const event = press(search(), '/');
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(search().value).toBe('ada');
+  });
+
+  it('Esc clears the search box', async () => {
+    await renderPage(profileApi());
+    await act(async () => { fireEvent.change(search(), { target: { value: 'grace' } }); });
+    expect(search().value).toBe('grace');
+
+    await act(async () => { fireEvent.keyDown(search(), { key: 'Escape' }); });
+
+    expect(search().value).toBe('');
+  });
+
+  it('Esc outside the search box is left for the host', async () => {
+    await renderPage(profileApi());
+    await act(async () => { fireEvent.change(search(), { target: { value: 'grace' } }); });
+
+    await act(async () => { fireEvent.keyDown(document.body, { key: 'Escape' }); });
+
+    expect(search().value).toBe('grace');
+  });
+});

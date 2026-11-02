@@ -42,13 +42,14 @@ import { makeExportDialog } from './lib/export-dialog.js';
 import { makePoliciesDialog } from './lib/policies-dialog.js';
 import { makeRolesDialog } from './lib/roles-dialog.js';
 import { makeSmartListsDialog } from './lib/smart-lists-dialog.js';
+import { makeHelpDialog } from './lib/help-dialog.js';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from './lib/capabilities.js';
 import { runAutomationForCard } from './lib/automation.js';
 import {
   automationRules, checkServer, findDuplicates, importContacts, newCompany, newContact, newGroup, newProject,
-  normalisationRules, smartLists, undoMerge,
+  normalisationRules, openHelp, smartLists, undoMerge,
 } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
@@ -88,6 +89,7 @@ const ExportDialog = makeExportDialog(React, api);
 const PoliciesDialog = makePoliciesDialog(React, api);
 const RolesDialog = makeRolesDialog(React, api);
 const SmartListsDialog = makeSmartListsDialog(React, api);
+const HelpDialog = makeHelpDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
@@ -102,6 +104,7 @@ function DialogSlot(props) {
   if (props?.policiesDialog) return React.createElement(PoliciesDialog, props);
   if (props?.rolesDialog) return React.createElement(RolesDialog, props);
   if (props?.smartLists) return React.createElement(SmartListsDialog, props);
+  if (props?.help) return React.createElement(HelpDialog, props);
   return React.createElement(ReviewDialog, props);
 }
 
@@ -144,6 +147,7 @@ export const hooks = {
     if (actionId === 'new-group') return newGroup(api);
     if (actionId === 'import-contacts') return importContacts(api);
     if (actionId === 'smart-lists') return smartLists(api);
+    if (actionId === 'help') return openHelp(api);
     if (actionId === 'check-server') return checkServer(api);
     if (actionId === 'normalisation-rules') return normalisationRules(api);
     if (actionId === 'automation-rules') return automationRules(api);
@@ -194,6 +198,7 @@ async function publish(pluginApi) {
     { id: 'automation-rules', label: t('action.automation'), icon: 'wand' },
     { id: 'import-contacts', label: t('action.importContacts'), icon: 'upload' },
     { id: 'smart-lists', label: t('action.smartLists'), icon: 'filter' },
+    { id: 'help', label: t('action.help'), icon: 'book-user' },
     { id: 'check-server', label: t('action.checkServer'), icon: 'cloud' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);

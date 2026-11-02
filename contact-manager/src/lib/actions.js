@@ -109,6 +109,18 @@ export async function automationRules(api) {
 }
 
 /**
+ * The Help dialog (#39): the search operators, the keyboard shortcuts and a
+ * short "what's new". It only reads, so there is nothing to toast.
+ */
+export async function openHelp(api) {
+  return api.ui.openDialog({
+    title: api.i18n.t('help.title'),
+    slot: 'plugin-dialog',
+    extraProps: { help: true },
+  });
+}
+
+/**
  * The Smart lists dialog (#13, the command-palette half): the saved searches
  * with live counts, and the members of the one the user picks. The dialog
  * returns what to export and **this** performs it, so the dialog never opens a
