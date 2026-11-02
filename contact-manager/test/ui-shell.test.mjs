@@ -24,16 +24,17 @@ function renderShell() {
     projects: Stub('Projects body'),
     health: Stub('Health body'),
     history: Stub('History body'),
+    privacy: Stub('Privacy body'),
   });
   render(React.createElement(Shell));
   return api;
 }
 
 describe('app shell', () => {
-  it('shows the seven sub-tabs, the overview first, and mounts only that one', () => {
+  it('shows the eight sub-tabs, the overview first, and mounts only that one', () => {
     renderShell();
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent))
-      .toEqual(['Overview', 'Duplicates', 'Contacts', 'Groups', 'Projects', 'Health', 'History']);
+      .toEqual(['Overview', 'Duplicates', 'Contacts', 'Groups', 'Projects', 'Health', 'History', 'Privacy']);
     // the plugin lands on its main page, not on Duplicates
     expect(screen.getByText('Overview body')).toBeTruthy();
     expect(screen.queryByText('Duplicates body')).toBeNull();
@@ -42,6 +43,7 @@ describe('app shell', () => {
     expect(screen.queryByText('Projects body')).toBeNull();
     expect(screen.queryByText('Health body')).toBeNull();
     expect(screen.queryByText('History body')).toBeNull();
+    expect(screen.queryByText('Privacy body')).toBeNull();
   });
 
   it('marks the active tab and keeps an opened tab mounted', async () => {

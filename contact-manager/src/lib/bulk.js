@@ -127,9 +127,12 @@ export const applyBooks = (api, cards, books = {}) => applyBulkEdit(api, cards, 
  * A card the host refuses to delete stays and is counted in `failed`, so a
  * partial run is reported rather than hidden.
  *
+ * `kind` names the task in the change history: a plain delete is `'delete'`, a
+ * data-subject erasure is `'erase'` (#26), so the history says which it was.
+ *
  * @returns {Promise<{deleted:number, failed:number}>}
  */
-export async function deleteContacts(api, cards) {
+export async function deleteContacts(api, cards, { kind = 'delete' } = {}) {
   const removed = [];
   let failed = 0;
   for (const card of Array.isArray(cards) ? cards : []) {
@@ -141,6 +144,6 @@ export async function deleteContacts(api, cards) {
     }
   }
   // No kept contact: an undo of a delete only has to re-create what went away.
-  if (removed.length) await saveUndo(api, [{ keptId: '', before: {}, absent: [], removed }], Date.now(), 'delete');
+  if (removed.length) await saveUndo(api, [{ keptId: '', before: {}, absent: [], removed }], Date.now(), kind);
   return { deleted: removed.length, failed };
 }
