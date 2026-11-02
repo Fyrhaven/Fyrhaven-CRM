@@ -19,6 +19,9 @@ import { manageAutomation } from './open-automation.js';
 import { runAutomationForCards } from './automation.js';
 import { undoLastMerge } from './undo.js';
 import { policyAwareOptions } from './book-policies.js';
+import { contactsToFile } from './export.js';
+import { saveFile } from './download.js';
+import { fileNameFor } from './smart-lists.js';
 
 /** Duplicate groups over all contacts, or over `scopeIds` when given. */
 export async function scanGroups(api, scopeIds = null) {
@@ -103,6 +106,39 @@ export async function normalisationRules(api) {
  */
 export async function automationRules(api) {
   return manageAutomation(api);
+}
+
+/**
+ * The Smart lists dialog (#13, the command-palette half): the saved searches
+ * with live counts, and the members of the one the user picks. The dialog
+ * returns what to export and **this** performs it, so the dialog never opens a
+ * dialog of its own — and the export falls back to showing the file when the
+ * sandbox refuses the download, the same as the Contacts page.
+ */
+export async function smartLists(api) {
+  const t = (key, vars) => api.i18n.t(key, vars);
+  const result = await api.ui.openDialog({
+    title: t('smartLists.title'),
+    slot: 'plugin-dialog',
+    extraProps: { smartLists: true },
+  });
+  if (!result?.export) return;
+  const { cards, format, name } = result.export;
+  const file = contactsToFile(cards, format);
+  if (!file.body) {
+    api.toast.warning(t('contacts.exportEmpty'));
+    return;
+  }
+  file.name = fileNameFor(name, format);
+  const saved = await saveFile(api, file.body, file.name, file.type);
+  if (!saved) {
+    await api.ui.openDialog({
+      title: t('export.resultTitle'),
+      slot: 'plugin-dialog',
+      extraProps: { exportResult: { name: file.name, body: file.body } },
+    });
+  }
+  api.toast.success(t('contacts.exported', { count: cards.length }));
 }
 
 /**

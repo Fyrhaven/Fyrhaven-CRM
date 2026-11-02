@@ -41,13 +41,14 @@ import { makeImportDialog } from './lib/import-dialog.js';
 import { makeExportDialog } from './lib/export-dialog.js';
 import { makePoliciesDialog } from './lib/policies-dialog.js';
 import { makeRolesDialog } from './lib/roles-dialog.js';
+import { makeSmartListsDialog } from './lib/smart-lists-dialog.js';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
 } from './lib/capabilities.js';
 import { runAutomationForCard } from './lib/automation.js';
 import {
   automationRules, checkServer, findDuplicates, importContacts, newCompany, newContact, newGroup, newProject,
-  normalisationRules, undoMerge,
+  normalisationRules, smartLists, undoMerge,
 } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
@@ -86,6 +87,7 @@ const ImportDialog = makeImportDialog(React, api);
 const ExportDialog = makeExportDialog(React, api);
 const PoliciesDialog = makePoliciesDialog(React, api);
 const RolesDialog = makeRolesDialog(React, api);
+const SmartListsDialog = makeSmartListsDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
@@ -99,6 +101,7 @@ function DialogSlot(props) {
   if (props?.exportSelection) return React.createElement(ExportDialog, props);
   if (props?.policiesDialog) return React.createElement(PoliciesDialog, props);
   if (props?.rolesDialog) return React.createElement(RolesDialog, props);
+  if (props?.smartLists) return React.createElement(SmartListsDialog, props);
   return React.createElement(ReviewDialog, props);
 }
 
@@ -140,6 +143,7 @@ export const hooks = {
     if (actionId === 'new-project') return newProject(api);
     if (actionId === 'new-group') return newGroup(api);
     if (actionId === 'import-contacts') return importContacts(api);
+    if (actionId === 'smart-lists') return smartLists(api);
     if (actionId === 'check-server') return checkServer(api);
     if (actionId === 'normalisation-rules') return normalisationRules(api);
     if (actionId === 'automation-rules') return automationRules(api);
@@ -189,6 +193,7 @@ async function publish(pluginApi) {
     { id: 'normalisation-rules', label: t('action.rules'), icon: 'wand' },
     { id: 'automation-rules', label: t('action.automation'), icon: 'wand' },
     { id: 'import-contacts', label: t('action.importContacts'), icon: 'upload' },
+    { id: 'smart-lists', label: t('action.smartLists'), icon: 'filter' },
     { id: 'check-server', label: t('action.checkServer'), icon: 'cloud' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
