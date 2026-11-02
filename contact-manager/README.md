@@ -1717,8 +1717,10 @@ plan without changing anything; `--no-release` stops after the merge.
 
 There is **no local todo file**. The roadmap lives in GitHub:
 
-* [Milestones](https://github.com/zyntrax/bulwark-plugins/milestones) — one per
-  planned release.
+* [Milestones](https://github.com/zyntrax/bulwark-plugins/milestones) — group the
+  feature issues. Their titles (`v1.2.0` … `v2.0.0`) are the **originally planned
+  releases**, not the current release train; read them as phases and read each
+  milestone's description for what has shipped and what remains.
 * [Issues labelled `roadmap`](https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap)
   — the individual features and tasks.
 * The pinned roadmap issue — the top-level vision linking every milestone.
