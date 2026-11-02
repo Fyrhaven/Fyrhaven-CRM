@@ -11,6 +11,7 @@ import { readUndo, undoLastMerge, clearUndo } from './undo.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { readPolicies, readIgnore } from './book-policies.js';
 import { canManage, canPerform, hasRoles, mostPermissiveRole, readRoles } from './book-roles.js';
+import { managePolicies } from './actions.js';
 import { BATCH_CAP, batchPlan, groupFacets, isOverCap } from './bulk-merge.js';
 
 const FOCUS_COOLDOWN_MS = 5000;
@@ -144,22 +145,10 @@ export function makeManagerPage(React, api) {
     };
 
     const openPolicies = async () => {
-      // Read the books here rather than trusting the last scan: with autoScan
-      // off the page has not scanned, and the dialog would open on "No address
-      // books found." with nothing to configure — on the one page that owns the
-      // policies. A failed read falls back to whatever the last scan saw.
-      let books = bookList;
-      try {
-        books = await loadBooks(api);
-        setBookList(books);
-      } catch {
-        // keep the previous list; the dialog still shows what we know
-      }
-      const result = await api.ui.openDialog({
-        title: t('policies.title'),
-        slot: 'plugin-dialog',
-        extraProps: { policiesDialog: true, books },
-      });
+      // The shared action reads the books itself, so the dialog cannot open on
+      // "No address books found." with autoScan off; this page's last scan is
+      // the fallback.
+      const result = await managePolicies(api, { fallbackBooks: bookList });
       if (result?.saved) void scan();
     };
 
