@@ -7,6 +7,28 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.41.0] — 2026-11-02
+
+### Added
+
+- **A first-run "Getting started" guide (#39, the onboarding half).** A new card
+  at the top of the *Overview* tab walks a first clean-up once: bring your
+  contacts in (import), scan for duplicates (which opens the review dialog),
+  and choose what to scan (the address-book policies). Each step runs the same
+  action the command palette and the menu run, and the guide records that it is
+  done so it does not open again on its own. Reopen it any time from the
+  Overview menu.
+
+### Notes
+
+The guide is a first-run help surface, not a second code path: every button
+calls a shared action in `lib/actions.js`. Opening the policies dialog from the
+guide and the Duplicates page now goes through one `managePolicies` action, so
+the two cannot disagree about which address books it lists. The step is
+remembered in `api.storage` (per account and per browser, like the projects and
+the saved searches); a step whose action fails does not trap the user — the
+guide still advances.
+
 ## [1.40.0] — 2026-11-02
 
 ### Added

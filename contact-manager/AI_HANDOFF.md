@@ -5,8 +5,8 @@
 > `main` and `contact-manager` (identical content on both).
 
 ## Current State
-- **Version**: 1.40.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: per-address-book roles (#23, the *advisory* half) — a *Roles* dialog records who may act on each book as *Viewer* / *Editor* / *Merger* / *Admin*, a strict ladder where each step adds a capability, and the Duplicates and Contacts pages disable the actions the role does not allow; it is stored in `api.storage` like the policies and the dialog says out loud that the host cannot enforce it (per-book permissions and a member list need the server tier, #68); on top of an automation rules engine (#33) — a rule is *when* (a contact is created, changed, or imported), *if* (a search query) and *then* (add tag, remove tag, add to group, propose a merge), built with a dry run, run in priority order, idempotent so a rule that fires on `update` cannot loop, and recorded in the change history; on top of smart lists (#34) — the search box now takes `OR` and parentheses (`(tag:vip OR tag:customer) has:email`), a *Select all N* button turns everything the list shows into the selection so a saved search drives the bulk actions, and a query of only negations finally filters the list (it used to show the whole address book); on top of a GDPR and consent toolkit (#26) — a *Privacy* tab answers a data-subject request: pick a person, export everything held about them (a JSON subject-access export, vCard or CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report; on top of a change history of the plugin's own writes — a *History* tab lists merges, cleanups, rules batches, imports, bulk edits, contact writes and group changes, newest first, with the rollback that is still live, and recording is a by-product of the write path rather than a second code path (#25, the local half, v1.36.0); on top of a normalisation rules engine — a *Rules…* button on the Contacts selection and a palette action open a dialog with seven built-in rules (whitespace, title case, legal suffix, E.164, email case) plus your own find-and-replace rules, in one deterministic order, previewed before anything is written, applied on demand, on import and on edit, and rolled back by the same undo as the cleanup (#20, v1.35.0); on top of contact groups — a *Groups* tab lists the distribution lists as real JSContact cards (`kind: 'group'`), with create, rename, delete, a member search and a duplicates-in-a-list warning, and `isMergeable` keeps a group out of person detection however it is marked (#12, v1.34.0); on top of smarter name matching — scripts are romanised, both honest German spellings are keyed, a curated nickname table pairs Bob/Robert, and initials, phonetic surnames and near-miss given names are found pairwise with the given name corroborating, so John Smith never meets Jane Smith (#8, v1.33.0); on top of bulk merge by company or domain — the Duplicates page reads facets off the groups (*Acme Inc. · 2 groups*, *@example.org · 3 groups*, *All N groups*), selects every group a facet touches, previews the batch and merges it in one dialog, capped at 50 groups (#6, v1.32.0); on top of a duplicate digest on the Overview page — when the plugin opens it compares the last scan and the current groups against what you have been shown and says so when the scan is stale or groups appeared since (#5, re-scoped: there is no timer hook, v1.31.0); on top of a decision per duplicate during import — each contact in the file that matches one you already have gets its own *Skip* / *Merge into the existing* / *Import as a separate contact* choice, with a batch default, and a merge is queued for the one review dialog rather than performed by the wizard (#4, v1.30.0); on top of ignore rules by field — the third ignore rule, ignored companies, matched on part of the organisation name (#7, v1.29.0); on top of protected fields per address book — a book can freeze the fields a merge never changes, the kept contact's books decide by union, and the review dialog names what it is holding back (#7, v1.28.0); on top of the policies dialog reading the address books when it opens (v1.27.2); on top of the two bugs a green suite hid in the book policies — ignored tags read the keyword *values* instead of the keys and so never matched, and every policy checkbox needed two clicks; plus the *Default*/*On*/*Off* tri-state the strings had always promised, and policies now honoured by the contact-details hint and the save-time warning too (#7, v1.27.1); on top of per-address-book duplicate policies and ignore rules — each book can be excluded or given its own match strategies, and contacts can be ignored by email domain or tag (#7, v1.27.0); on top of multi-select on the Health tab — edit, clean up, review or delete several at once (v1.26.0); on top of the server client and the `http:proxy` permission — *Check the server* asks a user-configured server for its version (#68, first step, v1.25.0); on top of failures worth stopping for using the host’s `ui.alert`, and the page having its own icon (v1.24.2); on top of `not:` as well as `-`, the probe’s calendar format, and exports saved through the host’s `ui.downloadFile` (v1.24.1); on top of search exclusion (v1.24.0) and plainer wording for the untouched-contacts section; before that, v1.23.2 (Meetings were refused because the calendar range carried milliseconds, the probe cried wolf about tasks, exporting shows its file because the sandbox forbids downloads, and the probe reports the host API surface) and v1.23.1 (four reported bugs fixed) — the profile crashed on a JMAP-shaped message sender, exporting downloaded nothing, the contact list did not refresh after an import, and the side pane was too short; on top of retention — the untouched contacts by age bucket, with an export that is written as part of any delete (#21, v1.23.0); on top of exporting the selection or the shown list as vCard or CSV, with the round trip asserted (#19, export half, v1.22.0); on top of importing contacts from CSV or vCard, with column mapping, a preview, duplicate protection and remembered mappings (#19, import half, v1.21.0); on top of the plugin opening on a main page — headline state, a menu of the palette tasks and a row into every section (v1.20.0); on top of a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
+- **Version**: 1.41.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: a first-run *Getting started* guide (#39, the onboarding half) — a card at the top of the Overview tab walks a first clean-up once (import → scan/review → set policies), every step running the same shared action the palette and the menu run, recorded as done in `api.storage` and re-openable from the Overview menu; on top of per-address-book roles (#23, the *advisory* half) — a *Roles* dialog records who may act on each book as *Viewer* / *Editor* / *Merger* / *Admin*, a strict ladder where each step adds a capability, and the Duplicates and Contacts pages disable the actions the role does not allow; it is stored in `api.storage` like the policies and the dialog says out loud that the host cannot enforce it (per-book permissions and a member list need the server tier, #68); on top of an automation rules engine (#33) — a rule is *when* (a contact is created, changed, or imported), *if* (a search query) and *then* (add tag, remove tag, add to group, propose a merge), built with a dry run, run in priority order, idempotent so a rule that fires on `update` cannot loop, and recorded in the change history; on top of smart lists (#34) — the search box now takes `OR` and parentheses (`(tag:vip OR tag:customer) has:email`), a *Select all N* button turns everything the list shows into the selection so a saved search drives the bulk actions, and a query of only negations finally filters the list (it used to show the whole address book); on top of a GDPR and consent toolkit (#26) — a *Privacy* tab answers a data-subject request: pick a person, export everything held about them (a JSON subject-access export, vCard or CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report; on top of a change history of the plugin's own writes — a *History* tab lists merges, cleanups, rules batches, imports, bulk edits, contact writes and group changes, newest first, with the rollback that is still live, and recording is a by-product of the write path rather than a second code path (#25, the local half, v1.36.0); on top of a normalisation rules engine — a *Rules…* button on the Contacts selection and a palette action open a dialog with seven built-in rules (whitespace, title case, legal suffix, E.164, email case) plus your own find-and-replace rules, in one deterministic order, previewed before anything is written, applied on demand, on import and on edit, and rolled back by the same undo as the cleanup (#20, v1.35.0); on top of contact groups — a *Groups* tab lists the distribution lists as real JSContact cards (`kind: 'group'`), with create, rename, delete, a member search and a duplicates-in-a-list warning, and `isMergeable` keeps a group out of person detection however it is marked (#12, v1.34.0); on top of smarter name matching — scripts are romanised, both honest German spellings are keyed, a curated nickname table pairs Bob/Robert, and initials, phonetic surnames and near-miss given names are found pairwise with the given name corroborating, so John Smith never meets Jane Smith (#8, v1.33.0); on top of bulk merge by company or domain — the Duplicates page reads facets off the groups (*Acme Inc. · 2 groups*, *@example.org · 3 groups*, *All N groups*), selects every group a facet touches, previews the batch and merges it in one dialog, capped at 50 groups (#6, v1.32.0); on top of a duplicate digest on the Overview page — when the plugin opens it compares the last scan and the current groups against what you have been shown and says so when the scan is stale or groups appeared since (#5, re-scoped: there is no timer hook, v1.31.0); on top of a decision per duplicate during import — each contact in the file that matches one you already have gets its own *Skip* / *Merge into the existing* / *Import as a separate contact* choice, with a batch default, and a merge is queued for the one review dialog rather than performed by the wizard (#4, v1.30.0); on top of ignore rules by field — the third ignore rule, ignored companies, matched on part of the organisation name (#7, v1.29.0); on top of protected fields per address book — a book can freeze the fields a merge never changes, the kept contact's books decide by union, and the review dialog names what it is holding back (#7, v1.28.0); on top of the policies dialog reading the address books when it opens (v1.27.2); on top of the two bugs a green suite hid in the book policies — ignored tags read the keyword *values* instead of the keys and so never matched, and every policy checkbox needed two clicks; plus the *Default*/*On*/*Off* tri-state the strings had always promised, and policies now honoured by the contact-details hint and the save-time warning too (#7, v1.27.1); on top of per-address-book duplicate policies and ignore rules — each book can be excluded or given its own match strategies, and contacts can be ignored by email domain or tag (#7, v1.27.0); on top of multi-select on the Health tab — edit, clean up, review or delete several at once (v1.26.0); on top of the server client and the `http:proxy` permission — *Check the server* asks a user-configured server for its version (#68, first step, v1.25.0); on top of failures worth stopping for using the host’s `ui.alert`, and the page having its own icon (v1.24.2); on top of `not:` as well as `-`, the probe’s calendar format, and exports saved through the host’s `ui.downloadFile` (v1.24.1); on top of search exclusion (v1.24.0) and plainer wording for the untouched-contacts section; before that, v1.23.2 (Meetings were refused because the calendar range carried milliseconds, the probe cried wolf about tasks, exporting shows its file because the sandbox forbids downloads, and the probe reports the host API surface) and v1.23.1 (four reported bugs fixed) — the profile crashed on a JMAP-shaped message sender, exporting downloaded nothing, the contact list did not refresh after an import, and the side pane was too short; on top of retention — the untouched contacts by age bucket, with an export that is written as part of any delete (#21, v1.23.0); on top of exporting the selection or the shown list as vCard or CSV, with the round trip asserted (#19, export half, v1.22.0); on top of importing contacts from CSV or vCard, with column mapping, a preview, duplicate protection and remembered mappings (#19, import half, v1.21.0); on top of the plugin opening on a main page — headline state, a menu of the palette tasks and a row into every section (v1.20.0); on top of a Health sub-tab — per-contact and per-address-book scores, eleven named rules and one-click fixes (#16, v1.19.0); on top of avatars on the contact list and profile — a contact's own photo, or Gravatar behind a new off-by-default setting (#15, avatar half, v1.18.0); on top of E.164 cleanup of a selection with a preview and an undo, region-aware phone matching and editor warnings (#17, v1.17.0), smart search with operators and saved searches with live counts, the page half of #13 (v1.16.0), bulk edit (tags and address books) and vCard export for a selection, completing #14 (v1.15.0), the capability probe and a precise unavailable notice (v1.14.1), multi-select bulk merge and delete plus the fixed search box (v1.14.0), the plugin-owned two-pane page skeleton (v1.13.2), the two bugs fixed in v1.13.1 (the *Contacts* sub-tab crashed when an optional API was missing, and new/edited projects were never written to storage), project time, expenses, billable totals and JSON export/import (v1.13.0), one app page with sub-tabs (v1.12.0), local projects (v1.11.0), file downloads (v1.10.0), company profiles (v1.9.0), activity tracking (v1.8.0), the Contacts page (v1.7.0), the contact editor (v1.6.0), nickname preservation (v1.5.0), the save-time warning (v1.4.0) and merge undo (v1.3.0)
 - **Released**: `contact-manager-v1.39.0` is the newest GitHub release (v1.38.0,
   v1.37.0,
   v1.36.0,
@@ -40,8 +40,9 @@
   #101, #102, #103, #104, #106, #107, #108, #110, #112, #114, #115, #116, #117,
   #118, #119, #120, #121, #122, #123, #125, #127 and #130 merged). Every stacked PR
   was retargeted to `main`, merged and released **one at a time** — v1.30.0
-  through v1.39.0 each have a tag and a ZIP. **v1.40.0 (#23, the advisory half) is
-  ready in the tree, waiting to be merged through a PR and released.**
+  through v1.39.0 each have a tag and a ZIP. **v1.40.0 (#23, the advisory half) and
+  v1.41.0 (#39, the onboarding half) are ready in the tree, waiting to be merged
+  through a PR and released.**
 - **Test double**: `test-utils/fake-api.mjs` can now declare a host **shape** —
   `fakeApi({ host: { absent: [...], exposes: { email: ['query', 'send'] } } })` —
   so "the method was renamed" and "the namespace is gone" are expressible in a
@@ -57,6 +58,49 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### The Getting started guide: the onboarding half of #39 (v1.41.0) — #39
+
+#39 is broad — scale, virtualised lists, performance budgets — and most of it is
+about the host the plugin runs in. The one piece that is self-contained and
+entirely the plugin's own is the onboarding bullet: *a first-run wizard: import,
+scan, merge, set policies*. That is what ships. The issue's "done when" — *a new
+user can import and clean contacts in under five minutes* — is the goal the
+guide exists for.
+
+**The steps are data, and every action is shared.** `onboarding.js` holds
+`STEPS = ['welcome', 'import', 'scan', 'policies', 'done']` and the pure step
+arithmetic (`nextStep`/`previousStep` clamp at the ends). `onboarding-card.js`
+maps a step to an action, and every action is the same function the command
+palette and the Overview menu run — `importContacts`, `findDuplicates`,
+`managePolicies`. So the guide cannot describe a different change from the one a
+task would make; it is a surface over the actions, not a second copy of them.
+
+**It records that it is done, and re-opens on demand.** The state is a single
+`{ done, at }` record in `api.storage` (per account and per browser, like the
+projects). `normalizeOnboarding` trusts only `done === true`; `readOnboarding`
+repairs junk on read and removes a not-done record; `completeOnboarding` writes
+the flag and `resetOnboarding` forgets it. The Overview menu's *Getting started*
+button re-opens the card through a **local** page flag, so re-opening never
+rewrites what was stored.
+
+**A failing step never traps the user.** Each action is awaited in a
+`try/finally`; a step that throws (a refused dialog, a failed read) still
+advances, because the action already reported its own failure and the guide is a
+help surface, not a gate.
+
+**One place opens the policies dialog.** `managePolicies(api, { fallbackBooks })`
+in `actions.js` reads the address books itself, so the guide and the Duplicates
+page cannot disagree about which books the dialog lists; the Duplicates page
+passes its last scan as the fallback for when the read fails. The Duplicates
+page's `openPolicies` was refactored onto it — the one behaviour change in a
+tested file.
+
+Tests: 985 passing (was 957) — 15 for the model (the order, the clamps, the
+storage repairs, complete/reset), 9 for the card (each step's action opens the
+right dialog, the walk forward and back, Finish and Skip, the change signal, and
+a throwing step still advancing) and 4 on the Home page (shown on first run,
+hidden once finished, re-opened from the menu, hidden on skip).
 
 ### Per-address-book roles: the advisory half of #23 (v1.40.0) — #23
 
@@ -1468,6 +1512,8 @@ contact-manager/
 │       ├── history.js     # the change history of the plugin's own writes (#25, v1.36.0)
 │       ├── book-roles.js  # per-address-book roles: ladder, store, reading (#23, v1.40.0)
 │       ├── roles-dialog.js # the address-book roles dialog (#23, v1.40.0)
+│       ├── onboarding.js  # the Getting started guide: steps and store (#39, v1.41.0)
+│       ├── onboarding-card.js # the Getting started card on the Overview tab (#39, v1.41.0)
 │       ├── review-dialog.js # the review/merge dialog
 │       ├── detail-section.js# the duplicate hint in contact details
 │       ├── preview.js     # display shaping for the dialog
@@ -1482,6 +1528,8 @@ contact-manager/
 │   ├── ui-page.test.mjs   # the manager page
 │   ├── book-roles.test.mjs # the role ladder, the store, the role that applies (#23, v1.40.0)
 │   ├── ui-roles.test.mjs  # the roles dialog (#23, v1.40.0)
+│   ├── onboarding.test.mjs # the guide's step order and storage (#39, v1.41.0)
+│   ├── ui-onboarding.test.mjs # the Getting started card (#39, v1.41.0)
 │   ├── ui-dialog.test.mjs # the review dialog and detail section
 │   ├── undo.test.mjs      # undo records: retention, restore, partial failures
 │   ├── watch.test.mjs     # save-time duplicate warning
@@ -1552,7 +1600,8 @@ duplicate during import (#4, the per-group half), v1.31.0 the duplicate digest
 v1.36.0 the change history (#25, the local half), v1.37.0 the GDPR and consent
 toolkit (#26, the local half), v1.38.0 smart lists — `OR`/grouping in the search
 box and a saved search as a bulk scope (#34) — v1.39.0 the automation rules
-engine (#33) and v1.40.0 per-address-book roles (#23, the advisory half).
+engine (#33), v1.40.0 per-address-book roles (#23, the advisory half) and v1.41.0
+the first-run Getting started guide (#39, the onboarding half).
 
 **Next: the v1.5.0 local halves, three done.** v1.5.0 was #22 (companies, v1.9.0),
 #23 (shared books and roles — the *advisory* UI shipped in v1.40.0; enforced
@@ -1560,15 +1609,16 @@ permissions and a member list need #68), #24 (a shared review queue — needs #6
 #25 (the change history — the local half shipped in v1.36.0; a *shared* log needs
 #68), #26 (consent records plus anonymise — the local half shipped in v1.37.0; a
 *shared* consent store needs #68) and #27 (field-level masking). #34's AND/OR
-composition shipped in v1.38.0, #33's engine in v1.39.0 and #23's advisory half in
-v1.40.0, so the next buildable item is **#39** (scale) or **#13**'s palette half;
-#24, #27, #26's shared half and #23's enforced half need the server tier. v1.4.0
-is complete except **#18**, which needs message bodies — `api.email` is optional
-and its shape is what #75 waits on. The one open *bug*, #75, still waits on a line
-of console output from a live install.
+composition shipped in v1.38.0, #33's engine in v1.39.0, #23's advisory half in
+v1.40.0 and #39's onboarding half in v1.41.0, so the next buildable item is
+**#39**'s scale half (pagination, virtualised lists, performance budgets) or
+**#13**'s palette half; #24, #27, #26's shared half and #23's enforced half need
+the server tier. v1.4.0 is complete except **#18**, which needs message bodies —
+`api.email` is optional and its shape is what #75 waits on. The one open *bug*,
+#75, still waits on a line of console output from a live install.
 
-> **v1.40.0 (#23, the advisory half) shipped** — the per-address-book roles dialog
-> and the page gating. The next work is **#39** (scale) or **#13**'s palette half.
+> **v1.41.0 (#39, the onboarding half) shipped** — the first-run Getting started
+> guide. The next work is **#39**'s scale half or **#13**'s palette half.
 
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in
