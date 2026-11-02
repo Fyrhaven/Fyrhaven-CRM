@@ -66,6 +66,7 @@ signatures, the last scan summary).
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
+| *Follow up* button | Contact Manager → *Contacts*, on the open contact | Opens the **follow-up task** editor (#36): title (prefilled), due date, priority and notes, created as a real host task. The profile's task list shows the contact's tasks with anything past due badged *Overdue*, first |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
@@ -174,6 +175,9 @@ contact-manager/
 │       ├── smart-lists-dialog.js # the Smart lists dialog (plugin-dialog slot, #13)
 │       ├── help.js        # the help model: operators, examples, shortcuts, what's new (#39)
 │       ├── help-dialog.js # the Help dialog (plugin-dialog slot, #39)
+│       ├── tasks.js       # follow-up tasks: the payload, the due date, the overdue split (#36)
+│       ├── task-dialog.js # the follow-up task editor (plugin-dialog slot, #36)
+│       ├── open-task.js   # one place that opens the task editor and creates the task (#36)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -194,6 +198,8 @@ contact-manager/
 │   ├── ui-smart-lists.test.mjs # the Smart lists dialog (#13)
 │   ├── help.test.mjs       # the help model: the cheatsheet can't drift (#39)
 │   ├── ui-help.test.mjs    # the Help dialog (#39)
+│   ├── tasks.test.mjs      # the follow-up payload, due dates and the overdue split (#36)
+│   ├── ui-task.test.mjs    # the follow-up task editor (#36)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -1173,6 +1179,42 @@ translation keys and the test pins that the versions descend and every note
 exists in both locales. Prepend an entry when a release has something a user
 would want to read.
 
+### 6.20 Follow-up tasks per contact (`src/lib/tasks.js`, `task-dialog.js`, `open-task.js`, v1.45.0) — #36
+
+The task-creation half of #36. A *Follow up* button on the open contact opens
+`task-dialog.js`; `open-task.js` creates the task through `api.tasks.create` and
+the profile's task list reloads.
+
+**A follow-up *is* a host task, not a record the plugin keeps.** So it shows in
+the webmail's own task list, survives a reload and is searchable there — nothing
+is cached in `api.storage`. The plugin already creates host tasks for project
+milestones, so this is the proven path rather than a new one.
+
+**The host task has no contact field, so the contact rides in the description** —
+its email first, because `tasksForContact` matches a task by the words in its
+title and description (`test/ui-profile` drives the whole funnel and asserts the
+created payload). For the same reason the **priority is carried at the end of the
+title** (`· High`): the known task shape is `{ title, description, due }`, there
+is no priority field to set, and the title is the one part every task list shows.
+The milestone draft's rule is kept for the due date — it is omitted, never `''`,
+so the host keeps "no due date" and "due today" apart.
+
+**Overdue is computed locally and conservatively.** `isOverdue` compares the due
+date against **today in the user's own time zone** (`todayIso`, never UTC, which
+can be a day off), and a task with no due date is never overdue.
+`taskBuckets` splits a contact's tasks into the overdue ones and the rest, each in
+due-date order with undated tasks last, and the profile badges the overdue ones
+and lists them first. The tasks themselves come from `api.tasks.list` through
+`optionalCall`, so a host without tasks simply shows the existing "unavailable"
+note.
+
+**A failing create is reported, never toasted as a success.** The `api.tasks`
+access happens *inside* the `try`, so a host with no tasks namespace fails there
+rather than at the call site.
+
+Still to come from #36: a cross-contact *My tasks* view with overdue/upcoming
+filters, and reminders — which need a timer hook the plugin does not have.
+
 ---
 
 ## 7. Build, test and package
@@ -1510,6 +1552,21 @@ Help (#39)
   WHATS_NEW is newest first; each note is a key present in en AND de
   / is ignored while a field has focus; Esc clears only when the search box has
     it, so a dialog's own Esc still reaches the host
+
+Follow-up tasks (#36)
+  a follow-up IS a host task: api.tasks.create({ title, description, due? }) —
+    nothing cached in api.storage, so it survives a reload and is searchable
+  followUpDraft omits `due` when it is not a real date (never ''), so the host
+    keeps "no due date" and "due today" apart
+  the contact rides in the description (its email first) because the host task
+    has no contact field and tasksForContact matches on title/description
+  the priority rides at the END OF THE TITLE (`· High`): no host priority field
+  isDate accepts only `YYYY-MM-DD`; todayIso is LOCAL, never UTC
+  isOverdue: a due date before today, in local time; no due date is never overdue
+  taskBuckets(tasks, now) -> { overdue, rest }, each in due-date order, undated last
+  openFollowUpTask(api, card) opens the editor and creates the task; a failure is
+    reported (api.tasks is reached INSIDE the try, so an absent namespace is caught)
+  the profile badges overdue tasks and lists them first
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)

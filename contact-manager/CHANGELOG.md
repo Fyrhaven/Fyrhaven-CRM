@@ -7,6 +7,30 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.45.0] — 2026-11-02
+
+### Added
+
+- **Follow-up tasks per contact (#36, the task-creation half).** A *Follow up*
+  button on a contact's profile opens a small editor — title (prefilled), due
+  date, priority and notes — and creates the task through `api.tasks.create`. A
+  follow-up *is* a real host task, so it shows in the webmail, survives a reload
+  and is searchable there.
+- **Overdue tasks are flagged on the profile.** The contact's open tasks are now
+  sorted by due date with anything past its due date badged *Overdue* and listed
+  first.
+
+### Notes
+
+The host task has no field this plugin can point at a contact, so the contact
+rides in the description — its email first, because `tasksForContact` matches a
+task by the words in its title and description. For the same reason the
+**priority is carried at the end of the title** (`· High`), where every task list
+shows it; there is no host priority field to set. Still to come from #36: a
+cross-contact *My tasks* view with overdue/upcoming filters (it must degrade
+cleanly on a host whose `api.tasks` is absent or shaped differently — the #75
+lesson) and reminders, which need a timer hook the plugin does not have.
+
 ## [1.44.0] — 2026-11-02
 
 ### Added
