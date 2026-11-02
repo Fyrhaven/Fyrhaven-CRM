@@ -7,6 +7,41 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.37.0] — 2026-11-02
+
+### Added
+
+- **A GDPR and consent toolkit (#26).** A new *Privacy* tab answers a
+  data-subject request: pick a person, see what personal data the address book
+  holds about them, export it all as JSON (the subject-access export, with the
+  consent records and this plugin's own changes for that person), vCard or CSV,
+  and erase or anonymise them.
+
+- **Consent records, per contact and source, with an expiry.** Each record
+  carries one of the six lawful bases of GDPR Art. 6, the date it was granted
+  and an optional expiry. A record within 30 days of its expiry is shown as
+  *expiring*, and an expired one as *expired*. The records live in
+  `api.storage` — per account and per browser, like the projects and the history
+  — because the host has no consent field and inventing one would put data the
+  user did not type into their address book.
+
+- **Erase or anonymise, with confirmation, and a proof-of-deletion report.**
+  *Erase* deletes the contact through the same delete path everything else uses
+  (so it leaves an undo record), drops its consent records and writes a
+  proof-of-deletion entry. *Anonymise* overwrites every personal field, keeps
+  the card as an empty tombstone so nothing that pointed at it dangles, and
+  records the same entry. The deletion log records the contact id, the method
+  and the fields cleared — never the name, which the erasure removed — and
+  exports as a CSV report.
+
+### Notes
+
+Consent changes are audited: every save or removal writes a `consent` entry to
+the change history, tied to the subject it was about, and an erasure or
+anonymisation writes an `erase`/`anonymise` entry. An anonymised tombstone is
+kept out of duplicate detection by `isMergeable`, the same single gate that
+keeps a group out, so a tombstone is never offered as a duplicate of a person.
+
 ## [1.36.0] — 2026-10-30
 
 ### Added
