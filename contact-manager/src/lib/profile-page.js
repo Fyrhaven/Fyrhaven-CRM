@@ -26,7 +26,7 @@ import { groupFromSelection } from './duplicates.js';
 import { toastMergeResult } from './labels.js';
 import { applyBulkEdit, deleteContacts } from './bulk.js';
 import { contactsToFile } from './export.js';
-import { buildIndex, countsForIndex, matchIndexed, parseQuery } from './search.js';
+import { buildIndex, countsForIndex, isBlankQuery, matchIndexed, parseQuery } from './search.js';
 import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
 import { applyRulesResult, openRules } from './open-rules.js';
@@ -90,9 +90,9 @@ export function makeProfilePage(React, api) {
     const searchIndex = useMemo(() => buildIndex(cards, { books }), [cards, books]);
     const parsed = useMemo(() => parseQuery(query), [query]);
     const visible = useMemo(
-      () => (parsed.terms.length || parsed.filters.length
-        ? searchIndex.filter((entry) => matchIndexed(entry, parsed)).map((entry) => entry.card)
-        : cards),
+      () => (isBlankQuery(parsed)
+        ? cards
+        : searchIndex.filter((entry) => matchIndexed(entry, parsed)).map((entry) => entry.card)),
       [searchIndex, parsed, cards],
     );
     const chipCounts = useMemo(
@@ -190,6 +190,11 @@ export function makeProfilePage(React, api) {
       else next.delete(id);
       return next;
     });
+
+    // A saved search (or any query) used as a bulk scope (#34): everything the
+    // list shows becomes the selection, so the actions above apply to the whole
+    // set rather than to hand-picked rows.
+    const selectShown = () => setPicked(new Set(visible.map((card) => card.id)));
 
     // A hand-picked selection carries no evidence, so it becomes a group marked
     // 'manual' and goes through the same review dialog as a duplicate group:
@@ -471,6 +476,14 @@ export function makeProfilePage(React, api) {
                 onChange: setQuery,
               }),
               searchNote(),
+              visible.length
+                ? h('div', { 'data-pane': 'select-all', style: ACTION_BAR },
+                    h(Button, {
+                      size: 'sm',
+                      variant: 'secondary',
+                      onClick: () => selectShown(),
+                    }, t('contacts.selectAll', { count: visible.length })))
+                : null,
               savedRow(),
               cleanup ? h('div', { 'data-pane': 'cleanup', style: ACTION_BAR },
                 h(Text, { tone: 'muted' }, t('cleanup.available')),

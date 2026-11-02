@@ -64,7 +64,7 @@ signatures, the last scan summary).
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language (the box stays put while the list scrolls), saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
 | Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
@@ -719,10 +719,18 @@ The *Contacts* sub-tab is the CRM record view: a searchable
 contact list on the left, the 360° profile of the selected contact on the
 right.
 
-* **List** — every contact, filtered by `filterCards` (name, nicknames, email
-  addresses and phone numbers, case-insensitive `contains`). The profile of
-  the open contact stays visible while the list is filtered, the way a mail
-  client keeps the open message.
+* **List** — every contact, filtered by the search query (`search.js`). The
+  profile of the open contact stays visible while the list is filtered, the way
+  a mail client keeps the open message.
+* **Query language** — `name:` `email:` `phone:` `company:` `note:` `tag:`
+  `book:` `has:` `is:`, a leading `-` (or `not:`) to exclude, and `OR` with
+  parentheses to group (`(tag:vip OR tag:customer) has:email`). Adjacent terms
+  are AND and `OR` binds looser. An unbalanced parenthesis or a dangling `OR` is
+  reported under the box, and the rest of the query is still parsed.
+* **Saved searches** — a named query with a live count, kept in `api.storage`.
+* **Bulk scope** — *Select all N* turns everything the list shows into the
+  selection, so a saved search (or any query) drives the bulk actions below,
+  not just hand-picked rows.
 * **Profile** — name, organisation · job title, tags, email addresses (the
   preferred one tinted), phones, nickname, address, notes, and the duplicate
   block from `contact-detail-section` (same component, same *Review* action).
@@ -957,7 +965,7 @@ npm run package    # build + scripts/package.mjs -> contact-manager.zip
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
-| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **866 tests in 58 files** |
+| `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **878 tests in 58 files** |
 | `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
@@ -991,7 +999,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/bulk.test.mjs` | `applyBulkEdit` / `applyTags` / `applyBooks`: complete map patches, the company marker, a card that would be in no book, one write per contact; and `deleteContacts` with its undo batch |
 | `test/ui-bulk.test.mjs` | The bulk editor dialog: what it collects for tags and books, cancel, and an account with no books |
 | `test/vcard.test.mjs` | The vCard writer: one block per contact, CRLF, the importable fields, RFC 2426 escaping, structured N/ADR |
-| `test/search.test.mjs` | `parseQuery` (operators, unknown fields, values), matching per field, the fuzzy floor, and 10k contacts inside the 100 ms budget |
+| `test/search.test.mjs` | `parseQuery` (operators, unknown fields, values, `OR`/grouping, the ast only when needed, unbalanced parentheses and a dangling `OR`), matching per field, the fuzzy floor, and 10k contacts inside the 100 ms budget |
 | `test/saved-searches.test.mjs` | The saved-search store: names, replacement, the cap, and the repairs it makes on the way in |
 | `test/phones.test.mjs` | `toE164` across international and national formats, the refusals (no country, ambiguous, not a number), the length bounds, and `phoneKey` agreeing across spellings |
 | `test/emails.test.mjs` | Email syntax, role addresses and throwaway domains, and that a role address is a warning rather than a rejection |
@@ -1273,12 +1281,16 @@ vCard export
   a contact with neither a name nor any field is left out
 
 Smart search
-  parseQuery(text) -> { terms, filters, errors }
+  parseQuery(text) -> { terms, notTerms, filters, notFilters, errors }
     errors name the token and the reason; the token is also kept as a term
+    OR and parentheses add an `ast` (only then); matchIndexed evaluates it
+  isBlankQuery(parsed) is the one "is there a query?" rule, so a query of only
+    negations filters the list instead of showing everything
   buildIndex(cards, { books }) derives the searchable strings once;
     matchIndexed(entry, parsed) and countsForIndex(index, queries) reuse it
   fields: name email phone company note tag book has is
-  every term must match; tag: is whole, book: takes a name or an id
+  adjacent terms are AND; OR binds looser; ( ) groups; OR is case-insensitive
+  tag: is whole, book: takes a name or an id
   a name also matches as a subsequence from three characters up
   10k contacts stay inside 100 ms
 
