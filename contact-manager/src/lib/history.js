@@ -20,7 +20,7 @@ const MAX_DETAIL = 120;
 export const HISTORY_KINDS = [
   'merge', 'cleanup', 'rules', 'import', 'bulk',
   'create', 'update', 'delete', 'group',
-  'consent', 'anonymise', 'erase',
+  'consent', 'anonymise', 'erase', 'automation',
 ];
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');

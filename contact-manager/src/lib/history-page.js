@@ -26,6 +26,10 @@ const KIND_LABEL = {
   update: 'history.kind.update',
   delete: 'history.kind.delete',
   group: 'history.kind.group',
+  consent: 'history.kind.consent',
+  anonymise: 'history.kind.anonymise',
+  erase: 'history.kind.erase',
+  automation: 'history.kind.automation',
 };
 
 /** The newest rollback that is still live, whichever task left it. */
