@@ -867,3 +867,64 @@ describe('contacts page: keyboard shortcuts', () => {
     expect(search().value).toBe('grace');
   });
 });
+
+// ── Follow-up tasks (#36) ───────────────────────────────────────
+//
+// The editor is a draft; open-task.js writes it. These drive the whole funnel:
+// the button, the dialog's answer, the host write and the reload.
+
+describe('contacts page: follow-up tasks', () => {
+  it('creates a follow-up task for the open contact and reloads its tasks', async () => {
+    const draft = { title: 'Follow up with Ada Lovelace', description: 'ada@example.org' };
+    const api = profileApi({
+      'tasks.create': async () => ({ id: 't-new' }),
+      'ui.openDialog': async () => ({ draft }),
+    });
+    await renderPage(api);
+    await waitFor(() => expect(api.calls('tasks.list')).toHaveLength(1));
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Follow up' })); });
+
+    await waitFor(() => expect(api.calls('tasks.create')).toHaveLength(1));
+    expect(api.calls('tasks.create')[0].args[0]).toEqual(draft);
+    // the editor was opened for the contact that is on screen
+    expect(api.calls('ui.openDialog')[0].args[0].extraProps.taskEditor.contact.id).toBe('a');
+    expect(api.calls('toast.success').at(-1).args[0]).toBe('Task created: Follow up with Ada Lovelace');
+    // and the open contact's task list reloads, so the new task is shown
+    await waitFor(() => expect(api.calls('tasks.list')).toHaveLength(2));
+  });
+
+  it('reports a task the host refused instead of claiming success', async () => {
+    const api = profileApi({
+      'tasks.create': async () => { throw new Error('refused'); },
+      'ui.openDialog': async () => ({ draft: { title: 'Follow up' } }),
+    });
+    await renderPage(api);
+    await waitFor(() => expect(api.calls('tasks.list')).toHaveLength(1));
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Follow up' })); });
+
+    await waitFor(() => expect(api.calls('ui.alert')).toHaveLength(1));
+    expect(api.calls('toast.success')).toHaveLength(0);
+    // nothing was created, so the task list is not reloaded
+    expect(api.calls('tasks.list')).toHaveLength(1);
+  });
+
+  it('marks an overdue task, and lists it before the others', async () => {
+    const api = profileApi({
+      'tasks.list': async () => [
+        { id: 't9', title: 'Later with Ada Lovelace', due: '2999-01-01' },
+        { id: 't8', title: 'Past with Ada Lovelace', due: '2000-01-01' },
+      ],
+    });
+    await renderPage(api);
+
+    await waitFor(() => expect(screen.getByText('Overdue')).toBeTruthy());
+    // only the past-due one is badged
+    expect(screen.getAllByText('Overdue')).toHaveLength(1);
+
+    const late = screen.getByText('Past with Ada Lovelace');
+    const later = screen.getByText('Later with Ada Lovelace');
+    expect(late.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

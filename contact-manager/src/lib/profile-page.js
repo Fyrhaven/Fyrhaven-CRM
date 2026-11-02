@@ -16,6 +16,8 @@ import {
   calendarRange, formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
 } from './profile.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
+import { openFollowUpTask } from './open-task.js';
+import { taskBuckets } from './tasks.js';
 import { saveFile } from './download.js';
 import { reportError } from './report.js';
 import { optionalCall } from './optional.js';
@@ -54,6 +56,9 @@ export function makeProfilePage(React, api) {
     // A handle on the list pane, so the `/` shortcut can reach its search box
     // (#39) without adding a wrapper element to the pane skeleton.
     const listPane = useRef(null);
+    // Bumped after a follow-up task is created, so the open contact's task list
+    // reloads — the context effect is keyed on the contact, not on its tasks.
+    const [taskTick, setTaskTick] = useState(0);
 
     const load = useCallback(async () => {
       setStatus('loading');
@@ -189,7 +194,14 @@ export function makeProfilePage(React, api) {
       });
       return () => { live = false; };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selected?.id, cards]);
+    }, [selected?.id, cards, taskTick]);
+
+    // Create a follow-up task for the open contact, then reload its task list.
+    const followUp = async () => {
+      if (!selected) return;
+      const created = await openFollowUpTask(api, selected);
+      if (created) setTaskTick((tick) => tick + 1);
+    };
 
     const edit = async () => {
       if (!selected) return;
@@ -204,6 +216,17 @@ export function makeProfilePage(React, api) {
 
     const bookLabel = (card) => Object.keys(card.addressBookIds ?? {})
       .map((id) => books.get(id)).filter(Boolean).join(', ');
+
+    // The open contact's tasks, overdue first (#36): a task whose due date has
+    // passed is badged, so it is visible without opening the task itself.
+    const taskRows = () => {
+      const { overdue, rest } = taskBuckets(context.tasks);
+      return [...overdue.map((task) => [task, true]), ...rest.map((task) => [task, false])]
+        .map(([task, late]) => h(Row, { key: task.id, gap: 2, wrap: true },
+          h(Text, null, task.title),
+          late ? h(Badge, { tone: 'danger' }, t('profile.taskOverdue')) : null,
+          task.due ? h(Text, { tone: 'muted' }, formatDate(task.due, api.i18n.getLocale())) : null));
+    };
 
     const createCompany = async () => {
       toastEditorResult(api, await openEditor(api, { mode: 'create', company: true }));
@@ -602,7 +625,8 @@ export function makeProfilePage(React, api) {
                       addressLine(selected) ? h(Text, { tone: 'muted' }, addressLine(selected)) : null,
                       notesLine(selected) ? h(Text, null, notesLine(selected)) : null,
                       h(Row, { gap: 2 },
-                        h(Button, { size: 'sm', icon: 'edit', disabled: !canPerform([selected], 'edit', roles), onClick: () => void edit() }, t('detail.edit'))))),
+                        h(Button, { size: 'sm', icon: 'edit', disabled: !canPerform([selected], 'edit', roles), onClick: () => void edit() }, t('detail.edit')),
+                        h(Button, { size: 'sm', variant: 'secondary', icon: 'plus', onClick: () => void followUp() }, t('profile.followUp'))))),
                   company ? peopleSection() : null,
                   company ? null : h(Duplicates, { contact: selected }),
                   h(Section, { title: t('profile.meetings') },
@@ -638,9 +662,7 @@ export function makeProfilePage(React, api) {
                     context.status === 'ready' && !context.tasks.length
                       ? h(Text, { tone: 'muted' }, t('profile.noTasks'))
                       : null,
-                    ...context.tasks.map((task) => h(Row, { key: task.id, gap: 2, wrap: true },
-                      h(Text, null, task.title),
-                      task.due ? h(Text, { tone: 'muted' }, formatDate(task.due, api.i18n.getLocale())) : null))),
+                    ...taskRows()),
                   context.degraded.length
                     ? h(Text, { tone: 'muted' }, t('profile.degraded', {
                         parts: context.degraded.map((part) => t(`profile.degraded.${part}`)).join(', '),
