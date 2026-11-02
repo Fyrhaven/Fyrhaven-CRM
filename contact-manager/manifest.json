@@ -1,7 +1,7 @@
 {
   "id": "contact-manager",
   "name": "Contact Manager",
-  "version": "1.39.0",
+  "version": "1.40.0",
   "author": "Alexander",
   "description": "Find, review and merge duplicate contacts across your address books, with a Contact Manager page, a command palette scan, duplicate hints in contact details and a GDPR toolkit for subject-access exports, consent records and erasure.",
   "type": "ui-extension",

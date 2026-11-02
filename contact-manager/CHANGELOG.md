@@ -7,6 +7,34 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.40.0] — 2026-11-02
+
+### Added
+
+- **Per-address-book roles (#23, the advisory half).** A new *Roles* dialog
+  (the *Roles…* button on the Duplicates page) records who may act on each
+  address book: **viewer**, **editor**, **merger** or **admin**. The four form a
+  strict ladder — a viewer may only look; an editor may create and edit; a merger
+  may also merge duplicates and delete; an admin may also change the roles and
+  the duplicate policies. The pages reflect the role by disabling the actions it
+  does not allow, so a viewer cannot merge, edit or delete.
+
+### Notes
+
+The host grants the plugin write access once at install, all-or-nothing, and has
+no per-book permission and no shared member list, so a role cannot be *enforced*.
+It is a convention a team agrees on, stored in `api.storage` (per account and per
+browser, like the policies), and the dialog says so out loud. The enforced half —
+and ownership transfer and safe removal of a member's access — needs the server
+tier (#68). An install that never opens the dialog behaves exactly as before: a
+book with no role, and a contact in no book at all, grants **admin**.
+
+The role that applies is the **weakest** across every book a contact lives in, so
+a contact that lives in a book where the user is only a viewer stays read-only
+even if another book would allow more. A global action (creating a contact,
+opening the roles or policies dialog) uses the **most** permissive configured
+role, so it is available if any book allows it.
+
 ## [1.39.0] — 2026-11-02
 
 ### Added

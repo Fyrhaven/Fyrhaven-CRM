@@ -52,6 +52,7 @@ signatures, the last scan summary).
 |---|---|---|
 | `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* |
 | *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
+| *Roles* button | Contact Manager → *Duplicates* header | Opens the **address-book roles** dialog (#23): the role held on each book — *Viewer* / *Editor* / *Merger* / *Admin* — which disables the actions it does not allow. Advisory only; the host is not enforcing it |
 | Command palette action | Ctrl+K → *Find duplicate contacts* | Scans everything, opens the review dialog |
 | Contact list action | Contact list toolbar → *Find duplicates in selection* | Scans only the selected contacts |
 | Command palette action | Ctrl+K → *Undo the last merge* | Restores the newest undo record while it is live |
@@ -74,7 +75,7 @@ signatures, the last scan summary).
 | Command palette action / *Automation rules* button | Ctrl+K → *Automation rules*, or the Overview menu | Opens the **automation rules** builder (#33): rules that run on a contact being created, changed or imported, with a condition (a search query) and actions (add/remove tag, add to a group, propose a merge), a priority order, an enable/disable toggle and a *Test* dry run |
 | *History* sub-tab | Contact Manager → *History* | What this plugin wrote — merges, cleanups, rules, imports, bulk edits, creates/updates/deletes and group changes — newest first, with the rollback that is still live (#25, the local half) |
 | *Privacy* sub-tab | Contact Manager → *Privacy* | The GDPR toolkit (#26): pick a person, export everything held about them (JSON subject-access export, vCard, CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report |
-| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…*, *Automation rules* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **automation editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice** and the **policies** dialog |
+| `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…*, *Automation rules* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **automation editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice**, the **policies** dialog and the **roles** dialog |
 
 All four entry points open the same review dialog. One place decides what is
 kept and what is deleted.
@@ -132,6 +133,8 @@ contact-manager/
 │       ├── manager-page.js # the Duplicates sub-tab
 │       ├── bulk-merge.js  # facets (company/domain) and the batch plan (#6)
 │       ├── policies-dialog.js # the address-book policies dialog (#7)
+│       ├── book-roles.js  # per-address-book roles: the ladder, the store, the reading (#23)
+│       ├── roles-dialog.js # the address-book roles dialog (#23)
 │       ├── review-dialog.js# the review/merge dialog (plugin-dialog slot)
 │       ├── detail-section.js# the duplicate hint in contact details
 │       ├── preview.js      # display shaping for the dialog (kept/added/changed/conflicts)
@@ -168,10 +171,12 @@ contact-manager/
 │   ├── contacts.test.mjs   # readers, name/email/phone extraction
 │   ├── duplicates.test.mjs # normalisation, keys, grouping
 │   ├── book-policies.test.mjs # policy resolution, ignore rules, storage repairs
+│   ├── book-roles.test.mjs # the role ladder, the store, the role that applies (#23)
 │   ├── merge.test.mjs      # merge planning, conflict choices and the merge run
 │   ├── preview.test.mjs    # complete details, added/changed values, conflicts, counts
 │   ├── ui-page.test.mjs    # the manager page
 │   ├── ui-policies.test.mjs # the policies dialog
+│   ├── ui-roles.test.mjs   # the roles dialog (#23)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -996,6 +1001,55 @@ rules and the address books once, and `importContacts` calls it over the cards
 the wizard created, before any merge is reviewed — the import is the one event
 the plugin owns.
 
+### 6.15 Per-address-book roles (`src/lib/book-roles.js`, `roles-dialog.js`, v1.40.0) — #23
+
+`src/lib/book-roles.js` is the model and `src/lib/roles-dialog.js` the dialog
+behind the *Roles…* button on the Duplicates page. A role is stored in
+`api.storage` (per account and per browser, like the policies) and repaired on
+read; an install that never opens the dialog behaves exactly as before.
+
+**The four roles are a strict ladder**, each step adding a capability and never
+taking one away:
+
+| Role | May |
+|---|---|
+| *Viewer* | view only |
+| *Editor* | also create and edit contacts, groups, projects, import, normalise |
+| *Merger* | also merge duplicates, undo a merge and delete contacts |
+| *Admin* | also change the roles and the duplicate policies |
+
+`roleAllows(role, capability)` is the one place that reads the table, and
+`ROLE_CAPABILITIES` is the table, so the pages and the tests cannot disagree
+about what a role may do.
+
+**It is advisory, and the dialog says so.** The host grants the plugin write
+access once at install, all-or-nothing; it has no per-book permission and no
+shared member list. So a role cannot be enforced — the pages read it and
+**disable** the actions it does not allow, and the dialog states plainly that the
+webmail is not enforcing it. Enforced permissions, ownership transfer and safe
+removal of a member's access need the server tier (#68).
+
+**A contact's role is the weakest across every book it lives in.**
+`roleForCard(card, roles)` folds the roles of the card's books with
+`weakestRole`, so a contact in a book where the user is only a viewer stays
+read-only even if another book would allow more. It is the opposite direction to
+the match strategies in `book-policies.js` (which take the most permissive
+reading, so a book that opts out never silences another): a limit on what the
+user may do is the safe direction *inwards*. A card in **no** book — and a book
+with no stored role — grants `admin`, the default.
+
+**A global action uses the most permissive configured role.** Creating a contact
+or opening the roles or policies dialog is not tied to one contact, so
+`mostPermissiveRole(roles)` decides it: the action is available if any book
+allows it. `canPerform(cards, capability, roles)` and `canManage(capability,
+roles)` are the two calls the pages make.
+
+The role gates the Duplicates page (*Review…*, the batch merge, *New contact*,
+*Policies*, *Roles*, *Undo merge*) and the Contacts page (*New contact*, *New
+company*, the per-contact *Edit*, and the selection's *Merge selected* / *Edit
+selected* / *Clean up* / *Rules…* / *Delete selected*). Each page shows a muted
+line naming the role when one is set.
+
 ---
 
 ## 7. Build, test and package
@@ -1273,6 +1327,23 @@ Book policies (#7)
     disagree about what a merge will change
   a filled map field (organizations, titles, personalInfo, media) reports one
     `added` entry per value, so the preview can show every one of them
+
+Book roles (#23)
+  ROLES = ['viewer', 'editor', 'merger', 'admin']; DEFAULT_ROLE = 'admin'
+  ROLE_CAPABILITIES is the ladder: view; edit; merge + delete; + manage
+  roleAllows(role, capability) is the ONE place that reads the table
+  an unknown role reads as the default, so it never weakens an answer
+  normalizeRoles / readRoles / writeRoles, key 'bookRoles', one role per book id
+    junk is dropped and storage rewritten; an empty map removes the key
+  roleForBook(roles, bookId) — the stored role, else the default
+  roleForCard(card, roles) — the WEAKEST role across the card's books; a card in
+    no book (or a book with no role) is unrestricted (the default)
+  effectiveRole(cards, roles) — the weakest role across a selection
+  mostPermissiveRole(roles) — the strongest configured role, for a global action
+  canPerform(cards, capability, roles) / canManage(capability, roles)
+  an empty roles map allows everything: the previous behaviour
+  the role is ADVISORY — the pages disable what it forbids; the host enforces
+    nothing (per-book permissions need the server tier, #68)
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
