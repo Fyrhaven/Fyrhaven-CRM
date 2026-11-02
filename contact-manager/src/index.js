@@ -29,8 +29,10 @@ import { makeProjectsPage } from './lib/projects-page.js';
 import { makeGroupsPage } from './lib/groups-page.js';
 import { makeHealthPage } from './lib/health-page.js';
 import { makeHistoryPage } from './lib/history-page.js';
+import { makePrivacyPage } from './lib/privacy-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { makeGroupDialog } from './lib/group-dialog.js';
+import { makeConsentDialog } from './lib/consent-dialog.js';
 import { makeBulkDialog } from './lib/bulk-dialog.js';
 import { makeNormaliseDialog } from './lib/normalise-dialog.js';
 import { makeRulesDialog } from './lib/rules-dialog.js';
@@ -60,17 +62,19 @@ const AppShell = makeAppShell(React, api, {
   projects: makeProjectsPage(React, api),
   health: makeHealthPage(React, api),
   history: makeHistoryPage(React, api),
+  privacy: makePrivacyPage(React, api),
 });
 
-// One dialog slot serves nine purposes: the review/merge dialog, the contact
-// editor, the project editor, the group editor, the bulk editor for a
-// selection, the cleanup preview, the normalisation rules, the import wizard
-// and the export choice. The `extraProps` marker picks which component the host
-// renders.
+// One dialog slot serves ten purposes: the review/merge dialog, the contact
+// editor, the project editor, the group editor, the consent editor, the bulk
+// editor for a selection, the cleanup preview, the normalisation rules, the
+// import wizard and the export choice. The `extraProps` marker picks which
+// component the host renders.
 const ReviewDialog = makeReviewDialog(React, api);
 const EditorDialog = makeEditorDialog(React, api);
 const ProjectDialog = makeProjectDialog(React, api);
 const GroupDialog = makeGroupDialog(React, api);
+const ConsentDialog = makeConsentDialog(React, api);
 const BulkDialog = makeBulkDialog(React, api);
 const NormaliseDialog = makeNormaliseDialog(React, api);
 const RulesDialog = makeRulesDialog(React, api);
@@ -81,6 +85,7 @@ function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
   if (props?.projectEditor) return React.createElement(ProjectDialog, props);
   if (props?.groupEditor) return React.createElement(GroupDialog, props);
+  if (props?.consentEditor) return React.createElement(ConsentDialog, props);
   if (props?.bulkEditor) return React.createElement(BulkDialog, props);
   if (props?.normalise) return React.createElement(NormaliseDialog, props);
   if (props?.rulesEditor) return React.createElement(RulesDialog, props);

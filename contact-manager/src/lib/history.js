@@ -20,6 +20,7 @@ const MAX_DETAIL = 120;
 export const HISTORY_KINDS = [
   'merge', 'cleanup', 'rules', 'import', 'bulk',
   'create', 'update', 'delete', 'group',
+  'consent', 'anonymise', 'erase',
 ];
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
@@ -34,12 +35,17 @@ export function normalizeEntry(raw) {
   const kind = HISTORY_KINDS.includes(raw.kind) ? raw.kind : '';
   const contacts = count(raw.contacts);
   if (!kind || !contacts) return null;
+  // `subject` names the contact a single-subject change was about (a consent
+  // record, an anonymisation, an erasure) so a data-subject request can pull
+  // the plugin's own changes for that person. It is absent on batch writes.
+  const subject = text(raw.subject).slice(0, 120);
   return {
     at: Number.isFinite(Number(raw.at)) ? Number(raw.at) : 0,
     kind,
     contacts,
     detail: text(raw.detail).slice(0, MAX_DETAIL),
     undoable: raw.undoable === true,
+    ...(subject ? { subject } : {}),
   };
 }
 

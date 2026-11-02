@@ -148,11 +148,21 @@ export function isGroupCard(card) {
 }
 
 /**
- * Whether we may merge this entry at all: it needs an id, and contact groups
- * (distribution lists) are never duplicates of a person.
+ * A tombstone left by anonymisation (#26): the card is kept so nothing that
+ * pointed at it dangles, but it holds no personal data. Like `group`, the
+ * keyword is the fallback marker for a host that does not keep `kind`.
+ */
+export function isAnonymisedCard(card) {
+  return card?.kind === 'anonymised' || card?.keywords?.anonymised === true;
+}
+
+/**
+ * Whether we may merge this entry at all: it needs an id, and neither a contact
+ * group (a distribution list) nor an anonymised tombstone is ever a duplicate
+ * of a person.
  */
 export function isMergeable(card) {
-  return Boolean(card && typeof card.id === 'string' && card.id && !isGroupCard(card));
+  return Boolean(card && typeof card.id === 'string' && card.id && !isGroupCard(card) && !isAnonymisedCard(card));
 }
 
 /** id → display name for the address books. */
