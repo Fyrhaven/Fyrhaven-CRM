@@ -261,3 +261,43 @@ describe('the duplicate digest', () => {
     expect(screen.getByText('Duplicate digest')).toBeTruthy();
   });
 });
+
+describe('the Getting started guide', () => {
+  const finished = () => ({ done: true, at: new Date().toISOString() });
+
+  it('shows on first run', async () => {
+    await renderPage(homeApi());
+
+    expect(screen.getByText('Step 1 of 5')).toBeTruthy();
+    expect(screen.getByText('Welcome to Contact Manager')).toBeTruthy();
+  });
+
+  it('stays hidden once it has been finished', async () => {
+    const api = homeApi();
+    await api.storage.set('onboarding', finished());
+    await renderPage(api);
+
+    expect(screen.queryByText('Step 1 of 5')).toBeNull();
+  });
+
+  it('re-opens from the menu after it was finished', async () => {
+    const api = homeApi();
+    await api.storage.set('onboarding', finished());
+    await renderPage(api);
+    expect(screen.queryByText('Step 1 of 5')).toBeNull();
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Getting started' })); });
+
+    expect(screen.getByText('Step 1 of 5')).toBeTruthy();
+  });
+
+  it('hides itself when the user skips it, and remembers that', async () => {
+    const api = homeApi();
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Skip the guide' })); });
+
+    expect(screen.queryByText('Step 1 of 5')).toBeNull();
+    expect(await api.storage.get('onboarding')).toMatchObject({ done: true });
+  });
+});

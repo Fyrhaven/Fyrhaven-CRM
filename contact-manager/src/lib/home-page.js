@@ -18,26 +18,32 @@ import { readProjects } from './projects.js';
 import { readHistory } from './history.js';
 import { healthSummary } from './health.js';
 import { readRegion } from './normalise.js';
-import { findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, undoMerge, automationRules } from './actions.js';
+import { findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, openHelp, undoMerge, automationRules } from './actions.js';
 import { undoWindowMinutes } from './labels.js';
 import { readUndo } from './undo.js';
 import { ACTION_BAR } from './layout.js';
 import { readPolicies, readIgnore } from './book-policies.js';
 import { acknowledge, buildDigest, digestWindowDays, groupSignatures, readDigestState } from './digest.js';
+import { readOnboarding } from './onboarding.js';
+import { makeOnboardingCard } from './onboarding-card.js';
 
 export function makeHomePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
+  const Guide = makeOnboardingCard(React, api);
 
   return function HomePage({ onNavigate, revision, onDataChanged } = {}) {
     const [state, setState] = useState({ status: 'loading' });
     const [digest, setDigest] = useState(null);
+    // The guide shows on first run and can be re-opened from the menu. A local
+    // flag, so re-opening it does not rewrite what was stored.
+    const [guideOpen, setGuideOpen] = useState(false);
     const go = (tab) => { if (typeof onNavigate === 'function') onNavigate(tab); };
 
     const load = useCallback(async () => {
       setState({ status: 'loading' });
       try {
-        const [cards, bookList, projects, region, undo, lastScan, policies, ignore, dismissed, told, history] = await Promise.all([
+        const [cards, bookList, projects, region, undo, lastScan, policies, ignore, dismissed, told, history, onboarding] = await Promise.all([
           loadCards(api),
           loadBooks(api),
           readProjects(api),
@@ -49,6 +55,7 @@ export function makeHomePage(React, api) {
           readDismissed(api),
           readDigestState(api),
           readHistory(api),
+          readOnboarding(api),
         ]);
         const books = bookNamesById(bookList);
         const groups = findDuplicateGroups(cards, { ...matchOptions(api.plugin?.settings), region, policies, ignore }, []);
@@ -89,6 +96,7 @@ export function makeHomePage(React, api) {
           }),
           undoable: undo.length,
           lastScan: lastScan && typeof lastScan === 'object' ? lastScan : null,
+          onboarding,
         });
       } catch {
         setState({ status: 'error' });
@@ -140,6 +148,8 @@ export function makeHomePage(React, api) {
       h(Button, { variant: 'secondary', icon: 'users', onClick: () => void newGroup(api).then(() => onDataChanged?.()) }, t('action.newGroup')),
       h(Button, { variant: 'secondary', icon: 'upload', onClick: () => void importContacts(api).then(() => onDataChanged?.()) }, t('action.importContacts')),
       h(Button, { variant: 'secondary', icon: 'wand', onClick: () => void automationRules(api).then(() => onDataChanged?.()) }, t('action.automation')),
+      h(Button, { variant: 'secondary', icon: 'book-user', onClick: () => setGuideOpen(true) }, t('action.gettingStarted')),
+      h(Button, { variant: 'secondary', icon: 'book-user', onClick: () => void openHelp(api) }, t('action.help')),
       undoWindowMinutes(api.plugin?.settings) > 0 && state.undoable
         ? h(Button, { variant: 'secondary', icon: 'undo', onClick: () => void undoMerge(api).then(() => onDataChanged?.()) }, t('action.undoCommand'))
         : null);
@@ -158,6 +168,15 @@ export function makeHomePage(React, api) {
       state.status === 'error' ? h(EmptyState, { title: t('home.unavailable') }) : null,
       state.status === 'ready'
         ? h(Stack, { gap: 4 },
+            guideOpen || state.onboarding?.done !== true
+              ? h(Guide, {
+                  onFinished: () => {
+                    setGuideOpen(false);
+                    setState((current) => ({ ...current, onboarding: { done: true, at: new Date().toISOString() } }));
+                  },
+                  onDataChanged,
+                })
+              : null,
             digest
               ? h(InfoBar, { tone: 'warning', title: t('digest.title') },
                   h(Stack, { gap: 2 },

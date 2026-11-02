@@ -7,6 +7,145 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.45.0] — 2026-11-02
+
+### Added
+
+- **Follow-up tasks per contact (#36, the task-creation half).** A *Follow up*
+  button on a contact's profile opens a small editor — title (prefilled), due
+  date, priority and notes — and creates the task through `api.tasks.create`. A
+  follow-up *is* a real host task, so it shows in the webmail, survives a reload
+  and is searchable there.
+- **Overdue tasks are flagged on the profile.** The contact's open tasks are now
+  sorted by due date with anything past its due date badged *Overdue* and listed
+  first.
+
+### Notes
+
+The host task has no field this plugin can point at a contact, so the contact
+rides in the description — its email first, because `tasksForContact` matches a
+task by the words in its title and description. For the same reason the
+**priority is carried at the end of the title** (`· High`), where every task list
+shows it; there is no host priority field to set. Still to come from #36: a
+cross-contact *My tasks* view with overdue/upcoming filters (it must degrade
+cleanly on a host whose `api.tasks` is absent or shaped differently — the #75
+lesson) and reminders, which need a timer hook the plugin does not have.
+
+## [1.44.0] — 2026-11-02
+
+### Added
+
+- **In-app help and keyboard shortcuts (#39).** A new *Help* action (Ctrl+K, and
+  a *Help* button on the Overview menu) opens a dialog with the **search
+  operator cheatsheet** — every field operator, what `has:` and `is:` accept,
+  and worked AND / OR / grouping / exclusion examples — plus the **keyboard
+  shortcuts** and a short **what's new**.
+- **Keyboard shortcuts on the Contacts page:** `/` jumps to the contact search
+  box and `Esc` clears it.
+
+### Notes
+
+The cheatsheet is derived from the search box's own constants (`FIELDS`,
+`HAS_FLAGS`, `IS_VALUES`), so a new operator cannot ship without appearing in the
+help, and every worked example is asserted to parse in the test suite — a help
+line cannot describe syntax the box rejects. Both shortcuts are scoped to the
+Contacts page's own search box: `/` is ignored while a field has focus, and `Esc`
+only clears when the search box is focused, so a dialog's own `Esc` still reaches
+the host. This completes #39's third bullet (*in-app help, changelog and keyboard
+shortcuts*); the scale bullets shipped in v1.41.0–v1.42.0.
+
+## [1.43.0] — 2026-11-02
+
+### Added
+
+- **Smart lists in the command palette (#13, the palette half).** A new
+  *Smart lists* action (Ctrl+K) opens the saved searches with their **live
+  counts**, shows the contacts a list holds, and exports the chosen list as a
+  vCard. The saved searches were reachable only from the Contacts page until
+  now; this is the palette half the issue asked for.
+
+### Notes
+
+The dialog is honest about where the data lives: a saved search is stored in
+`api.storage` per account and per browser, so the list is the one you saved on
+this browser. It reads and returns a *choice* — the export happens in
+`lib/actions.js` after the dialog closes — so the dialog never opens a dialog of
+its own, and the export falls back to showing the file when the sandbox refuses
+the download, exactly as the Contacts page does. The list is paged with the same
+`paging.js` the Contacts page uses, so a very large list does not build a very
+large DOM.
+
+## [1.42.0] — 2026-11-02
+
+### Added
+
+- **A paged Contacts list (#39, the scale half).** The Contacts tab used to
+  render every contact a query matched, which is fine for a few hundred and a
+  freeze for tens of thousands — the whole match set became DOM at once. It now
+  renders one page of 100 at a time, with *Previous* / *Next* and a
+  `Page X of Y · A–B of N` line above the list. A new query starts at the first
+  page, and a shrinking list is clamped so a page index can never point past the
+  end.
+
+### Notes
+
+The page is a view of the results, not a limit on them: the match counts and
+*Select all N* still work over the whole match set, so a paged list is still a
+bulk scope. `src/lib/paging.js` is the pure page math (`pageCount`, `clampPage`,
+`isPaged`, `pageSlice`) and a budget test pins that slicing one page out of 100k
+contacts does not walk the list. Still to come for full scale (#39): virtualised
+rows, worker-based duplicate matching and incremental search indexes.
+
+## [1.41.0] — 2026-11-02
+
+### Added
+
+- **A first-run "Getting started" guide (#39, the onboarding half).** A new card
+  at the top of the *Overview* tab walks a first clean-up once: bring your
+  contacts in (import), scan for duplicates (which opens the review dialog),
+  and choose what to scan (the address-book policies). Each step runs the same
+  action the command palette and the menu run, and the guide records that it is
+  done so it does not open again on its own. Reopen it any time from the
+  Overview menu.
+
+### Notes
+
+The guide is a first-run help surface, not a second code path: every button
+calls a shared action in `lib/actions.js`. Opening the policies dialog from the
+guide and the Duplicates page now goes through one `managePolicies` action, so
+the two cannot disagree about which address books it lists. The step is
+remembered in `api.storage` (per account and per browser, like the projects and
+the saved searches); a step whose action fails does not trap the user — the
+guide still advances.
+
+## [1.40.0] — 2026-11-02
+
+### Added
+
+- **Per-address-book roles (#23, the advisory half).** A new *Roles* dialog
+  (the *Roles…* button on the Duplicates page) records who may act on each
+  address book: **viewer**, **editor**, **merger** or **admin**. The four form a
+  strict ladder — a viewer may only look; an editor may create and edit; a merger
+  may also merge duplicates and delete; an admin may also change the roles and
+  the duplicate policies. The pages reflect the role by disabling the actions it
+  does not allow, so a viewer cannot merge, edit or delete.
+
+### Notes
+
+The host grants the plugin write access once at install, all-or-nothing, and has
+no per-book permission and no shared member list, so a role cannot be *enforced*.
+It is a convention a team agrees on, stored in `api.storage` (per account and per
+browser, like the policies), and the dialog says so out loud. The enforced half —
+and ownership transfer and safe removal of a member's access — needs the server
+tier (#68). An install that never opens the dialog behaves exactly as before: a
+book with no role, and a contact in no book at all, grants **admin**.
+
+The role that applies is the **weakest** across every book a contact lives in, so
+a contact that lives in a book where the user is only a viewer stays read-only
+even if another book would allow more. A global action (creating a contact,
+opening the roles or policies dialog) uses the **most** permissive configured
+role, so it is available if any book allows it.
+
 ## [1.39.0] — 2026-11-02
 
 ### Added
