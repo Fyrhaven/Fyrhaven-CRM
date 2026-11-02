@@ -10,6 +10,7 @@ import { memberLabel, mergeLabel, reasonLine, strengthKey, toastMergeResult, und
 import { readUndo, undoLastMerge, clearUndo } from './undo.js';
 import { openEditor, toastEditorResult } from './open-editor.js';
 import { readPolicies, readIgnore } from './book-policies.js';
+import { canManage, canPerform, hasRoles, mostPermissiveRole, readRoles } from './book-roles.js';
 import { BATCH_CAP, batchPlan, groupFacets, isOverCap } from './bulk-merge.js';
 
 const FOCUS_COOLDOWN_MS = 5000;
@@ -29,6 +30,7 @@ export function makeManagerPage(React, api) {
     const [showHidden, setShowHidden] = useState(false);
     const [selected, setSelected] = useState(() => new Set());
     const [undo, setUndo] = useState(null); // the newest undo record, if any
+    const [roles, setRoles] = useState({}); // per-address-book roles (#23), advisory
     const [run, setRun] = useState(0); // bump to scan again
     const lastScanAt = useRef(0);
 
@@ -37,9 +39,9 @@ export function makeManagerPage(React, api) {
       setStatus('scanning');
       setError('');
       try {
-        const [cards, books, dismissed, batches, policies, ignore] = await Promise.all([
+        const [cards, books, dismissed, batches, policies, ignore, bookRoles] = await Promise.all([
           loadCards(api), loadBooks(api), readDismissed(api), readUndo(api),
-          readPolicies(api), readIgnore(api),
+          readPolicies(api), readIgnore(api), readRoles(api),
         ]);
         const hiddenSet = new Set(dismissed);
         const globalOpts = await detectionOptions(api);
@@ -49,6 +51,7 @@ export function makeManagerPage(React, api) {
         setUndo(batches.at(-1) ?? null);
         setBookNames(bookNamesById(books));
         setBookList(books);
+        setRoles(bookRoles);
         setGroups(found.filter((group) => !hiddenSet.has(group.signature)));
         setHiddenGroups(found.filter((group) => hiddenSet.has(group.signature)));
         setStats({ when, contacts: cards.length, books: books.length });
@@ -160,6 +163,24 @@ export function makeManagerPage(React, api) {
       if (result?.saved) void scan();
     };
 
+    const openRoles = async () => {
+      // Same reason as the policies dialog: read the books here, so the dialog
+      // is not empty on a page that has not scanned.
+      let books = bookList;
+      try {
+        books = await loadBooks(api);
+        setBookList(books);
+      } catch {
+        // keep the previous list; the dialog still shows what we know
+      }
+      const result = await api.ui.openDialog({
+        title: t('roles.title'),
+        slot: 'plugin-dialog',
+        extraProps: { rolesDialog: true, books },
+      });
+      if (result?.saved) void scan();
+    };
+
     const hide = async (group) => {
       const next = await readDismissed(api);
       if (!next.includes(group.signature)) next.push(group.signature);
@@ -196,6 +217,10 @@ export function makeManagerPage(React, api) {
     const overCap = isOverCap(plan);
     const selectFacet = (signatures) => setSelected(new Set(signatures));
     const selectAll = () => setSelected(new Set(groups.map((group) => group.signature)));
+    // The role that applies to the current selection, so a batch merge is
+    // disabled for contacts the user's role does not allow (#23).
+    const selectedGroups = groups.filter((group) => selected.has(group.signature));
+    const canMergeSelection = canPerform(selectedGroups.flatMap((group) => group.members), 'merge', roles);
 
     const bookLabel = (member) => {
       const ids = bookIds(member);
@@ -225,7 +250,12 @@ export function makeManagerPage(React, api) {
               meta: member.id === keepId ? [h(Badge, { key: 'keep', tone: 'primary' }, t('group.keepBadge'))] : [],
             }))),
           h(Row, { gap: 2 },
-            h(Button, { size: 'sm', icon: 'git-merge', onClick: () => void openReview([group]) }, t('action.review')),
+            h(Button, {
+              size: 'sm',
+              icon: 'git-merge',
+              disabled: !canPerform(group.members, 'merge', roles),
+              onClick: () => void openReview([group]),
+            }, t('action.review')),
             h(Button, { size: 'sm', variant: 'secondary', icon: 'eye-off', onClick: () => void hide(group) }, t('action.hide')))));
     };
 
@@ -245,10 +275,12 @@ export function makeManagerPage(React, api) {
         title: t('page.title'),
         description: t('page.description'),
         actions: h(Row, { gap: 2 },
-          h(Button, { icon: 'user-plus', variant: 'secondary', onClick: () => void newContact() },
+          h(Button, { icon: 'user-plus', variant: 'secondary', disabled: !canManage('edit', roles), onClick: () => void newContact() },
             t('action.newContact')),
-          h(Button, { icon: 'shield', variant: 'secondary', onClick: () => void openPolicies() },
+          h(Button, { icon: 'shield', variant: 'secondary', disabled: !canManage('manage', roles), onClick: () => void openPolicies() },
             t('action.policies')),
+          h(Button, { icon: 'users', variant: 'secondary', disabled: !canManage('manage', roles), onClick: () => void openRoles() },
+            t('action.roles')),
           h(Button, { icon: 'refresh', busy: status === 'scanning', onClick: () => setRun((n) => n + 1) },
             status === 'ready' ? t('action.rescan') : t('action.scan')),
           status === 'ready' && (showHidden || hiddenGroups.length)
@@ -256,6 +288,9 @@ export function makeManagerPage(React, api) {
                 showHidden ? t('action.hideHidden') : t('action.showHidden'))
             : null),
       }),
+      hasRoles(roles)
+        ? h(Text, { tone: 'muted' }, t('roles.limited', { role: t(`roles.role.${mostPermissiveRole(roles)}`) }))
+        : null,
       status === 'scanning' ? h(InfoBar, { tone: 'primary', title: t('scan.running') }) : null,
       undo
         ? h(InfoBar, { tone: 'neutral', title: t('undo.bannerTitle', {
@@ -267,7 +302,7 @@ export function makeManagerPage(React, api) {
                 minutes: undoWindowMinutes(api.plugin.settings),
               })),
               h(Row, { gap: 2 },
-                h(Button, { size: 'sm', icon: 'undo', onClick: () => void undoMerge() }, t('undo.action')),
+                h(Button, { size: 'sm', icon: 'undo', disabled: !canManage('merge', roles), onClick: () => void undoMerge() }, t('undo.action')),
                 h(Button, { size: 'sm', variant: 'secondary', onClick: () => void forgetUndo() },
                   t('undo.forget')))))
         : null,
@@ -310,9 +345,10 @@ export function makeManagerPage(React, api) {
                       icon: 'git-merge',
                       // A batch bigger than the cap is refused here, not trimmed:
                       // silently merging part of what was asked for is worse than
-                      // asking the user to narrow the selection.
-                      disabled: overCap,
-                      onClick: () => void openReview(groups.filter((group) => selected.has(group.signature))),
+                      // asking the user to narrow the selection. A batch the
+                      // user's role does not allow is refused the same way.
+                      disabled: overCap || !canMergeSelection,
+                      onClick: () => void openReview(selectedGroups),
                     }, mergeLabel(t, selected.size)),
                     h(Button, { variant: 'secondary', onClick: () => setSelected(new Set()) }, t('dialog.cancel'))),
                   h(Text, { tone: 'muted' }, t('batch.plan', {

@@ -229,3 +229,67 @@ describe('bulk merge by company or domain', () => {
     expect(api.calls('ui.openDialog')).toHaveLength(0);
   });
 });
+
+// --- Advisory per-address-book roles (#23) ------------------------------------
+
+describe('advisory roles on the manager page', () => {
+  const withRoles = async (roles) => {
+    const api = pageApi();
+    await api.storage.set('bookRoles', roles);
+    await renderPage(api);
+    return api;
+  };
+
+  it('a viewer role disables merge, the create button and both dialogs', async () => {
+    await withRoles({ b1: 'viewer' });
+
+    expect(screen.getAllByRole('button', { name: 'Review…' })[0].disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'New contact' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Policies' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Roles' }).disabled).toBe(true);
+    // and the line says which role is holding it back
+    expect(screen.getByText(/Role: Viewer/)).toBeTruthy();
+  });
+
+  it('a merger role allows the merge but not the policies or roles dialogs', async () => {
+    await withRoles({ b1: 'merger' });
+
+    expect(screen.getAllByRole('button', { name: 'Review…' })[0].disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'New contact' }).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Policies' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Roles' }).disabled).toBe(true);
+  });
+
+  it('a viewer cannot merge the selected batch', async () => {
+    await withRoles({ b1: 'viewer' });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'All 2 groups' })); });
+
+    expect(screen.getByRole('button', { name: 'Merge 2 groups' }).disabled).toBe(true);
+  });
+
+  it('a group whose weakest member is read-only cannot be merged', async () => {
+    // One duplicate lives in a book the user only views: the weakest link wins.
+    const cards = [
+      makeCard({ id: 'x1', name: 'Ada Lovelace', emails: ['ada@example.org'], addressBookIds: { b1: true } }),
+      makeCard({ id: 'x2', name: 'A. Lovelace', emails: ['ada@example.org'], addressBookIds: { b2: true } }),
+    ];
+    const api = pageApi({ 'contacts.list': async () => cards });
+    await api.storage.set('bookRoles', { b1: 'viewer', b2: 'admin' });
+    await renderPage(api);
+
+    expect(screen.getByRole('button', { name: 'Review…' }).disabled).toBe(true);
+  });
+
+  it('opens the roles dialog with the address books', async () => {
+    const api = pageApi({ 'ui.openDialog': async () => null });
+    await renderPage(api);
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Roles' })); });
+
+    await waitFor(() => expect(api.calls('ui.openDialog')).toHaveLength(1));
+    expect(api.calls('ui.openDialog')[0].args[0].extraProps.rolesDialog).toBe(true);
+    expect(api.calls('ui.openDialog')[0].args[0].extraProps.books)
+      .toEqual([{ id: 'b1', name: 'Personal' }]);
+  });
+});
