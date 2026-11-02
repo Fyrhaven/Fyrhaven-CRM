@@ -14,12 +14,21 @@
 //   has:phone  has:email   presence — also has:note, has:tag
 //   -tag:vip  not:tag:vip  excludes instead of requiring
 //   is:company is:person   what kind of contact it is
+//   a OR b                 either side matches (case-insensitive `OR`)
+//   (a OR b) c             grouping; adjacent terms are AND, `OR` binds looser
 //
 // A leading `-` excludes instead of requiring: `-tag:vip`, `-has:phone`,
 // `-ada`. Everything else is unchanged.
 //
 // An unknown operator is reported *and* treated as free text, so a typo never
 // silently returns nothing.
+//
+// **When `OR` or a group is used, `parseQuery` also returns an `ast`** — the
+// expression tree — because a flat AND of every atom cannot express a
+// disjunction. Simple queries keep the old flat shape, so `parsed.terms` and
+// `parsed.filters` still describe the whole query for the error line and the
+// saved-search chips. `matchIndexed` evaluates the `ast` when it is there and
+// the flat lists otherwise, so the two can never disagree about a simple query.
 
 import { contactName, emailEntries, phoneEntries, text } from './contacts.js';
 import { isCompany } from './profile.js';
@@ -48,21 +57,46 @@ const isSubsequence = (needle, haystack) => {
 };
 
 /**
- * Splits a query into text terms and filters.
+ * Parses a query into the flat lists the rest of the code has always used, and
+ * — only when the query uses `OR` or a group — the `ast` that expresses it.
  *
- * @returns {{terms: string[], filters: Array<{field: string, value: string}>,
- *            errors: Array<{token: string, field: string, reason: string}>}}
- *   `reason` is `'unknown-field' | 'unknown-has' | 'unknown-is' | 'empty-value'`.
- *   A token with an error is kept as a free-text term as well.
+ * Grammar: `orExpr := andExpr (OR andExpr)*`, `andExpr := factor+`,
+ * `factor := '(' orExpr ')' | atom`. So adjacent terms are AND, `OR` binds
+ * looser than AND, and parentheses group.
+ *
+ * @returns {{terms: string[], notTerms: string[],
+ *            filters: Array<{field: string, value: string}>,
+ *            notFilters: Array<{field: string, value: string}>,
+ *            errors: Array<{token: string, field: string, value: string, reason: string}>,
+ *            ast?: object}}
+ *   `reason` is `'unknown-field' | 'unknown-has' | 'unknown-is' | 'empty-value'
+ *   | 'unbalanced' | 'dangling-or'`. A token with an error is kept as a
+ *   free-text term as well. `ast` is present only when the query is not a plain
+ *   AND, so a simple query keeps the exact shape it always had.
  */
 export function parseQuery(input) {
+  const tokens = String(input ?? '')
+    .replace(/\(/g, ' ( ')
+    .replace(/\)/g, ' ) ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
   const terms = [];
   const notTerms = [];
   const filters = [];
   const notFilters = [];
   const errors = [];
+  let pos = 0;
+  let hasOr = false;
 
-  for (const raw of String(input ?? '').trim().split(/\s+/).filter(Boolean)) {
+  const peek = () => tokens[pos];
+  const atOr = () => (peek() ?? '').toLowerCase() === 'or';
+  const atClose = () => peek() === ')';
+
+  // One atom: `field:value`, a bare word, or a token we cannot use. Returns a
+  // leaf node, or null for a paren this level should not have seen.
+  const parseAtom = (raw) => {
     // `not:` and a leading `-` both exclude. `not:` is what a user asks for by
     // name; `-` is the shorthand. A lone `-` is still just a character.
     const lowerRaw = raw.toLowerCase();
@@ -76,36 +110,86 @@ export function parseQuery(input) {
 
     const at = token.indexOf(':');
     if (at <= 0) {
-      pushTerm(lower(token));
-      continue;
+      const value = lower(token);
+      pushTerm(value);
+      return { type: 'term', value, negated: not };
     }
     const field = token.slice(0, at).toLowerCase();
     const value = token.slice(at + 1);
     const fail = (reason) => {
       errors.push({ token, field, value, reason });
       pushTerm(lower(token));
+      return { type: 'term', value: lower(token), negated: not };
     };
 
-    if (!FIELDS.includes(field)) {
-      fail('unknown-field');
-      continue;
-    }
-    if (!value) {
-      fail('empty-value');
-      continue;
-    }
-    if (field === 'has' && !HAS_FLAGS.includes(lower(value))) {
-      fail('unknown-has');
-      continue;
-    }
-    if (field === 'is' && !IS_VALUES.includes(lower(value))) {
-      fail('unknown-is');
-      continue;
-    }
-    pushFilter({ field, value: lower(value) });
-  }
+    if (!FIELDS.includes(field)) return fail('unknown-field');
+    if (!value) return fail('empty-value');
+    if (field === 'has' && !HAS_FLAGS.includes(lower(value))) return fail('unknown-has');
+    if (field === 'is' && !IS_VALUES.includes(lower(value))) return fail('unknown-is');
+    const filter = { field, value: lower(value) };
+    pushFilter(filter);
+    return { type: 'filter', ...filter, negated: not };
+  };
 
-  return { terms, notTerms, filters, notFilters, errors };
+  // How deep inside parentheses we are: a `)` at depth 0 is a stray one, and
+  // `parseAnd` must not treat it as the end of a group it is not inside.
+  let depth = 0;
+
+  const parseFactor = () => {
+    if (peek() === '(') {
+      pos += 1;
+      depth += 1;
+      const node = parseOr();
+      if (peek() === ')') pos += 1;
+      else errors.push({ token: '(', field: '(', value: '', reason: 'unbalanced' });
+      depth -= 1;
+      return node;
+    }
+    if (peek() === ')') {
+      // a closing paren with no opener: reported, and skipped rather than
+      // swallowing the rest of the query
+      errors.push({ token: ')', field: ')', value: '', reason: 'unbalanced' });
+      pos += 1;
+      return null;
+    }
+    const node = parseAtom(tokens[pos]);
+    pos += 1;
+    return node;
+  };
+
+  const parseAnd = () => {
+    const clauses = [];
+    while (pos < tokens.length && !atOr() && !(atClose() && depth > 0)) {
+      const node = parseFactor();
+      if (node) clauses.push(node);
+    }
+    if (!clauses.length) return null;
+    return clauses.length === 1 ? clauses[0] : { type: 'and', clauses };
+  };
+
+  const parseOr = () => {
+    const clauses = [];
+    const first = parseAnd();
+    if (first) clauses.push(first);
+    while (atOr()) {
+      hasOr = true;
+      // an `OR` with nothing before it is a mistake, but the right-hand side is
+      // still parsed, so the rest of the query survives
+      if (!clauses.length) errors.push({ token: 'OR', field: 'OR', value: '', reason: 'dangling-or' });
+      pos += 1;
+      const next = parseAnd();
+      if (next) clauses.push(next);
+      else errors.push({ token: 'OR', field: 'OR', value: '', reason: 'dangling-or' });
+    }
+    if (!clauses.length) return null;
+    return clauses.length === 1 ? clauses[0] : { type: 'or', clauses };
+  };
+
+  const ast = parseOr();
+  const parsed = { terms, notTerms, filters, notFilters, errors };
+  // A plain AND is already the flat lists; only a disjunction needs the tree.
+  if (hasOr) parsed.ast = ast;
+  return parsed;
 }
 
 /** Organisation names, the email domain, and a company record's own name. */
@@ -210,8 +294,32 @@ function filterMatches(entry, { field, value }) {
   return true;
 }
 
-/** Does one indexed card satisfy every term and every filter? */
+/** Does one indexed card carry this leaf (a term or a filter)? */
+function leafMatches(entry, node) {
+  const hit = node.type === 'term'
+    ? hasTerm(entry.free, node.value) || hasFuzzyName(entry.names, node.value)
+    : filterMatches(entry, node);
+  // a negated leaf must NOT match; a plain one must
+  return hit !== (node.negated === true);
+}
+
+/** Evaluates one node of a parsed query's `ast`. */
+function nodeMatches(entry, node) {
+  if (!node) return true;
+  if (node.type === 'and') return node.clauses.every((clause) => nodeMatches(entry, clause));
+  if (node.type === 'or') return node.clauses.some((clause) => nodeMatches(entry, clause));
+  return leafMatches(entry, node);
+}
+
+/**
+ * Does one indexed card satisfy a parsed query?
+ *
+ * When the query used `OR`/grouping, `parsed.ast` holds the tree and decides;
+ * otherwise every flat term and filter must hold — the same rule as before, so
+ * a simple query is unchanged.
+ */
 export function matchIndexed(entry, parsed) {
+  if (parsed?.ast) return nodeMatches(entry, parsed.ast);
   const hasText = (term) => hasTerm(entry.free, term) || hasFuzzyName(entry.names, term);
   for (const term of parsed.terms) if (!hasText(term)) return false;
   for (const term of parsed.notTerms ?? []) if (hasText(term)) return false;
@@ -222,8 +330,16 @@ export function matchIndexed(entry, parsed) {
   return true;
 }
 
-const isBlank = (parsed) => !parsed.terms.length && !parsed.filters.length
+/**
+ * Whether a parsed query asks for nothing — no terms, no filters, no negations.
+ * Exported so the page can decide "show everything" the same way `searchCards`
+ * does, instead of guessing from the positive lists (which once made a query of
+ * only negations silently show the whole address book).
+ */
+export const isBlankQuery = (parsed) => !parsed.terms.length && !parsed.filters.length
   && !(parsed.notTerms ?? []).length && !(parsed.notFilters ?? []).length;
+
+const isBlank = isBlankQuery;
 
 /** Does one card satisfy a parsed query? Convenience for a single card. */
 export function matchCard(card, parsed, { books } = {}) {
