@@ -145,6 +145,9 @@ export function makeImportDialog(React, api) {
           failed: result.failed,
           skipped: skipped.length,
           mergeGroups: mergeGroupsFromImport(merging, result.cards),
+          // The created cards, so the caller can run the `import` automation
+          // trigger over what was actually written.
+          cards: result.cards,
         });
       } catch (err) {
         setError(t('import.failed', { reason: String(err?.message ?? err) }));

@@ -15,6 +15,8 @@ import { openEditor, toastEditorResult } from './open-editor.js';
 import { openProject, toastProjectResult } from './open-project.js';
 import { openGroup, toastGroupResult } from './open-group.js';
 import { runRules } from './open-rules.js';
+import { manageAutomation } from './open-automation.js';
+import { runAutomationForCards } from './automation.js';
 import { undoLastMerge } from './undo.js';
 import { policyAwareOptions } from './book-policies.js';
 
@@ -96,6 +98,14 @@ export async function normalisationRules(api) {
 }
 
 /**
+ * The automation rule builder (#33) — the command palette's entry point. The
+ * dialog writes the rules itself; this opens it and toasts what was saved.
+ */
+export async function automationRules(api) {
+  return manageAutomation(api);
+}
+
+/**
  * The import wizard: it reads the file, shows what would happen, and returns
  * what it wrote. Duplicates the user chose to merge come back as review-dialog
  * groups — every merge goes through that dialog (README §9.2) — so the action
@@ -110,6 +120,12 @@ export async function importContacts(api) {
     extraProps: { importWizard: true },
   });
   if (!result) return;
+
+  // The import is the one event the plugin owns, so the `import` trigger runs
+  // here — over the cards the wizard created, before any merge is reviewed.
+  if (result.cards?.length) {
+    await runAutomationForCards(api, { trigger: 'import', cards: result.cards.map((entry) => entry.card) });
+  }
 
   let merged = 0;
   if (result.mergeGroups?.length) {
