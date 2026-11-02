@@ -66,7 +66,7 @@ signatures, the last scan summary).
 | *New contact* button | Contact Manager page header | Opens the contact editor (create) |
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
-| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
+| *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
 | Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
@@ -75,6 +75,7 @@ signatures, the last scan summary).
 | Command palette action | Ctrl+K → *Normalisation rules* | The same rules dialog, over every contact |
 | Command palette action / *Automation rules* button | Ctrl+K → *Automation rules*, or the Overview menu | Opens the **automation rules** builder (#33): rules that run on a contact being created, changed or imported, with a condition (a search query) and actions (add/remove tag, add to a group, propose a merge), a priority order, an enable/disable toggle and a *Test* dry run |
 | Command palette action | Ctrl+K → *Smart lists* | Opens the **Smart lists** dialog (#13, the palette half): the saved searches with live counts, the contacts a list holds (paged), and a vCard export of the chosen list |
+| Command palette action / *Help* button | Ctrl+K → *Help*, or the Overview menu | Opens the **Help** dialog (#39): the search operator cheatsheet (every field, what `has:`/`is:` take, worked AND/OR/grouping/exclusion examples), the keyboard shortcuts, and a short *what's new* |
 | *History* sub-tab | Contact Manager → *History* | What this plugin wrote — merges, cleanups, rules, imports, bulk edits, creates/updates/deletes and group changes — newest first, with the rollback that is still live (#25, the local half) |
 | *Privacy* sub-tab | Contact Manager → *Privacy* | The GDPR toolkit (#26): pick a person, export everything held about them (JSON subject-access export, vCard, CSV), record the lawful basis they are held on per source with an expiry, and erase or anonymise them with confirmation, leaving a proof-of-deletion report |
 | `plugin-dialog` slot | Modal, opened by all of the above, *New contact*, *New project*, *New group*, *Rules…*, *Automation rules* and *Manage consent…* | One slot, several dialogs picked by `extraProps`: the review/merge dialog, the **contact editor**, the **project editor**, the **group editor**, the **consent editor**, the **automation editor**, the **bulk editor**, the **cleanup preview**, the **rules editor**, the **import wizard**, the **export choice**, the **policies** dialog and the **roles** dialog |
@@ -171,6 +172,8 @@ contact-manager/
 │       ├── paging.js      # the pure page math for a long contact list (#39)
 │       ├── smart-lists.js # saved searches as smart lists: counts, members, file name (#13)
 │       ├── smart-lists-dialog.js # the Smart lists dialog (plugin-dialog slot, #13)
+│       ├── help.js        # the help model: operators, examples, shortcuts, what's new (#39)
+│       ├── help-dialog.js # the Help dialog (plugin-dialog slot, #39)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -189,6 +192,8 @@ contact-manager/
 │   ├── paging.test.mjs     # the page math and its budget (#39)
 │   ├── smart-lists.test.mjs # the smart-list model and its file name (#13)
 │   ├── ui-smart-lists.test.mjs # the Smart lists dialog (#13)
+│   ├── help.test.mjs       # the help model: the cheatsheet can't drift (#39)
+│   ├── ui-help.test.mjs    # the Help dialog (#39)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -1143,6 +1148,31 @@ download is refused. That keeps the dialog from ever opening a dialog of its own
 one page of 100, and it is honest that the saved searches live in `api.storage`
 per account and per browser.
 
+### 6.19 In-app help and keyboard shortcuts (`src/lib/help.js`, `help-dialog.js`, v1.44.0) — #39
+
+This is #39's third bullet: *in-app help, changelog and keyboard shortcuts*. The
+search operators are the least discoverable part of the plugin, so the cheatsheet
+is the point of the dialog.
+
+**The cheatsheet cannot drift.** `help.js` derives the operator list from
+`search.js`'s own `FIELDS`, and the `has:` / `is:` values from `HAS_FLAGS` /
+`IS_VALUES` directly — so a new operator appears in the help without anyone
+remembering to add it. Every worked example is asserted in
+`test/help.test.mjs` to parse **without an error**, so a help line can never
+describe syntax the box rejects.
+
+**The shortcuts are scoped to the page's own search box.** On the Contacts page,
+`/` focuses the search box and `Esc` clears it. `/` is ignored while a field has
+focus (so typing a slash still types a slash), and `Esc` only acts when the
+search box itself is focused (so a dialog's own `Esc` still reaches the host).
+Both cases have a negative twin in `test/ui-profile.test.mjs` — a shortcut that
+steals a keystroke meant for something else is the failure mode here.
+
+The dialog also carries a short **what's new**, newest first; its entries are
+translation keys and the test pins that the versions descend and every note
+exists in both locales. Prepend an entry when a release has something a user
+would want to read.
+
 ---
 
 ## 7. Build, test and package
@@ -1471,6 +1501,15 @@ Smart lists (#13, the palette half)
   the dialog reads and returns a choice; actions.js does the export after it
     closes, so the dialog never opens a dialog of its own
   the export falls back to showing the file when the download is refused
+
+Help (#39)
+  QUERY_OPERATORS / HAS_VALUES / IS_VALUES_LIST are DERIVED from search.js's own
+    FIELDS / HAS_FLAGS / IS_VALUES, so the cheatsheet cannot drift from the box
+  every QUERY_EXAMPLES entry parses with NO errors (test/help.test.mjs)
+  SHORTCUTS: Ctrl+K (the host palette), / (focus the search box), Esc (clear it)
+  WHATS_NEW is newest first; each note is a key present in en AND de
+  / is ignored while a field has focus; Esc clears only when the search box has
+    it, so a dialog's own Esc still reaches the host
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
