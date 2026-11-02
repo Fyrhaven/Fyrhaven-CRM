@@ -7,6 +7,35 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.39.0] — 2026-11-02
+
+### Added
+
+- **An automation rules engine (#33).** Repetitive contact hygiene can run
+  itself: a rule is *when* (a trigger), *if* (a search query) and *then*
+  (actions). The triggers are the events this plugin can actually see — a
+  contact is created, a contact is changed, and contacts are imported — and the
+  actions are *add tag*, *remove tag*, *add to group* and *propose a merge*.
+  Rules run in priority order, are idempotent (a tag already present writes
+  nothing, so a rule that fires on `update` cannot loop with its own write), and
+  each run is recorded in the change history.
+
+- **A rule builder with a dry run.** A new *Automation rules* dialog (command
+  palette and the main page menu) lists the rules, adds or changes one, and
+  *Test* shows how many contacts it matches and what it would change — through
+  the same `previewRule` the engine uses, so the preview cannot describe a
+  different change from the one a run would make. Rules are kept in
+  `api.storage`, per account and per browser, like the projects and the history.
+
+### Notes
+
+Deliberately absent, because the host does not provide them: an *on tag* or *on
+email* trigger (no such events), *assign owner* (there is no owner concept,
+#23) and a shared execution log (needs the server tier, #68). The trigger list
+grows with the host rather than promising what it cannot do. A rule can never
+break a save: the hooks are observers, the writes are wrapped, and a group card
+or an anonymised tombstone is skipped.
+
 ## [1.38.0] — 2026-11-02
 
 ### Added

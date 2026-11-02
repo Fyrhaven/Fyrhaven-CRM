@@ -18,7 +18,7 @@ import { readProjects } from './projects.js';
 import { readHistory } from './history.js';
 import { healthSummary } from './health.js';
 import { readRegion } from './normalise.js';
-import { findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, undoMerge } from './actions.js';
+import { findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, undoMerge, automationRules } from './actions.js';
 import { undoWindowMinutes } from './labels.js';
 import { readUndo } from './undo.js';
 import { ACTION_BAR } from './layout.js';
@@ -139,6 +139,7 @@ export function makeHomePage(React, api) {
       h(Button, { variant: 'secondary', icon: 'folder', onClick: () => void newProject(api).then(() => onDataChanged?.()) }, t('action.newProject')),
       h(Button, { variant: 'secondary', icon: 'users', onClick: () => void newGroup(api).then(() => onDataChanged?.()) }, t('action.newGroup')),
       h(Button, { variant: 'secondary', icon: 'upload', onClick: () => void importContacts(api).then(() => onDataChanged?.()) }, t('action.importContacts')),
+      h(Button, { variant: 'secondary', icon: 'wand', onClick: () => void automationRules(api).then(() => onDataChanged?.()) }, t('action.automation')),
       undoWindowMinutes(api.plugin?.settings) > 0 && state.undoable
         ? h(Button, { variant: 'secondary', icon: 'undo', onClick: () => void undoMerge(api).then(() => onDataChanged?.()) }, t('action.undoCommand'))
         : null);
