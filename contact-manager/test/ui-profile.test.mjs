@@ -725,3 +725,89 @@ describe('contacts page: advisory roles', () => {
     expect(screen.getByRole('button', { name: 'New contact' }).disabled).toBe(false);
   });
 });
+
+// ── Paging a long contact list (#39) ────────────────────────────
+//
+// The list renders one page at a time, so a large address book cannot turn the
+// whole match set into DOM at once. The counts and *Select all* still work over
+// the whole match set — the page is a view of the results, not a limit on them.
+
+describe('contacts page: paging a long list', () => {
+  const many = (n) => Array.from({ length: n }, (_, i) => makeCard({
+    id: `c${String(i).padStart(4, '0')}`,
+    name: `Person ${String(i).padStart(4, '0')}`,
+    emails: [`p${i}@example.org`],
+  }));
+
+  const rows = () => screen.getAllByRole('checkbox');
+
+  async function renderMany(count) {
+    const api = profileApi({ 'contacts.list': async () => many(count) });
+    const Page = makeProfilePage(React, api);
+    await act(async () => { render(React.createElement(Page)); });
+    await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+    return api;
+  }
+
+  const click = async (name) => { await act(async () => { fireEvent.click(screen.getByRole('button', { name })); }); };
+
+  it('renders one page of a long list, and says where it is', async () => {
+    await renderMany(250);
+
+    expect(rows()).toHaveLength(100);
+    expect(screen.getByText('Page 1 of 3 · 1–100 of 250')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Previous' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Next' }).disabled).toBe(false);
+  });
+
+  it('walks to the next page, to the last, and back', async () => {
+    await renderMany(250);
+
+    await click('Next');
+    expect(rows()).toHaveLength(100);
+    expect(screen.getByText('Page 2 of 3 · 101–200 of 250')).toBeTruthy();
+
+    await click('Next');
+    expect(rows()).toHaveLength(50);
+    expect(screen.getByText('Page 3 of 3 · 201–250 of 250')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Next' }).disabled).toBe(true);
+
+    await click('Previous');
+    expect(screen.getByText('Page 2 of 3 · 101–200 of 250')).toBeTruthy();
+  });
+
+  it('shows no pager when the list fits on one page', async () => {
+    await renderMany(20);
+
+    expect(rows()).toHaveLength(20);
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+  });
+
+  it('starts a new query at the first page', async () => {
+    await renderMany(250);
+    await click('Next');
+    expect(screen.getByText(/Page 2 of 3/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'has:email' } });
+    });
+
+    expect(screen.getByText('Page 1 of 3 · 1–100 of 250')).toBeTruthy();
+  });
+
+  it('Select all still takes the whole match set, not just the page', async () => {
+    await renderMany(250);
+
+    await click('Select all 250');
+
+    expect(screen.getByText('250 selected')).toBeTruthy();
+  });
+
+  it('renders a bounded page for a very large address book', async () => {
+    await renderMany(5000);
+
+    // the DOM holds one page, not the whole book
+    expect(rows()).toHaveLength(100);
+    expect(screen.getByText('Page 1 of 50 · 1–100 of 5000')).toBeTruthy();
+  });
+});

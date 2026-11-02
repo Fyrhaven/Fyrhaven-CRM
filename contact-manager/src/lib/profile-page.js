@@ -31,6 +31,7 @@ import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
 import { applyRulesResult, openRules } from './open-rules.js';
 import { canManage, canPerform, effectiveRole, hasRoles, readRoles } from './book-roles.js';
+import { PAGE_SIZE, isPaged, pageSlice } from './paging.js';
 
 export function makeProfilePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
@@ -46,6 +47,7 @@ export function makeProfilePage(React, api) {
     const [selectedId, setSelectedId] = useState('');
     const [context, setContext] = useState({ status: 'idle', messages: [], tasks: [], events: [], files: [], degraded: [] });
     const [picked, setPicked] = useState(() => new Set());
+    const [page, setPage] = useState(0);
     const [saved, setSaved] = useState([]);
     const [cleanup, setCleanup] = useState(null);
     const [roles, setRoles] = useState({}); // per-address-book roles (#23), advisory
@@ -98,6 +100,12 @@ export function makeProfilePage(React, api) {
         : searchIndex.filter((entry) => matchIndexed(entry, parsed)).map((entry) => entry.card)),
       [searchIndex, parsed, cards],
     );
+    // The rendered page (#39): a view of the match set, never a limit on it.
+    // The counts and *Select all* still read `visible`.
+    const paged = useMemo(() => pageSlice(visible, page, PAGE_SIZE), [visible, page]);
+    // A new query starts at the first page; a shrinking list is clamped by
+    // pageSlice, so a page index can never point past the end.
+    useEffect(() => { setPage(0); }, [query]);
     const chipCounts = useMemo(
       () => countsForIndex(searchIndex, saved.map((entry) => entry.query)),
       [searchIndex, saved],
@@ -504,9 +512,30 @@ export function makeProfilePage(React, api) {
                 h(Button, {
                   size: 'sm', variant: 'secondary', icon: 'undo', onClick: () => void undoSingleCleanup(),
                 }, t('cleanup.undo'))) : null,
+              // The pager (#39) sits above the scroll area, so it does not
+              // scroll away with a long list. Shown only when there is more
+              // than one page.
+              isPaged(visible.length)
+                ? h('div', { 'data-pane': 'pager', style: ACTION_BAR },
+                    h(Button, {
+                      size: 'sm', variant: 'secondary', disabled: paged.page === 0,
+                      onClick: () => setPage(paged.page - 1),
+                    }, t('contacts.prevPage')),
+                    h(Text, { tone: 'muted' }, t('contacts.pageRange', {
+                      page: paged.page + 1,
+                      pages: paged.pages,
+                      from: paged.from,
+                      to: paged.to,
+                      total: paged.total,
+                    })),
+                    h(Button, {
+                      size: 'sm', variant: 'secondary', disabled: paged.page >= paged.pages - 1,
+                      onClick: () => setPage(paged.page + 1),
+                    }, t('contacts.nextPage')))
+                : null,
               h('div', { 'data-pane': 'list-scroll', style: SCROLL_AREA },
                 visible.length
-                  ? h(List, { label: t('page.contactsTitle') }, ...visible.map((card) => h(ListRow, {
+                  ? h(List, { label: t('page.contactsTitle') }, ...paged.items.map((card) => h(ListRow, {
                     key: card.id,
                     title: avatarTitle(card, 24),
                     subtitle: bookLabel(card),
