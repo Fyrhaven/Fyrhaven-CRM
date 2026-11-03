@@ -21,9 +21,13 @@ export function filesHost({ seed = [], features = { files: true }, handlers = {}
       'files.list': async (folderId) => state.files
         .filter((file) => (folderId === undefined ? !file.parentId : file.parentId === folderId))
         .map(info),
-      'files.find': async ({ folderId } = {}) => state.files
-        .filter((file) => file.parentId === folderId)
-        .map(info),
+      // `find` searches by text in the name or path; with no text it finds
+      // nothing. `list(folderId)` is what lists a folder's contents — the two
+      // are not interchangeable, which is why the fake keeps them apart.
+      'files.find': async ({ text, folderId } = {}) => (text
+        ? state.files.filter((file) => file.parentId === folderId
+          && String(file.name).toLowerCase().includes(String(text).toLowerCase()))
+        : []).map(info),
       'files.getText': async (fileId) => {
         const file = state.files.find((entry) => entry.id === fileId);
         if (!file) throw new Error('no such file');

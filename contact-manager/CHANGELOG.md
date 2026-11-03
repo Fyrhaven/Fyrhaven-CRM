@@ -7,6 +7,25 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.50.2] — 2026-11-03
+
+### Fixed
+
+- **A saved project was gone the next time the page opened.** Reported from a
+  live install — the file was there under Files, but the Projects tab was empty.
+  The store read the folder with `find`, which searches by **text**; with no text
+  it returns nothing, so every reopen looked at an empty folder. It uses
+  `list(folderId)` now, which is the call that lists what is *in* a folder, and
+  both fakes keep the two apart so the mistake cannot come back.
+
+### Notes
+
+**A record in Files is shared with nobody but its owner, and the plugin cannot
+change that.** There is no share call on `api.files`, and the host refuses writes
+into a folder shared with others — so `Contact Manager/` shows *Only you* until
+the user shares the folder in the Files app, and even then the others get
+**read-only**. Team-*writable* records are exactly what the cloud tier is for.
+
 ## [1.50.1] — 2026-11-03
 
 ### Fixed

@@ -14,7 +14,13 @@
 // 2. **It is rate-limited**: `getText` 30 a minute, every write 20 a minute. A
 //    page that reads fifteen stores must therefore read the folder **once**, not
 //    fifteen times, so the whole folder is cached for the session.
-// 3. **It is optional.** `api.host.features.files` is true only when the server
+// 3. **The folder is the user's own, and the plugin cannot share it.** There is
+//    no share call on `api.files`, and writes are refused into a folder shared
+//    with others — so a record is "Only you" in the Files app until the user
+//    shares the folder there. Even then the others get *read-only*, because the
+//    host refuses writes into a shared folder. Team-*writable* records are what
+//    the cloud tier exists for.
+// 4. **It is optional.** `api.host.features.files` is true only when the server
 //    has Files for this signed-in account and the admin left Files on; with it
 //    off every call rejects with "Files is not available". Nothing here may
 //    throw, and a failure is reported as such rather than as an empty store.
@@ -65,7 +71,10 @@ export function makeFilesStore(api) {
         // The names already there, so a write can say which file it replaces.
         const names = new Set();
         if (folderId) {
-          const files = await api.files.find({ folderId, limit: 50 });
+          // `list(folderId)` lists what is *in* a folder; `find` searches by
+          // name/path and, with no `text`, need not return the folder's contents
+          // at all — which is why a saved project vanished on the next open.
+          const files = await api.files.list(folderId);
           for (const file of files ?? []) {
             const name = String(file?.name ?? '');
             if (file?.kind !== 'file') continue;
