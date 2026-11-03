@@ -7,6 +7,37 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.48.0] — 2026-11-03
+
+### Added
+
+- **Records can live on the customer's own Stalwart server (#68).** `api.files`
+  is Stalwart's file storage, so the storage seam gained a `files` backend that
+  keeps one JSON file per store in a `Contact Manager/` folder in the user's own
+  drive. No cloud, no token, no secret — their server, their backups.
+
+### Changed
+
+- **Where a record goes is now decided in one place.** `recordBackend(api)`
+  answers `'files'` (the customer's own server), `'cloud'` (the dedicated server,
+  for a host without Files) or `'unavailable'`. There is **no fallback to the
+  browser**: with neither server, a record feature says so and offers the cloud,
+  and writes nothing locally.
+
+### Notes
+
+Two host facts shape the files backend, both from the plugin guide. **Writes go
+only into the user's own drive** and there is **no delete call**, so removal is a
+tombstone (`null`) and the store is per user — a team *reads* a folder the owner
+shares, it cannot write it. And the calls are **rate-limited** (`getText` 30/min,
+writes 20/min), so the folder is listed and read **once per session** and cached;
+that cache is why `store.js` keeps one files store per `api`. If `api.files`
+fails, the seam reports `unavailable` with the reason rather than an empty store —
+an empty list and an unreachable server must never look alike.
+
+No behaviour changes yet: no store has been switched over, so every feature still
+reads where it read before. Switching them is the next step, projects first.
+
 ## [1.47.0] — 2026-11-03
 
 ### Added

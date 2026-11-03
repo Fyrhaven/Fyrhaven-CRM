@@ -207,6 +207,10 @@ The storage seam (#68)
     read/write/remove(api, key) -> { status: 'ok' | 'unavailable' }
     recordsAvailable(api) — what a feature asks before it reads, so it can say
       "this needs a server" instead of showing an empty list
+    NO silent local fallback. With no `api.files` (an older webmail, or an admin
+      who turned Files off) and no cloud configured, a record feature is
+      UNAVAILABLE and says so, and the cloud tier is offered as the alternative.
+      A record that quietly lives in one browser is the bug this exists to remove
     an unknown key is treated as view state; test/store.test.mjs asserts every
       key constant the plugin exports is classified, so a new store cannot be
       added without deciding which kind it is
