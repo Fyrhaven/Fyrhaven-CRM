@@ -1,8 +1,9 @@
-# AI Handoff - Contact Manager Plugin
+# Handoff - Contact Manager Plugin
 
-> The authoritative handoff for this plugin. It lives in the repository at
-> `contact-manager/AI_HANDOFF.md` and is published on GitHub on the branches
-> `main` and `contact-manager` (identical content on both).
+> The authoritative record of where this plugin stands and why. It lives in the
+> repository at `contact-manager/HANDOFF.md` and is published on GitHub on the
+> branches `main` and `contact-manager` (identical content on both). The rules
+> for changing the code are in [`.clinerules`](../.clinerules).
 
 ## Current State
 - **Version**: 1.46.0 (`manifest.json` is the single source of truth; `package.json` matches)
@@ -541,7 +542,7 @@ direction. The same reason `applyNormalisation` records *after* the writes.
 can still be undone — a merge batch or a cleanup/rules record — and the page
 offers that one, through the undo functions that already exist. The history
 points at the rollback rather than inventing a second one, which is the same
-rule as §9.2 for merges.
+rule as the one-review-dialog rule in `.clinerules`.
 
 **`applyNormalisation`'s third argument changed shape.** It used to be `now`;
 it is now `{ now, kind }`, and a plain number still means "the time", so the
@@ -622,7 +623,7 @@ organisation; the editor writes it on every group card.
 options the Duplicates page scans with — the per-book policies and ignore rules
 included — and the editor recomputes it on the *draft*, so the warning follows
 the edit instead of describing the card as it was opened. The list itself is
-never changed: the review goes through the one review dialog (§9.2), the same
+never changed: the review goes through the one review dialog (see `.clinerules`), the same
 reason the import wizard queues a merge rather than performing it.
 
 **The member search reuses the contact search.** `memberCandidates` filters with
@@ -776,7 +777,7 @@ contact*, remembered per batch.
 
 **The design question, settled the way the issue suggested.** A merge here would
 be the first merge in the plugin that does not go through the review dialog, and
-that is a hard rule (README §9.2). So "merge" does **not** merge inside the
+that is a hard rule (see `.clinerules`). So "merge" does **not** merge inside the
 wizard. The wizard writes the imported contact and hands the pair
 `[existing, imported]` back to the caller, and `importContacts` in `actions.js`
 opens the one review dialog every other merge uses. The wizard queues; the dialog
@@ -1709,7 +1710,7 @@ contact-manager/
 ├── package.json           # scripts and dev dependencies
 ├── CHANGELOG.md           # user-facing history
 ├── README.md              # user-facing plugin documentation
-├── AI_HANDOFF.md          # this file - the handoff for the next agent
+├── HANDOFF.md             # this file - where the project stands and why
 ├── vitest.config.mjs      # test config
 ├── src/
 │   ├── index.js           # slots, hooks, activate() wiring

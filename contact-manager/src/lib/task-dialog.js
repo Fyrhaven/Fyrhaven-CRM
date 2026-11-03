@@ -1,6 +1,6 @@
 // The follow-up task editor (#36): a title, a due date, a priority and notes for
 // one contact. It returns a **draft** and writes nothing — open-task.js creates
-// the task, the same funnel as the other editors (README §9.2).
+// the task, the same funnel as the other editors (see `.clinerules`).
 
 import { DialogButtons, Field, Input, Row, Select, Stack, Text, Textarea } from '@plugin-host/ui';
 import { contactName, primaryEmail } from './contacts.js';
