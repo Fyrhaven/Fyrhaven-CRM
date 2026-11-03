@@ -7,6 +7,26 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.47.0] — 2026-11-03
+
+### Added
+
+- **Overdue follow-ups on the Overview (#36, the cross-contact half).** The
+  landing page now has a *Follow-ups* block: the open tasks over **every**
+  contact at once, overdue ones first and badged, then anything due within the
+  next seven days, and a count of what can wait. An overdue task used to be
+  visible only on the contact it was about.
+
+### Notes
+
+The tasks come from `api.tasks.list` through `optionalCall`, so a host without a
+task list leaves the page readable and says so rather than showing nothing. The
+seven-day window is a **local calendar day** (`new Date(y, m, d + 7)`), so a
+daylight-saving change cannot shift the boundary by an hour and drop a task; an
+overdue task is never counted as due soon. `formatDate` moved from the profile
+page into `labels.js`, so the Overview and the profile cannot disagree about what
+a date looks like.
+
 ## [1.46.0] — 2026-11-02
 
 ### Added
