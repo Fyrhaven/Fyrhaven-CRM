@@ -41,7 +41,15 @@ function filesApi({ seed = [], features = { files: true }, overrides = {} } = {}
       'files.create': async (payload) => {
         const { folderId, name, content, type, replace } = payload;
         const existing = state.files.find((file) => file.parentId === folderId && file.name === name);
-        if (existing && !replace) throw new Error('already there');
+        // `replace` is the **id** of the file to replace, and it must be one
+        // this folder really holds (as on a live install).
+        const replaced = replace === undefined
+          ? null
+          : state.files.find((file) => file.id === replace && file.parentId === folderId);
+        if (replace !== undefined && !replaced) {
+          throw new Error(`files.create: no file or folder with id "${replace}" in your own files`);
+        }
+        if (existing && !replaced) throw new Error('already there');
         if (existing) {
           existing.content = content;
           state.created.push(payload);
@@ -94,6 +102,7 @@ describe('the files store', () => {
 
     await store.write('projects', [{ id: 'p1' }]);
     expect(await store.read('projects')).toEqual([{ id: 'p1' }]);
+    const firstId = state.files.find((file) => file.name === 'projects.json').id;
 
     await store.write('projects', [{ id: 'p2' }]);
     expect(await store.read('projects')).toEqual([{ id: 'p2' }]);
@@ -102,12 +111,12 @@ describe('the files store', () => {
       name: 'projects.json',
       content: JSON.stringify([{ id: 'p2' }]),
       type: 'text/plain',
-      // the second write replaces the file it made, by name
-      replace: 'projects.json',
+      // the second write replaces the file it made, **by id**
+      replace: firstId,
     });
   });
 
-  it('sends no replace on a first write — only a name when one is there', async () => {
+  it('sends no replace on a first write — only an id when one is there', async () => {
     const { api, state } = filesApi();
     await makeFilesStore(api).write('projects', []);
     expect(state.created[0]).not.toHaveProperty('replace');

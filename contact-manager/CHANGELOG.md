@@ -7,6 +7,17 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.50.3] — 2026-11-03
+
+### Fixed
+
+- **Saving a second project failed with *"no file or folder with id
+"projects.json""*.** `files.create`'s `replace` is the **id** of the file being
+replaced — not a flag (1.50.1) and not a name (1.50.2). The store keeps each
+file's id from the folder listing, sends it as `replace`, and keeps the id the
+host reports back, so the next save replaces the right file. Both fakes now
+reject a `replace` that is not a file they actually hold.
+
 ## [1.50.2] — 2026-11-03
 
 ### Fixed

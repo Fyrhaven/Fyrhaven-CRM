@@ -46,13 +46,19 @@ export function filesHost({ seed = [], features = { files: true }, handlers = {}
         if (type !== 'text/plain' && type !== 'text/markdown') {
           throw new Error('files.create: type must be text/markdown or text/plain');
         }
-        // `replace`, when given, is the **name** of the file to replace — a
-        // string of 1-256 characters, not a flag (seen on a live install).
+        // `replace` is the **id** of the file to replace — a string, and one the
+        // host can actually find (two live installs taught this, in that order).
         if (replace !== undefined && (typeof replace !== 'string' || !replace.length || replace.length > 256)) {
           throw new Error('files.create: replace must be a string of 1-256 characters');
         }
+        const replaced = replace === undefined
+          ? null
+          : state.files.find((file) => file.id === replace && file.parentId === folderId);
+        if (replace !== undefined && !replaced) {
+          throw new Error(`files.create: no file or folder with id "${replace}" in your own files`);
+        }
         const existing = state.files.find((file) => file.parentId === folderId && file.name === name);
-        if (existing && replace !== name) throw new Error('already there');
+        if (existing && !replaced) throw new Error('already there');
         if (existing) {
           existing.content = content;
           state.created.push(payload);
