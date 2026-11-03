@@ -7,6 +7,34 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.46.0] — 2026-11-02
+
+### Added
+
+- **Private notes on a contact (#38, the private half).** A *Private notes*
+  section on the contact profile: write a note, and read it back with a
+  timestamp and delete it. Notes are rendered as elements, never as markup, with
+  a tiny documented subset — `**bold**`, `*italic*`/`_italic_`, `` `code` `` and
+  `@mention` — so a note can never become markup.
+- **The subject-access export now carries the notes, and erasure takes them
+  away.** A data-subject request is answered with everything held about the
+  person, and the private notes are held about them; an erasure or
+  anonymisation removes them, or it would be a half-measure.
+
+### Notes
+
+A note is **private by construction**: the host has no note *record* per
+contact, and JSContact's `notes` field is a field ON the card that everyone who
+can see the card can see — so a private note cannot be a card field. It is a
+record *about* the contact, kept in `api.storage` per account and per browser,
+exactly like the consent records and the change history; nothing shared can show
+it because nothing shared can read it. The section says so out loud.
+
+Still to come from #38: team visibility, mentions that notify, and search across
+notes — all of which need the server tier (#68) for the shared half. There is
+also no *author* on a note: the host exposes no user identity to the plugin, and
+inventing one would be a lie.
+
 ## [1.45.0] — 2026-11-02
 
 ### Added
@@ -427,7 +455,7 @@ has **hidden** are left out: a hidden group is a decision, not news.
 
 - **A merge chosen during import still goes through the review dialog (#4).**
   "Merge" writes the imported contact and then hands the pair to the one review
-  dialog every merge in this plugin uses (README §9.2), pre-selected to keep the
+  dialog every merge in this plugin uses (see `.clinerules`), pre-selected to keep the
   contact that was already there. Nothing is merged without the user seeing the
   plan, and the merge is undoable like any other.
 
@@ -458,7 +486,7 @@ wrote, what it skipped and what it queued for review instead of a single count.
 ### Notes
 
 This completes #7's build list apart from the auto-merge threshold, which is
-deliberately not built: every merge must go through the review dialog (§9.2), so
+deliberately not built: every merge must go through the review dialog (see `.clinerules`), so
 an automatic merge would bypass the one surface the plugin insists on.
 
 The stored ignore record is now `{ domains, tags, companies }`; a record written

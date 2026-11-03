@@ -5,6 +5,7 @@ import { fakeApi } from '../test-utils/fake-api.mjs';
 import { makeCard } from './fixtures.mjs';
 import { isAnonymisedCard, isMergeable } from '../src/lib/contacts.js';
 import { readConsents, setConsent } from '../src/lib/consent.js';
+import { readNotes, saveNote } from '../src/lib/notes.js';
 import { readHistory } from '../src/lib/history.js';
 import { readUndo } from '../src/lib/undo.js';
 import {
@@ -80,6 +81,20 @@ describe('buildSubjectExport', () => {
     expect(subjectExportJson(bundle)).toContain('"Ada Lovelace"');
   });
 
+  it('hands back the private notes held about the subject (#38)', () => {
+    const note = { id: 'n1', at: '2026-01-01T00:00:00Z', text: 'met at a talk' };
+    const bundle = buildSubjectExport({ card: FULL, notes: [note] });
+
+    // the notes are personal data this browser holds, so completeness means them
+    expect(bundle.notes).toEqual([note]);
+    expect(subjectExportJson(bundle)).toContain('met at a talk');
+  });
+
+  it('reads no notes as an empty list', () => {
+    expect(buildSubjectExport({ card: FULL }).notes).toEqual([]);
+    expect(buildSubjectExport({ card: FULL, notes: 'nonsense' }).notes).toEqual([]);
+  });
+
   it('names the file after the subject', () => {
     expect(subjectExportName(FULL, 'json')).toBe('ada-lovelace.json');
     expect(subjectExportName(FULL, 'csv')).toBe('ada-lovelace.csv');
@@ -131,6 +146,7 @@ describe('anonymiseSubject', () => {
   it('overwrites the card, drops its consents and records the change', async () => {
     const api = fakeApi({ handlers: { 'contacts.update': async () => {} } });
     await setConsent(api, { contactId: 'a', source: 'newsletter', basis: 'consent', grantedAt: '2026-01-01' });
+    await saveNote(api, 'a', 'a private thought', { id: 'n1' });
     const result = await anonymiseSubject(api, FULL, { now: 1000 });
 
     expect(result.anonymised).toBe(true);
@@ -139,6 +155,9 @@ describe('anonymiseSubject', () => {
     expect(patch.name).toEqual({ full: ANONYMISED_NAME });
     expect(patch.emails).toBeUndefined();
     expect(await readConsents(api)).toEqual([]);
+    // the private notes go too, or the anonymisation would be a half-measure
+    expect(result.notes).toBe(1);
+    expect(await readNotes(api)).toEqual({});
     expect((await readDeletions(api))[0]).toMatchObject({ id: 'a', method: 'anonymise', books: ['b1'] });
     expect((await readHistory(api))[0]).toMatchObject({ kind: 'anonymise', subject: 'a' });
   });
@@ -148,11 +167,15 @@ describe('eraseSubject', () => {
   it('deletes the card, drops its consents, and leaves a proof of deletion', async () => {
     const api = fakeApi({ handlers: { 'contacts.remove': async () => {} } });
     await setConsent(api, { contactId: 'a', source: 'newsletter', basis: 'consent', grantedAt: '2026-01-01' });
+    await saveNote(api, 'a', 'a private thought', { id: 'n1' });
     const result = await eraseSubject(api, FULL, { now: 1000 });
 
     expect(result.erased).toBe(true);
     expect(api.calls('contacts.remove')[0].args[0]).toBe('a');
     expect(await readConsents(api)).toEqual([]);
+    // erasure takes the private notes with it
+    expect(result.notes).toBe(1);
+    expect(await readNotes(api)).toEqual({});
     expect((await readDeletions(api))[0]).toMatchObject({ id: 'a', method: 'erase' });
     expect((await readHistory(api))[0]).toMatchObject({ kind: 'erase' });
     // the delete left an undo record, like every other delete
