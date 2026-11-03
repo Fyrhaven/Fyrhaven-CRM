@@ -103,6 +103,7 @@ contact-manager/
 ├── src/
 │   ├── index.js            # slots, hooks, activate() — wiring only
 │   └── lib/
+│       ├── store.js       # the storage seam: which key lives on the server (#68)
 │       ├── contacts.js     # JSContact readers, loaders, settings flags
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
 │       ├── name-match.js   # folding, nicknames, phonetic keys, name evidence (#8)
@@ -1372,6 +1373,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/release.test.mjs` | The release guard: the manifest/package/CHANGELOG agreement, and the notes it extracts |
 | `test/ship.test.mjs` | The ship plan: which pull requests are ready, which are blocked, and retargeting a stacked one |
 | `test/labels.test.mjs` | `formatDate`: a date and a timestamp agree, an empty value is empty, and a value that is not a date is shown as it is |
+| `test/store.test.mjs` | The storage seam (#68): every key the plugin stores is classified as a record or view state, records route to the server and view state to the host storage, and a record with no server configured writes nothing locally |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
 `test/bundle.test.mjs` evaluates `dist/index.js` with a `require` that only
