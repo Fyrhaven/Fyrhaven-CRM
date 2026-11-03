@@ -2,12 +2,14 @@
 //
 // The host has no note *record* per contact: JSContact's `notes` field is a field
 // ON the card, so everyone who can see the card sees it. A note that is private
-// to this browser therefore cannot be a card field — it is a record ABOUT the
-// contact, kept in `api.storage` per account and per browser, exactly like the
-// consent records and the change history. Nothing shared can show it, because
-// nothing shared can read it.
+// to one browser therefore cannot be a card field — it is a record ABOUT the
+// contact, kept through the storage seam (#68) on the customer's own server, in
+// the same shape as the consent records and the change history. Nothing shared
+// can read it as a card field, because it never is one.
 //
-// Pure model plus api.storage — no DOM. The UI is notes-section.js.
+// Pure model plus the storage seam — no DOM. The UI is notes-section.js.
+
+import { read, remove, write } from './store.js';
 
 export const NOTES_KEY = 'contactNotes';
 /** Across every contact… */
@@ -61,14 +63,21 @@ export function normalizeNotes(raw) {
   return out;
 }
 
-/** Read the store; rewrites when junk was dropped. */
+/**
+ * Read the store; rewrites when junk was dropped.
+ *
+ * Through the seam (#68), so a note lives on a server rather than only in this
+ * browser. An unavailable store reads as no notes, so the section can say what
+ * is missing instead of failing to draw.
+ */
 export async function readNotes(api) {
-  const stored = await api.storage.get(NOTES_KEY);
+  const answer = await read(api, NOTES_KEY);
+  const stored = answer.status === 'ok' ? answer.value : null;
   const raw = stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
   const notes = normalizeNotes(raw);
-  if (JSON.stringify(notes) !== JSON.stringify(raw)) {
-    if (Object.keys(notes).length) await api.storage.set(NOTES_KEY, notes);
-    else await api.storage.remove(NOTES_KEY);
+  if (answer.status === 'ok' && JSON.stringify(notes) !== JSON.stringify(raw)) {
+    if (Object.keys(notes).length) await write(api, NOTES_KEY, notes);
+    else await remove(api, NOTES_KEY);
   }
   return notes;
 }
@@ -76,8 +85,11 @@ export async function readNotes(api) {
 /** Write the whole store. An empty store removes the key. */
 export async function writeNotes(api, all) {
   const clean = normalizeNotes(all);
-  if (Object.keys(clean).length) await api.storage.set(NOTES_KEY, clean);
-  else await api.storage.remove(NOTES_KEY);
+  const answer = Object.keys(clean).length
+    ? await write(api, NOTES_KEY, clean)
+    : await remove(api, NOTES_KEY);
+  // A note with nowhere to live must not look like it was kept.
+  if (answer.status !== 'ok') throw new Error(answer.reason ?? 'unconfigured');
   return clean;
 }
 
