@@ -20,9 +20,13 @@ function filesApi({ seed = [], features = { files: true }, overrides = {} } = {}
       'files.list': async (folderId) => state.files
         .filter((file) => (folderId === undefined ? !file.parentId : file.parentId === folderId))
         .map(info),
-      'files.find': async ({ folderId } = {}) => state.files
-        .filter((file) => file.parentId === folderId)
-        .map(info),
+      // `find` searches by text in the name or path; with no text it finds
+      // nothing. `list(folderId)` is what lists a folder's contents — the two
+      // are not interchangeable, which is why the fake keeps them apart.
+      'files.find': async ({ text, folderId } = {}) => (text
+        ? state.files.filter((file) => file.parentId === folderId
+          && String(file.name).toLowerCase().includes(String(text).toLowerCase()))
+        : []).map(info),
       'files.getText': async (fileId) => {
         const file = state.files.find((entry) => entry.id === fileId);
         if (!file) throw new Error('no such file');
@@ -134,8 +138,9 @@ describe('the files store', () => {
     await store.read('projects');
     await store.read('contactNotes');
 
-    // the folder was listed and searched once; the rest is the session cache
-    expect(api.calls('files.find')).toHaveLength(1);
+    // the folder's contents were listed once; the rest is the session cache
+    const contents = api.calls('files.list').filter((call) => call.args.length > 0);
+    expect(contents).toHaveLength(1);
     expect(state.folders).toHaveLength(1);
   });
 
@@ -145,7 +150,8 @@ describe('the files store', () => {
     await store.write('projects', []);
     store.invalidate();
     await store.read('projects');
-    expect(api.calls('files.find')).toHaveLength(2);
+    const contents = api.calls('files.list').filter((call) => call.args.length > 0);
+    expect(contents).toHaveLength(2);
   });
 
   it('reads a seeded store from the server, beside the folder it found', async () => {
@@ -183,5 +189,28 @@ describe('the files store', () => {
     await expect(store.read('projects')).rejects.toThrow('refused');
     // the next read tries again rather than remembering the failure
     await expect(store.read('projects')).rejects.toThrow('refused');
+  });
+});
+
+// The bug a live install found: a project saved fine, then was missing the next
+// time the page opened. The store read the folder with `find`, which searches
+// by *text* — so with no text it returned nothing. These are the regressions.
+
+describe('reopening a store', () => {
+  it('reads back what a previous session wrote', async () => {
+    const folder = { id: 'f1', name: FILES_FOLDER, kind: 'folder', parentId: null };
+    const saved = { id: 'f2', name: 'projects.json', kind: 'file', parentId: 'f1', content: '[{"id":"p1"}]' };
+    const { api } = filesApi({ seed: [folder, saved] });
+
+    // a fresh store, as a page load makes
+    expect(await makeFilesStore(api).read('projects')).toEqual([{ id: 'p1' }]);
+  });
+
+  it('lists the folder rather than searching it with no text', async () => {
+    const { api } = filesApi();
+    await makeFilesStore(api).read('projects');
+
+    expect(api.calls('files.find')).toHaveLength(0);
+    expect(api.calls('files.list').filter((call) => call.args.length > 0)).toHaveLength(1);
   });
 });
