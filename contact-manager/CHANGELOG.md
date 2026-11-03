@@ -7,6 +7,17 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.50.1] — 2026-11-03
+
+### Fixed
+
+- **Saving a record to Files failed with *"replace must be a string of 1-256
+characters"*.** Reported from a live install: `files.create`'s `replace` is not
+**a flag but the name of the file being replaced**. The store now sends
+`replace: <name>` only when that file is really in the folder, so a first write
+is an ordinary create, and the test double rejects any non-string `replace` so
+the mistake cannot ship again.
+
 ## [1.50.0] — 2026-11-03
 
 ### Changed

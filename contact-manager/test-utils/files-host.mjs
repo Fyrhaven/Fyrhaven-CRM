@@ -35,24 +35,30 @@ export function filesHost({ seed = [], features = { files: true }, handlers = {}
         state.folders.push(folder);
         return folder;
       },
-      'files.create': async ({ folderId, name, content, type, replace }) => {
+      'files.create': async (payload) => {
+        const { folderId, name, content, type, replace } = payload;
         // The host refuses anything but these two (seen on a live install), so
         // the fake does too — a wrong type must fail here, not in production.
         if (type !== 'text/plain' && type !== 'text/markdown') {
           throw new Error('files.create: type must be text/markdown or text/plain');
         }
+        // `replace`, when given, is the **name** of the file to replace — a
+        // string of 1-256 characters, not a flag (seen on a live install).
+        if (replace !== undefined && (typeof replace !== 'string' || !replace.length || replace.length > 256)) {
+          throw new Error('files.create: replace must be a string of 1-256 characters');
+        }
         const existing = state.files.find((file) => file.parentId === folderId && file.name === name);
-        if (existing && !replace) throw new Error('already there');
+        if (existing && replace !== name) throw new Error('already there');
         if (existing) {
           existing.content = content;
-          state.created.push({ name, content, type, replace });
+          state.created.push(payload);
           return { file: info(existing) };
         }
         const file = {
           id: `f${state.nextId++}`, name, kind: 'file', parentId: folderId, content, mimeType: type,
         };
         state.files.push(file);
-        state.created.push({ name, content, type, replace });
+        state.created.push(payload);
         return { file: info(file) };
       },
       ...handlers,

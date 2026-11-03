@@ -34,17 +34,18 @@ function filesApi({ seed = [], features = { files: true }, overrides = {} } = {}
         state.folders.push(folder);
         return folder;
       },
-      'files.create': async ({ folderId, name, content, type, replace }) => {
+      'files.create': async (payload) => {
+        const { folderId, name, content, type, replace } = payload;
         const existing = state.files.find((file) => file.parentId === folderId && file.name === name);
         if (existing && !replace) throw new Error('already there');
         if (existing) {
           existing.content = content;
-          state.created.push({ name, content, type, replace });
+          state.created.push(payload);
           return { file: info(existing) };
         }
         const file = { id: `f${state.nextId++}`, name, kind: 'file', parentId: folderId, content, mimeType: type };
         state.files.push(file);
-        state.created.push({ name, content, type, replace });
+        state.created.push(payload);
         return { file: info(file) };
       },
       ...overrides,
@@ -97,8 +98,15 @@ describe('the files store', () => {
       name: 'projects.json',
       content: JSON.stringify([{ id: 'p2' }]),
       type: 'text/plain',
-      replace: true,
+      // the second write replaces the file it made, by name
+      replace: 'projects.json',
     });
+  });
+
+  it('sends no replace on a first write — only a name when one is there', async () => {
+    const { api, state } = filesApi();
+    await makeFilesStore(api).write('projects', []);
+    expect(state.created[0]).not.toHaveProperty('replace');
   });
 
   it('reads a store that is not there as nothing', async () => {
