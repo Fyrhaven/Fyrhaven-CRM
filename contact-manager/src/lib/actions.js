@@ -180,7 +180,7 @@ export async function managePolicies(api, { fallbackBooks = [] } = {}) {
 /**
  * The import wizard: it reads the file, shows what would happen, and returns
  * what it wrote. Duplicates the user chose to merge come back as review-dialog
- * groups — every merge goes through that dialog (README §9.2) — so the action
+ * groups — every merge goes through that dialog (see `.clinerules`) — so the action
  * opens it here, then toasts the whole outcome. The page toasts that; the
  * palette has no page to toast from, so this does it here.
  */

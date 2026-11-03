@@ -9,9 +9,10 @@ meant to grow into a general contact-management addon.
 > host allows. The module-by-module map, the phases and the non-goals are in
 > [issue #54](https://github.com/zyntrax/bulwark-plugins/issues/54).
 
-This document is written for **human developers and AI coding assistants**.
-Section 9 (“Working on this plugin”) is the part an AI model should read
-first; section 10 is a compact, machine-checkable contract.
+This document describes what the plugin does, how it is built and how it
+behaves. The rules an automated contributor works to, and the contract the test
+suite enforces, live in [`.clinerules`](../.clinerules) at the repository root;
+the current state of the project is in [`HANDOFF.md`](HANDOFF.md).
 
 ---
 
@@ -67,6 +68,7 @@ signatures, the last scan summary).
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
 | *Follow up* button | Contact Manager → *Contacts*, on the open contact | Opens the **follow-up task** editor (#36): title (prefilled), due date, priority and notes, created as a real host task. The profile's task list shows the contact's tasks with anything past due badged *Overdue*, first |
+| *Private notes* section | Contact Manager → *Contacts*, on the open contact | Notes this browser holds about the contact (#38, the private half): write, read back with a timestamp, delete. Private by construction — they live in `api.storage`, never on the card. A small documented subset of marks (`**bold**`, `*italic*`, `` `code` ``, `@mention`) is rendered as elements, never as markup. The subject-access export carries them, and erasure removes them |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
@@ -96,6 +98,7 @@ contact-manager/
 ├── .gitignore              # node_modules, dist, *.zip, logs
 ├── CHANGELOG.md            # user-facing history, newest on top
 ├── README.md               # this file
+├── HANDOFF.md              # where the project stands and why
 ├── src/
 │   ├── index.js            # slots, hooks, activate() — wiring only
 │   └── lib/
@@ -178,6 +181,9 @@ contact-manager/
 │       ├── tasks.js       # follow-up tasks: the payload, the due date, the overdue split (#36)
 │       ├── task-dialog.js # the follow-up task editor (plugin-dialog slot, #36)
 │       ├── open-task.js   # one place that opens the task editor and creates the task (#36)
+│       ├── notes.js       # private notes: the store, its repairs, the erasure (#38)
+│       ├── markdown.js    # the tiny inline formatter for a note (#38)
+│       ├── notes-section.js # the Private notes section on a contact (#38)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -200,6 +206,9 @@ contact-manager/
 │   ├── ui-help.test.mjs    # the Help dialog (#39)
 │   ├── tasks.test.mjs      # the follow-up payload, due dates and the overdue split (#36)
 │   ├── ui-task.test.mjs    # the follow-up task editor (#36)
+│   ├── notes.test.mjs      # the note store, its repairs and the erasure (#38)
+│   ├── markdown.test.mjs   # the tiny inline formatter (#38)
+│   ├── ui-notes.test.mjs   # the Private notes section (#38)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -866,7 +875,7 @@ stays a picker.
 page scans with (per-book policies and ignore rules included), so a list cannot
 hold a duplicate the rest of the plugin would not see. The Groups page flags
 such a list and the editor warns as the membership is edited; the list itself is
-never changed — the review goes through the one review dialog (§9.2).
+never changed — the review goes through the one review dialog (see `.clinerules`).
 
 Two parts of #12 are deliberately not built because the host has no surface for
 them: groups in the composer's autocomplete, and a membership view inside the
@@ -1215,6 +1224,45 @@ rather than at the call site.
 Still to come from #36: a cross-contact *My tasks* view with overdue/upcoming
 filters, and reminders — which need a timer hook the plugin does not have.
 
+### 6.21 Private notes on a contact (`src/lib/notes.js`, `markdown.js`, `notes-section.js`, v1.46.0) — #38
+
+The private half of #38. A *Private notes* section on the contact profile: write
+a note, read it back with a timestamp, delete it.
+
+**Private by construction, not by a visibility flag.** The host has no note
+*record* per contact, and JSContact's `notes` field is a field **on the card** —
+so everyone who can see the card can see it, and a private note cannot be a card
+field. A note is therefore a record *about* the contact, kept in `api.storage`
+per account and per browser, exactly like the consent records and the change
+history. Nothing shared can show it because nothing shared can read it — the
+strongest form of "private notes never appear in shared views". The section says
+so out loud (`notes.hint`), rather than implying a flag enforces it.
+
+**The store is bounded and repairs itself.** `normalizeNotes` keeps only real
+contacts with real notes, de-duplicates by note id, drops a note with no id or no
+text (corruption, not a note), and caps both the notes per contact and the total;
+`readNotes` rewrites when it dropped junk and removes the key when nothing is
+left. `notesFor` sorts newest first **without mutating the stored list**.
+
+**Marks are rendered as elements, never as markup.** `parseInline` is a
+deliberately tiny, documented subset — `**bold**`, `*italic*`/`_italic_`,
+`` `code` ``, `@mention` — and returns tokens, so `notes-section.js` builds
+`<strong>`, `<em>`, `<code>` and a badge. Nothing a note contains can become
+markup, and no parser dependency is needed. An unmatched mark stays literal, so a
+stray `*` is shown rather than swallowed; a matched pair *is* emphasis, however
+spaced.
+
+**It is personal data, so the GDPR toolkit knows about it.** The subject-access
+export carries the notes (`buildSubjectExport({ …, notes })`), and both
+`eraseSubject` and `anonymiseSubject` drop them — an erasure that left the notes
+behind would be a half-measure. The vCard/CSV subject exports stay card-only,
+since a note is not a card field.
+
+Still to come from #38: team visibility, mentions that notify, and search across
+notes — the shared half needs the server tier (#68). There is deliberately **no
+author** on a note: the host exposes no user identity to the plugin, and
+inventing one would be a lie.
+
 ---
 
 ## 7. Build, test and package
@@ -1287,6 +1335,30 @@ plugin host are **not** bundled, the host provides them.
 | `test/normalise.test.mjs` | The cleanup plan (complete maps, the values it keeps), its application, the refusal that is left out of the record, and the undo putting everything back exactly |
 | `test/capabilities.test.mjs` | The optional-API probe: wanted methods present, renamed, absent, empty and unreadable |
 | `test/ui-kit.test.mjs` | Every `@plugin-host/ui` name the source imports is exported by the kit stand-in |
+| `test/editor.test.mjs` | Draft ↔ JSContact conversions, validation and the dirty check (#9) |
+| `test/ui-editor.test.mjs` | The create/edit/delete dialog: create, validation, cancel, edit and delete (#9) |
+| `test/undo.test.mjs` | The undo records: the retention window, the size caps, eviction, purge, restore and a partial restore |
+| `test/watch.test.mjs` | The save-time duplicate warning: the create and edit paths, and the setting off |
+| `test/profile.test.mjs` | Contact search, task and timeline matching for the 360° profile (#10) |
+| `test/projects.test.mjs` | The project model and storage, the milestone task draft, billable totals, and the JSON export/import (#11) |
+| `test/ui-projects.test.mjs` | The Projects page and editor, and the milestone task it creates (#11) |
+| `test/ui-shell.test.mjs` | The one app page: the sub-tabs, the first-mount rule and the revision bump |
+| `test/report.test.mjs` | `reportError`: the host alert, the toast fallback, and a refused alert |
+| `test/book-roles.test.mjs` | The role ladder and its monotonicity, the unknown-role default, the storage repairs, the weakest-link reading and the empty-map default (#23) |
+| `test/ui-roles.test.mjs` | The roles dialog: the four roles per book, the advisory line, cancel and the save (#23) |
+| `test/onboarding.test.mjs` | The guide's step order, the clamps at both ends, and its storage repairs (#39) |
+| `test/ui-onboarding.test.mjs` | The Getting started card: each step's action, the walk forward and back, and Finish/Skip (#39) |
+| `test/smart-lists.test.mjs` | The smart-list model: the entries and their counts, the members of a list, and the export file name (#13) |
+| `test/ui-smart-lists.test.mjs` | The Smart lists dialog: the counts, the members of a picked list, and the export choice (#13) |
+| `test/help.test.mjs` | The help model cannot drift from the search box: the operators match `FIELDS`, and every example parses (#39) |
+| `test/ui-help.test.mjs` | The Help dialog: the cheatsheet, the shortcuts and what's new (#39) |
+| `test/tasks.test.mjs` | The follow-up payload, the due-date rules and the overdue split (#36) |
+| `test/ui-task.test.mjs` | The follow-up task editor: the prefilled title, the priority suffix and the due-date rule (#36) |
+| `test/notes.test.mjs` | The note store, its repairs and the erasure (#38) |
+| `test/markdown.test.mjs` | The tiny inline formatter: each mark, the precedence, and the unmatched cases (#38) |
+| `test/ui-notes.test.mjs` | The Private notes section: add, the marks as elements, per-contact isolation and delete (#38) |
+| `test/release.test.mjs` | The release guard: the manifest/package/CHANGELOG agreement, and the notes it extracts |
+| `test/ship.test.mjs` | The ship plan: which pull requests are ready, which are blocked, and retargeting a stacked one |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
 `test/bundle.test.mjs` evaluates `dist/index.js` with a `require` that only
@@ -1322,473 +1394,21 @@ folder.
 
 ---
 
-## 9. Working on this plugin (for AI coding assistants)
+## 9. Repository, releases and changelog policy
 
-### 9.1 Orientation — read in this order
-
-1. `manifest.json` — the contract with the host: id, version, permissions,
-   settings schema, and every translated string.
-2. `src/index.js` — the wiring: which slots exist, which actions are
-   published, when `activate()` runs.
-3. `src/lib/duplicates.js` — the heart: normalisation, detection, merge
-   planning, the merge run.
-4. `src/lib/contacts.js` — how a card is read.
-5. `src/lib/review-dialog.js` and `src/lib/manager-page.js` — the UI.
-6. The matching file in `test/` — the expected behaviour, in executable form.
-
-### 9.2 Hard rules
-
-* **Do not change the host contract.** The exports of `src/index.js` are
-  `slots`, `hooks` and `activate`. A slot component is a React component
-  created by a `make*` factory that takes `(React, api)`.
-* **Do not add runtime dependencies.** `package.json` has `devDependencies`
-  only; the bundle must stay self-contained.
-* **Do not hard-code user-visible strings.** Use `t('key')` /
-  `api.i18n.t('key', vars)` and add the key to `manifest.json` under **both**
-  `locales.en` and `locales.de`.
-* **Do not bypass the review dialog.** Every **merge** — detected group or
-  hand-picked selection — funnels through `src/lib/review-dialog.js`, and
-  `src/lib/duplicates.js` (`mergeGroups`) is the only place that removes a
-  contact on a merge's behalf. **Deletion** has exactly two other paths, both
-  behind a danger confirm and both undoable: the editor's single-contact delete
-  (`editor-dialog.js`) and the bulk delete (`bulk.js`). Adding a third is a
-  design decision, not a convenience.
-* **Do not delete a contact before its data is kept.** Keep the
-  update-then-delete order in `mergeGroups` intact.
-* **Do not add a permission silently.** Every new surface needs a permission
-  in `manifest.json`, and `bundle.test.mjs` checks that the declared
-  permissions cover the slots.
-* **Do not cache contacts in `api.storage`.** The only exception is the
-  bounded, expiring undo record written by `src/lib/undo.js`; everything else
-  there is settings-derived state (hidden-group signatures, last scan
-  summary).
-* **Keep the pure parts pure.** Detection, planning and preview shaping stay
-  free of `api` and DOM access so they remain unit-testable.
-* **Never call an optional host API directly.** Mail, tasks and calendar are
-  context the plugin can live without, so every call goes through
-  `optionalCall` from `src/lib/optional.js`. A missing namespace throws
-  *synchronously*, which a bare `.catch()` cannot catch and which takes the
-  whole page down inside a React effect.
-* **Do not build the page skeleton out of the kit.** `Row` and `Stack` are
-  fine for *content* — an actions row, a card's inner stack, a dialog footer —
-  but whether they forward a `style` prop to the DOM is not part of any
-  contract this plugin can check, and the test stand-in drops it. The
-  two-pane split lives in `src/lib/layout.js` and is drawn with plain
-  elements, so a list can never stretch the page and hide the pane beside it.
-
-### 9.3 Definition of done
-
-A change is complete when:
-
-1. `npm test` passes — the whole suite, plus any new test you added.
-2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
-   test name says what the behaviour *is*, not how it is implemented.
-3. New strings exist in `en` **and** `de`.
-4. `npm run package` produces a valid `contact-manager.zip` whose root holds
-   `manifest.json` and `index.js`.
-5. The `version` in `manifest.json` is bumped and `CHANGELOG.md` has an
-   entry for it (see below).
-6. The release script rebuilds the ZIP from the tagged source and attaches it
-   to the GitHub release, so the download matches the code in the repository.
-
-### 9.4 Making a change — the loop
-
-```bash
-cd contact-manager
-npm test                 # 1. build + run the suite
-npm run package          # 2. rebuild the installable ZIP
-```
-
-Then commit the source and push. Merge the branch into `main` through a PR
-first; releases are cut from `main` with `npm run release`; there is no
-committed `build/` directory. Delete the feature branch once its PR has landed
-— `main` and `contact-manager` are the only long-lived branches.
-
-### 9.5 Test-writing conventions
-
-* Pure logic → a plain unit test in `test/duplicates.test.mjs`,
-  `test/merge.test.mjs` or `test/contacts.test.mjs`. No DOM.
-* UI → `test/ui-page.test.mjs` or `test/ui-dialog.test.mjs` with
-  `@testing-library/react`, `act()` around every state-changing call, and
-  `fakeApi` for the host.
-* The host is **always** faked. Never call the network, never touch a real
-  address book, never write outside `api.storage`.
-* Assert on **behaviour**, not on markup: `screen.getByRole('button', {
-  name: 'Merge' })` rather than snapshotting the tree.
-* Use the card builders in `test/fixtures.mjs` (`makeCard`) instead of
-  hand-writing card literals.
-
-### 9.6 Common pitfalls
-
-| Pitfall | Consequence | Do this instead |
-|---|---|---|
-| Adding a string only to `en` | `bundle.test.mjs` fails | Add it to `en` **and** `de` |
-| Patching a map field with only the new entries | The host replaces maps wholesale — existing entries are lost | Send the **complete union** |
-| Sending `undefined` in the patch | The host clears the field | Omit the key instead |
-| Deleting before updating | Data loss if the update fails | Update first, then delete |
-| Hard-coding English text | Breaks the German locale and the locale test | `t('key')` + manifest entry |
-| Reading `card.emails` directly | Breaks on array-shaped cards from imports | `emailEntries(card)` from `contacts.js` |
-| Matching a single-word name | False positives on common surnames | Require two substantial tokens (`coreNameKey`) |
-| Treating a `kind: 'group'` card as a person | Distribution lists get merged | `isMergeable` filters them out |
-| Adding a slot without a permission | The host refuses the surface | Add the permission to `manifest.json` |
-| Calling an optional API directly (`api.calendar.getEvents(...).catch(...)`) | A missing namespace throws synchronously and takes the page down | `optionalCall(() => api.calendar.getEvents(range))` |
-| Letting a dialog decide to write | A pure dialog that returns a draft writes nothing | Write in the `open*` funnel (`openProject`, `openEditor`) |
-| Sizing a pane with `style` on a kit component | The kit may drop the prop; the panes collapse into one column and the list runs away | Draw the skeleton with `layout.js` (plain elements) |
-| Hiding a control with `style` on a kit component | The prop may be dropped and the control appears | Wrap it in a plain element with `HIDDEN` |
-| A fixture shaped like the *code*, not like the *host* | The test passes and the feature is dead — `keywords: { k1: { label } }` ignored every real tag, because tags are the map's **keys** | Build cards with `makeCard`, and read fields through `contacts.js` |
-| A "stays silent" test with no positive twin | Silence passes for the wrong reason — a function that always returns nothing satisfies it | Assert the same path still fires when the rule does *not* apply |
-| A control drawn from one expression and toggled by another | `checked: v !== false` with `onChange(!v)` makes the first click do nothing | Derive both from the same reading of the value |
-| A test written against the permissive fake api | It passes against methods the host does not have — that is how three shipped profile sections were inert (#75) | Declare the shape: `fakeApi({ host: { absent, exposes } })` |
-
----
-
-## 10. Machine-checkable contract
-
-Everything below is asserted by the test suite. If a change breaks one of
-these, the build is broken.
-
-```
-Manifest
-  id, version (semver), permissions[], settings schema
-  locales.en and locales.de contain exactly the same key sets
-
-Exports of src/index.js
-  slots['app-page'], slots['plugin-dialog'], slots['contact-detail-section']
-  hooks.onAction
-  activate(pluginApi)
-
-Detection
-  findDuplicateGroups(cards, opts, dismissed) -> groups
-  group = { signature, strength: 'strong'|'possible', reasons[], members[] }
-  strong  <=> the group shares an email or a phone number
-  possible <=> the group shares only a name
-  dismissed signatures are excluded from the result
-
-Book policies (#7)
-  readPolicies / writePolicies, key 'bookPolicies', one record per book id
-  readIgnore / writeIgnore, key 'bookIgnore', { domains, tags, companies }
-  normalizePolicies drops unknown fields and junk; both repair on read
-  isCardScannable(card, policies) — a card with no book is always scannable
-  effectiveOpts(card, policies, globalOpts) — the most permissive enabled
-    book wins, so a book that opts out never silences another book
-  isCardIgnored(card, ignore) — by email domain, by tag, or by part of the
-    organisation name, case-insensitively
-  hasIgnoreRules(ignore) is the ONE place that decides whether any rule is set;
-    a caller testing the fields itself is how a companies-only rule was missed
-  filterForScan(cards, { policies, ignore, globalOpts }) -> { cards, perCardOpts }
-  an empty policy set is the previous behaviour: every book, global strategies
-  a card's tags are the KEYS of its keywords — the reading search.js uses, so
-    `tag:vip` and an ignore rule for `vip` cannot disagree
-  cards are read through contacts.js (bookIds, emailEntries, orgName), never
-    re-read here
-  policyAwareOptions(api) assembles detection options and policies in one call
-  findGroupFor honours the policies too, so the contact-details hint and the
-    save-time warning agree with the scan
-  protectedFieldsFor(card, policies) — the union over the card's enabled books;
-    protection is a safety property, so the union is the safe direction
-  planMerge(group, keepId, choices, { policies }) freezes those fields: never
-    filled from a donor, never unioned into, never replaced by a donor choice
-  mergeGroups reads the policies itself, so the preview and the write cannot
-    disagree about what a merge will change
-  a filled map field (organizations, titles, personalInfo, media) reports one
-    `added` entry per value, so the preview can show every one of them
-
-Book roles (#23)
-  ROLES = ['viewer', 'editor', 'merger', 'admin']; DEFAULT_ROLE = 'admin'
-  ROLE_CAPABILITIES is the ladder: view; edit; merge + delete; + manage
-  roleAllows(role, capability) is the ONE place that reads the table
-  an unknown role reads as the default, so it never weakens an answer
-  normalizeRoles / readRoles / writeRoles, key 'bookRoles', one role per book id
-    junk is dropped and storage rewritten; an empty map removes the key
-  roleForBook(roles, bookId) — the stored role, else the default
-  roleForCard(card, roles) — the WEAKEST role across the card's books; a card in
-    no book (or a book with no role) is unrestricted (the default)
-  effectiveRole(cards, roles) — the weakest role across a selection
-  mostPermissiveRole(roles) — the strongest configured role, for a global action
-  canPerform(cards, capability, roles) / canManage(capability, roles)
-  an empty roles map allows everything: the previous behaviour
-  the role is ADVISORY — the pages disable what it forbids; the host enforces
-    nothing (per-book permissions need the server tier, #68)
-
-Onboarding (#39)
-  STEPS = ['welcome', 'import', 'scan', 'policies', 'done']
-  isStep / stepIndex / isFirstStep / isLastStep / nextStep / previousStep
-    nextStep of the last step stays put; previousStep of the first does too
-  normalizeOnboarding(raw) -> { done: boolean, at: string|null }; only
-    `done === true` counts as done
-  readOnboarding / writeOnboarding, key 'onboarding'; junk is dropped and
-    storage rewritten, and a not-done state removes the key
-  completeOnboarding(api) records done; resetOnboarding(api) forgets it
-  the card runs the shared actions (importContacts / findDuplicates /
-    managePolicies), so the guide cannot describe a different change
-  a step whose action throws still advances: the guide is help, not a gate
-
-Paging (#39)
-  PAGE_SIZE = 100
-  pageCount(total, size) -> at least 1, even for an empty list
-  clampPage(page, total, size) -> in range, so a shrinking list never blanks
-  isPaged(total, size) -> only true when there is more than one page
-  pageSlice(list, page, size) -> { items, page, pages, from, to, total }
-    from/to are 0/0 for an empty list; the slice is one page, never the list
-  the page is a VIEW of the results: counts and Select all still read the whole
-    match set, so a paged list is still a bulk scope
-  a budget test pins that slicing one page of 100k does not walk the list
-
-Smart lists (#13, the palette half)
-  smartLists(saved, { total, counts }) -> [everything, ...one per saved search]
-    counts are positionally aligned with `saved`, so the two cannot drift
-  matchesFor(index, entry) uses isBlankQuery / matchIndexed — the SAME matcher
-    the Contacts page uses, so a list's count and its members cannot disagree
-  fileNameFor(name, format) -> a safe `<list>.vcf` / `<list>.csv`
-  the dialog reads and returns a choice; actions.js does the export after it
-    closes, so the dialog never opens a dialog of its own
-  the export falls back to showing the file when the download is refused
-
-Help (#39)
-  QUERY_OPERATORS / HAS_VALUES / IS_VALUES_LIST are DERIVED from search.js's own
-    FIELDS / HAS_FLAGS / IS_VALUES, so the cheatsheet cannot drift from the box
-  every QUERY_EXAMPLES entry parses with NO errors (test/help.test.mjs)
-  SHORTCUTS: Ctrl+K (the host palette), / (focus the search box), Esc (clear it)
-  WHATS_NEW is newest first; each note is a key present in en AND de
-  / is ignored while a field has focus; Esc clears only when the search box has
-    it, so a dialog's own Esc still reaches the host
-
-Follow-up tasks (#36)
-  a follow-up IS a host task: api.tasks.create({ title, description, due? }) —
-    nothing cached in api.storage, so it survives a reload and is searchable
-  followUpDraft omits `due` when it is not a real date (never ''), so the host
-    keeps "no due date" and "due today" apart
-  the contact rides in the description (its email first) because the host task
-    has no contact field and tasksForContact matches on title/description
-  the priority rides at the END OF THE TITLE (`· High`): no host priority field
-  isDate accepts only `YYYY-MM-DD`; todayIso is LOCAL, never UTC
-  isOverdue: a due date before today, in local time; no due date is never overdue
-  taskBuckets(tasks, now) -> { overdue, rest }, each in due-date order, undated last
-  openFollowUpTask(api, card) opens the editor and creates the task; a failure is
-    reported (api.tasks is reached INSIDE the try, so an absent namespace is caught)
-  the profile badges overdue tasks and lists them first
-
-Merging
-  pickPrimary(members) -> deterministic (fields, then created, then id)
-  planMerge(group, keepId, choices) -> { primary, others, patch, added, changed }
-  patch contains only changed keys; map fields are complete unions
-  choices replace a single-value field and land in changed
-  mergeGroups() updates the kept contact BEFORE removing the others
-
-Safety
-  a failing update leaves the duplicates untouched
-  a merge leaves an undo record; undo restores before it reverts
-  a save-time warning never blocks the save (observer hooks only)
-
-Optional host calls
-  optionalCall(run) resolves the value, or null when the namespace, the
-    method or the promise is missing — it never throws and never rejects
-  a missing api.calendar / api.tasks / api.email leaves the Contacts page
-    readable, and the notice names only the pieces that failed
-  detectCapabilities(api) -> per namespace { present, keys, missing }
-  activate() logs one line when something is missing, naming the keys the
-    host does expose; silent when nothing is missing
-
-Projects (local to this browser)
-  openProject() stores whatever the dialog returned (create and edit)
-  a failing write is reported and never toasted as a success
-
-UI kit
-  every name src/ imports from @plugin-host/ui is exported by the kit stand-in
-    (test/ui-kit.test.mjs) — an undefined component crashes a page on render
-
-Page skeleton
-  the two-pane split is drawn with plain elements (src/lib/layout.js), never
-    with `style` on a kit component
-  the Contacts and Projects pages put the list and the detail in one flex row
-  the list scrolls inside the pane, not the pane itself — the Contacts search
-    box sits above the scroll area and stays visible
-  the import file input is hidden by a wrapper element, not a kit style prop
-
-Bulk actions (Contacts)
-  groupFromSelection(cards) -> a 'manual' group: no evidence claimed, signed
-    like a detected group, so it goes through the review dialog unchanged
-  merging a selection needs two or more contacts
-  applyBulkEdit(api, cards, { tags, books }) -> { updated, skipped, failed }
-    one update per contact; keywords and addressBookIds are sent complete
-    the 'company' keyword is never removed by a tag edit
-    a card that would be left in no address book is refused, not skipped
-  deleteContacts(api, cards) -> { deleted, failed }, always behind a confirm
-    and always leaving one undo batch; undoLastMerge restores every card
-  a delete-only undo entry reports no reverted kept contact
-
-vCard export
-  contactsToVCard(cards) -> one VCARD 3.0 block per contact, CRLF, escaped
-  N is family;given and ADR is structured, each component escaped separately
-  a contact with neither a name nor any field is left out
-
-Smart search
-  parseQuery(text) -> { terms, notTerms, filters, notFilters, errors }
-    errors name the token and the reason; the token is also kept as a term
-    OR and parentheses add an `ast` (only then); matchIndexed evaluates it
-  isBlankQuery(parsed) is the one "is there a query?" rule, so a query of only
-    negations filters the list instead of showing everything
-  buildIndex(cards, { books }) derives the searchable strings once;
-    matchIndexed(entry, parsed) and countsForIndex(index, queries) reuse it
-  fields: name email phone company note tag book has is
-  adjacent terms are AND; OR binds looser; ( ) groups; OR is case-insensitive
-  tag: is whole, book: takes a name or an id
-  a name also matches as a subsequence from three characters up
-  10k contacts stay inside 100 ms
-
-Saved searches
-  readSaved / saveSearch / deleteSaved, key 'savedSearches', cap 20
-  named by their own query, so no prompt API is needed; per browser only
-
-Phone numbers
-  toE164(number, region) -> '+491761234567' or '' — never a guess
-    international (+…, 00…) needs no region; a national number does
-    a national number already starting with the dial code is ambiguous -> ''
-  phoneKey(number, region) is what detection compares
-  isValidE164 requires the '+' and 7..15 digits with no leading zero
-
-Import (#19, import half; a decision per duplicate since #4)
-  parseCsv(text) -> { delimiter, headers, rows }   RFC 4180, BOM, CRLF
-  parseVCards(text) -> draft-shaped records; 3.0 and 4.0, folded, grouped
-  guessMapping(headers) -> a field per column; guessField is the one-header form
-  rowToDraft(row, mapping, { bookIds }) -> the editor's draft shape
-  planImport(drafts, existing, { region }) -> { fresh, duplicates }
-    matched on the same keys detection uses, so an import cannot create duplicates
-  duplicateKey(entry) -> a stable key for one duplicate, so a per-contact
-    decision survives the drafts being rebuilt on every render
-  applyImport(api, drafts) -> { created, failed, cards }, one create per draft
-    cards pairs each draft that was written with the card the host returned
-  mergeGroupsFromImport(merges, created) -> review-dialog groups, [existing, imported]
-    each carries keepId = the existing contact, so "merge" folds the file in;
-    the wizard queues them and actions.js opens the one review dialog (#4)
-  remembered mappings in 'importMappings', keyed by the header row
-  NOT imported: photos, URLs, custom fields (see the CHANGELOG)
-
-Server client (#68, first step)
-  readRemoteUrl / writeRemoteUrl  the configured server, '' when local-only
-  callServer(api, path, { method, body }) ->
-    { status: 'ok'|'unconfigured'|'unavailable'|'failed', code?, body?, reason? }
-    it never throws: every failure is one of those answers
-  serverVersion(api) parses { version } from the answer
-  the request goes through api.proxy.fetch(credentialId, url, init) with the
-    http:proxy permission, so the host holds the credential
-  NOT confirmed against a live host: the signature is from the test double
-  scripts/mock-server.mjs is a throwaway endpoint for checking the path
-
-Retention (#21)
-  STALE_BANDS = a year / two years / three years; STALE_MONTHS (24) is the
-    health rule's own threshold, not the retention list's
-  staleness(card, now) -> { months, band } | null    null when no date is known
-  staleContacts(cards, { months }) -> oldest first; staleCounts(cards)
-  the page lists from the LOWEST band, so buckets and rows cannot disagree
-  'Export and delete' writes the file as part of the delete, then deletes
-    through bulk.js, so it is undoable as well as archived
-
-Duplicate digest (#5, re-scoped — there is no timer hook to schedule with)
-  digestWindowDays(settings) -> days; 0 (or junk) means off   setting: digestDays
-  groupSignatures(groups) -> sorted signatures; unseenSignatures(sig, ack) -> new
-  isScanStale(at, days, now) -> boolean; a scan that never ran makes no claim
-  buildDigest({ at, signatures, acknowledged, seenAt, baseline, days, now }) ->
-    null | { at, seenAt, count, fresh, stale, changed, signatures }
-    'changed' needs a baseline: before anything is acknowledged a group is the
-      state of the address book, not news
-    a staleness nag is said once per scan age: told at/after that scan -> silent
-  readDigestState(api) -> { baseline, at, signatures }   acknowledged baseline
-  acknowledge(api, signatures, now) / forgetDigest(api)  in 'scanDigest'
-  stores the SUMMARY and signatures only, never contacts; the home page shows it
-  hidden groups are left out (a hidden group is a decision, not news)
-
-Bulk merge by facet (#6) — the facets select, the review dialog merges
-  BATCH_CAP = 50    > the cap disables Merge; it never trims the selection
-    the undo record keeps MAX_CARDS = 100, so a capped batch can be undone
-  companyKey(name) -> case/whitespace-insensitive; domainKey(address) -> '' unless it has a dot
-  cardFacets(card) -> [{ kind: 'company'|'domain', key }], de-duplicated
-  groupFacets(groups) -> [{ kind, key, label, signatures }], biggest first
-    a group is under EVERY facet any of its members has (a filter, not a partition)
-    a facet covering one group is not offered — that is Review on that group
-  batchPlan(groups, selected) -> { groups, contacts, removals, signatures }
-    removals = contacts - groups: one kept per group, the dry run before the dialog
-  isOverCap(plan, cap = BATCH_CAP) -> boolean
-  NOT a matching rule: the facets are read from the data, so there is no typing
-    to be fuzzy about; rewriting 'Acme Inc.' to 'Acme' is #20 (normalisation)
-
-Name matching (#8) — equivalence by key, evidence pairwise
-  foldName(value, { german }) -> romanised, de-marked, lower, punctuation -> space
-    Cyrillic + Greek tables; letters with no decomposition (ß ø ł đ þ æ œ) mapped
-    applied TWICE: "ü" -> "ue" needs the first pass, "ώ" -> "ω" needs the second
-  foldVariants(value) -> ['muller', 'mueller']   one key per honest spelling
-  canonicalToken / nicknameKey: curated table, ambiguous aliases left alone
-  phoneticKey(token) -> compact Soundex; needs >= 2 letters to mean anything
-  jaroWinkler(a, b) -> 0..1   shared opening counts more than an edit in the middle
-  splitName(fullName, components) -> { surname, given }   components first
-  givenKind(a, b, threshold) -> 'same' | 'initial' | 'similar' | null
-  pairNameEvidence(people, { threshold, bucketLimit }) -> [{ a, b, kind, score }]
-    bucket by phonetic surname, skip a bucket over 60, surnames must agree,
-    and the given name must corroborate — 'John Smith' / 'Jane Smith' never pair
-  keys: n: c: k: share the name namespace; evidence is NEVER a key
-  every group from evidence is 'possible', with a reason naming both spellings
-
-Export (#19, export half)
-  toCsv(rows) / escapeCell(cell)   RFC 4180 quoting, CRLF
-  contactsToCsv(cards) -> text; email/phone columns as wide as the widest card
-  contactsToFile(cards, 'vcard'|'csv') -> { body, name, type }
-  the CSV headers are the spellings guessMapping knows, so a round trip needs
-    no column work; the vCard writer emits CATEGORIES for the tags
-
-Main page (Overview)
-  makeHomePage(React, api) renders the landing tab; every sub-page is handed
-    onNavigate(tabId), which is how its rows lead into a section
-  the menu and the command palette both call lib/actions.js — one implementation
-    findDuplicates(api, scopeIds)  newContact  newCompany  newProject  undoMerge
-  the counts come from one load of the cards, shared with the duplicate scan
-    and the health rules
-  the plugin lands on Overview, not on Duplicates
-
-Health (#16)
-  RULES maps a rule key to { weight, fix }; RULE_KEYS is the order shown
-  contactIssues(card, ctx) -> [{ key, weight, fix, value }]   value = the text
-  healthScore(issues) = 100 - the deductions, floored at 0
-  healthBand(score) uses BANDS.good / BANDS.fair, defined once
-  healthSummary(cards, { books, region, duplicates }) -> contacts, byRule, byBook
-  a duplicate is either "in the set" (duplicates) or "is one" (duplicate: true)
-  the email rules read rawEmailAddresses, not emailEntries, so a malformed
-    address is visible
-
-Avatars (#15, avatar half)
-  md5(text) -> lowercase hex, checked against the published vectors
-  gravatarUrl(email, { size, fallback, rating }) -> '' when there is no address
-    d=404 so "no picture" is a failed image, not a stranger's silhouette
-  avatarFor(card, { gravatar, size }) -> { url, source: 'card'|'gravatar' } | null
-    a photo stored on the contact always wins; Gravatar needs the setting on
-  the element hides itself on error, so a blocked request is simply absent
-
-Cleanup (#17)
-  planNormalisation(cards, { region }) -> the cards that would change, each
-    with the complete new map and the maps it replaces
-  applyNormalisation writes one update per contact, then one undo record
-    a contact the host refuses is counted and left out of the record
-  undoCleanup restores every contact; entries that fail stay for a retry
-  the region lives in api.storage, not the settings schema (see #75)
-  a failing removal is reported, not swallowed
-  nothing outside review-dialog.js calls contacts.remove
-```
-
----
-
-## 11. Repository, releases and changelog policy
-
-### 11.1 Where the code lives
+### 9.1 Where the code lives
 
 | Path | Contents |
 |---|---|
-| `contact-manager/` | The full source tree — `src/`, `test/`, `test-utils/`, `scripts/`, `manifest.json`, `package.json`, `vitest.config.mjs`, `README.md`, `CHANGELOG.md` |
+| `contact-manager/` | The full source tree — `src/`, `test/`, `test-utils/`, `scripts/`, `manifest.json`, `package.json`, `vitest.config.mjs`, `README.md`, `HANDOFF.md`, `CHANGELOG.md` |
+| `.clinerules` (repository root) | The rules for changing the code, and the contract the test suite enforces |
 
 The source lives in **`zyntrax/bulwark-plugins`** on GitHub. Installable ZIPs
 are published as assets on
 [GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases); no
 build artifacts are committed.
 
-### 11.2 Release checklist
+### 9.2 Release checklist
 
 1. Merge the feature branch into `main` through a pull request — this also
    closes the shipped roadmap issues — and keep the `contact-manager` mirror
@@ -1809,7 +1429,7 @@ into `main` (retargeting stacked ones), keeps the `contact-manager` mirror in
 step, then runs `npm run release`. `npm run ship -- --dry-run` previews the
 plan without changing anything; `--no-release` stops after the merge.
 
-### 11.2.1 Roadmap and todos
+### 9.2.1 Roadmap and todos
 
 There is **no local todo file**. The roadmap lives in GitHub:
 
@@ -1823,7 +1443,7 @@ There is **no local todo file**. The roadmap lives in GitHub:
 
 New ideas become a new issue with the `roadmap` label and a milestone.
 
-### 11.3 Changelog policy
+### 9.3 Changelog policy
 
 * The changelog is **user-facing**: describe what a user can now do, not how
   the code is structured.
@@ -1832,7 +1452,7 @@ New ideas become a new issue with the `roadmap` label and a milestone.
 * The version in `manifest.json` and the top entry in `CHANGELOG.md` must
   always agree.
 
-### 11.4 Versioning rules
+### 9.4 Versioning rules
 
 | Change | Bump |
 |---|---|
@@ -1842,7 +1462,7 @@ New ideas become a new issue with the `roadmap` label and a milestone.
 
 ---
 
-## 12. License
+## 10. License
 
 No separate `LICENSE` file is committed in this plugin folder yet, and the terms
 are the maintainer's to set. The repository README's default — *"the same license

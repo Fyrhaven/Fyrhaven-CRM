@@ -15,6 +15,7 @@ import {
 } from '@plugin-host/ui';
 import { contactName, loadCards } from './contacts.js';
 import { consentStatus, consentSummary, consentsFor, daysUntilExpiry, readConsents } from './consent.js';
+import { notesFor, readNotes } from './notes.js';
 import {
   anonymiseSubject, buildSubjectExport, deletionSummary, deletionsToCsv, eraseSubject,
   personalDataInventory, readDeletions, subjectExportJson, subjectExportName,
@@ -38,6 +39,9 @@ export function makePrivacyPage(React, api) {
     const [consents, setConsents] = useState([]);
     const [deletions, setDeletions] = useState([]);
     const [history, setHistory] = useState([]);
+    // The private notes (#38) — personal data this browser holds, so the
+    // subject-access export has to hand them back.
+    const [notes, setNotes] = useState({});
     const [status, setStatus] = useState('loading');
     const [query, setQuery] = useState('');
     const [selectedId, setSelectedId] = useState('');
@@ -45,13 +49,15 @@ export function makePrivacyPage(React, api) {
     const load = useCallback(async () => {
       setStatus('loading');
       try {
-        const [list, records, log, entries] = await Promise.all([
+        const [list, records, log, entries, stored] = await Promise.all([
           loadCards(api), readConsents(api), readDeletions(api), readHistory(api).catch(() => []),
+          readNotes(api).catch(() => ({})),
         ]);
         setCards(Array.isArray(list) ? list : []);
         setConsents(records);
         setDeletions(log);
         setHistory(entries);
+        setNotes(stored);
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : ''));
         setStatus('ready');
       } catch {
@@ -89,7 +95,7 @@ export function makePrivacyPage(React, api) {
     const subjectFile = (format) => {
       if (!card) return null;
       if (format === 'json') {
-        const bundle = buildSubjectExport({ card, consents, history });
+        const bundle = buildSubjectExport({ card, consents, history, notes: notesFor(notes, card.id) });
         return { body: subjectExportJson(bundle), name: subjectExportName(card, 'json'), type: 'application/json' };
       }
       return contactsToFile([card], format);

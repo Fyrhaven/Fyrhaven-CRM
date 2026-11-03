@@ -138,7 +138,7 @@ export function duplicateKey(entry) {
  * The review-dialog groups for the duplicates the user chose to *merge*.
  *
  * A merge is the one decision the import cannot make on its own: every merge in
- * this plugin goes through the review dialog (§9.2), so the wizard queues the
+ * this plugin goes through the review dialog (see `.clinerules`), so the wizard queues the
  * pair and this turns the pairs into groups the dialog understands. Each group
  * is `[existing, imported]` — the existing contact is preferred as the one to
  * keep, because "merge" here means "fold what the file adds into the contact I

@@ -10,6 +10,7 @@
 
 import { contactName, emailEntries, phoneEntries, text } from './contacts.js';
 import { eraseConsents, removeConsent, setConsent } from './consent.js';
+import { eraseNotes } from './notes.js';
 import { deleteContacts } from './bulk.js';
 import { recordHistory } from './history.js';
 import { toCsv } from './csv.js';
@@ -67,12 +68,15 @@ export function anonymisePatch(card, { name = ANONYMISED_NAME } = {}) {
  * name the subject. `generatedAt` is the request time, so the file says when
  * it was answered.
  */
-export function buildSubjectExport({ card, consents = [], history = [], now = Date.now() } = {}) {
+export function buildSubjectExport({ card, consents = [], history = [], notes = [], now = Date.now() } = {}) {
   const id = text(card?.id);
   return {
     generatedAt: new Date(now).toISOString(),
     subject: { id, name: contactName(card) },
     data: card ?? null,
+    // The private notes are held about this person, so a subject-access export
+    // has to hand them back — completeness is the point of the export.
+    notes: Array.isArray(notes) ? notes : [],
     consents: (Array.isArray(consents) ? consents : []).filter((record) => record?.contactId === id),
     changes: (Array.isArray(history) ? history : []).filter((entry) => entry?.subject && entry.subject === id),
   };
@@ -195,9 +199,12 @@ export async function anonymiseSubject(api, card, { now = Date.now(), name } = {
   const books = bookIdsOf(card);
   await api.contacts.update(id, anonymisePatch(card, { name }));
   const consents = await eraseConsents(api, id);
+  // The private notes are personal data this browser holds; an anonymisation
+  // that left them behind would not be one.
+  const notes = await eraseNotes(api, id);
   await recordDeletion(api, { id, method: 'anonymise', fields: inventory.fields, books }, now);
   await recordHistory(api, { kind: 'anonymise', contacts: 1, subject: id, detail: 'anonymise' }, now);
-  return { anonymised: true, fields: inventory.fields, consents };
+  return { anonymised: true, fields: inventory.fields, consents, notes };
 }
 
 /**
@@ -211,10 +218,12 @@ export async function eraseSubject(api, card, { now = Date.now() } = {}) {
   const inventory = personalDataInventory(card);
   const books = bookIdsOf(card);
   const result = await deleteContacts(api, [card], { kind: 'erase' });
-  if (!result.deleted) return { erased: false, fields: [], consents: 0, failed: result.failed };
+  if (!result.deleted) return { erased: false, fields: [], consents: 0, notes: 0, failed: result.failed };
   const consents = await eraseConsents(api, id);
+  // Erasure has to take the private notes with it, or it is a half-measure.
+  const notes = await eraseNotes(api, id);
   await recordDeletion(api, { id, method: 'erase', fields: inventory.fields, books }, now);
-  return { erased: true, fields: inventory.fields, consents, failed: 0 };
+  return { erased: true, fields: inventory.fields, consents, notes, failed: 0 };
 }
 
 /** Saves a consent and audits the change, so the history says who consented. */
