@@ -67,6 +67,7 @@ signatures, the last scan summary).
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
 | *Follow up* button | Contact Manager → *Contacts*, on the open contact | Opens the **follow-up task** editor (#36): title (prefilled), due date, priority and notes, created as a real host task. The profile's task list shows the contact's tasks with anything past due badged *Overdue*, first |
+| *Private notes* section | Contact Manager → *Contacts*, on the open contact | Notes this browser holds about the contact (#38, the private half): write, read back with a timestamp, delete. Private by construction — they live in `api.storage`, never on the card. A small documented subset of marks (`**bold**`, `*italic*`, `` `code` ``, `@mention`) is rendered as elements, never as markup. The subject-access export carries them, and erasure removes them |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
@@ -178,6 +179,9 @@ contact-manager/
 │       ├── tasks.js       # follow-up tasks: the payload, the due date, the overdue split (#36)
 │       ├── task-dialog.js # the follow-up task editor (plugin-dialog slot, #36)
 │       ├── open-task.js   # one place that opens the task editor and creates the task (#36)
+│       ├── notes.js       # private notes: the store, its repairs, the erasure (#38)
+│       ├── markdown.js    # the tiny inline formatter for a note (#38)
+│       ├── notes-section.js # the Private notes section on a contact (#38)
 │       ├── optional.js    # optional host calls that degrade to null, never throw
 │       └── watch.js       # warn about duplicates after a contact is saved
 ├── test/
@@ -200,6 +204,9 @@ contact-manager/
 │   ├── ui-help.test.mjs    # the Help dialog (#39)
 │   ├── tasks.test.mjs      # the follow-up payload, due dates and the overdue split (#36)
 │   ├── ui-task.test.mjs    # the follow-up task editor (#36)
+│   ├── notes.test.mjs      # the note store, its repairs and the erasure (#38)
+│   ├── markdown.test.mjs   # the tiny inline formatter (#38)
+│   ├── ui-notes.test.mjs   # the Private notes section (#38)
 │   ├── ui-dialog.test.mjs  # the review dialog and detail section
 │   ├── undo.test.mjs       # undo records: retention, restore, partial failures
 │   ├── editor.test.mjs     # draft/card conversions, validation, dirty check
@@ -1215,6 +1222,45 @@ rather than at the call site.
 Still to come from #36: a cross-contact *My tasks* view with overdue/upcoming
 filters, and reminders — which need a timer hook the plugin does not have.
 
+### 6.21 Private notes on a contact (`src/lib/notes.js`, `markdown.js`, `notes-section.js`, v1.46.0) — #38
+
+The private half of #38. A *Private notes* section on the contact profile: write
+a note, read it back with a timestamp, delete it.
+
+**Private by construction, not by a visibility flag.** The host has no note
+*record* per contact, and JSContact's `notes` field is a field **on the card** —
+so everyone who can see the card can see it, and a private note cannot be a card
+field. A note is therefore a record *about* the contact, kept in `api.storage`
+per account and per browser, exactly like the consent records and the change
+history. Nothing shared can show it because nothing shared can read it — the
+strongest form of "private notes never appear in shared views". The section says
+so out loud (`notes.hint`), rather than implying a flag enforces it.
+
+**The store is bounded and repairs itself.** `normalizeNotes` keeps only real
+contacts with real notes, de-duplicates by note id, drops a note with no id or no
+text (corruption, not a note), and caps both the notes per contact and the total;
+`readNotes` rewrites when it dropped junk and removes the key when nothing is
+left. `notesFor` sorts newest first **without mutating the stored list**.
+
+**Marks are rendered as elements, never as markup.** `parseInline` is a
+deliberately tiny, documented subset — `**bold**`, `*italic*`/`_italic_`,
+`` `code` ``, `@mention` — and returns tokens, so `notes-section.js` builds
+`<strong>`, `<em>`, `<code>` and a badge. Nothing a note contains can become
+markup, and no parser dependency is needed. An unmatched mark stays literal, so a
+stray `*` is shown rather than swallowed; a matched pair *is* emphasis, however
+spaced.
+
+**It is personal data, so the GDPR toolkit knows about it.** The subject-access
+export carries the notes (`buildSubjectExport({ …, notes })`), and both
+`eraseSubject` and `anonymiseSubject` drop them — an erasure that left the notes
+behind would be a half-measure. The vCard/CSV subject exports stay card-only,
+since a note is not a card field.
+
+Still to come from #38: team visibility, mentions that notify, and search across
+notes — the shared half needs the server tier (#68). There is deliberately **no
+author** on a note: the host exposes no user identity to the plugin, and
+inventing one would be a lie.
+
 ---
 
 ## 7. Build, test and package
@@ -1567,6 +1613,19 @@ Follow-up tasks (#36)
   openFollowUpTask(api, card) opens the editor and creates the task; a failure is
     reported (api.tasks is reached INSIDE the try, so an absent namespace is caught)
   the profile badges overdue tasks and lists them first
+
+Private notes (#38, the private half)
+  a note is a record ABOUT the contact in api.storage (key 'contactNotes'), never
+    a card field — so it is private by construction, not by a visibility flag
+  normalizeNotes: real contacts, real notes, de-duped by id, capped per contact
+    and in total; readNotes rewrites on repair and removes the key when empty
+  notesFor(all, contactId) -> newest first, WITHOUT mutating the stored list
+  saveNote / deleteNote / eraseNotes(api, contactId) -> how many were removed
+  parseInline: **bold**, *italic* / _italic_, `code`, @mention, else literal
+    an unmatched mark stays literal; a matched pair IS emphasis
+    tokens are rendered as ELEMENTS, so a note can never become markup
+  the subject-access export carries the notes, and erase/anonymise drop them
+  no author: the host exposes no user identity, and inventing one would be a lie
 
 Merging
   pickPrimary(members) -> deterministic (fields, then created, then id)
