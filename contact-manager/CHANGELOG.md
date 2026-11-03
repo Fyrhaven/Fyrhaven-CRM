@@ -7,6 +7,22 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.50.4] — 2026-11-03
+
+### Fixed
+
+- **A saved project was still missing when the page was reopened.** The file was
+  on the server, but `files.getText` answers with an **object**
+  (`{ text, status, truncated, … }`), not a string — reading it as one made
+  `JSON.parse` throw, the throw was swallowed, and the store looked empty. The
+  read handles the documented shape, and **a record that is there but unreadable
+  now reports the failure instead of looking like no data at all** — which is
+  how this hid for two releases.
+
+- **The test double returned a bare string from `getText`**, which is why the
+  suite passed while a real host showed nothing. It now returns the documented
+  object, and a test pins both the object shape and the `no_text` status.
+
 ## [1.50.3] — 2026-11-03
 
 ### Fixed
