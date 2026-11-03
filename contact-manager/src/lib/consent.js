@@ -1,13 +1,13 @@
 // Consent records (#26): the lawful basis a contact is held on, per source,
 // with an expiry — the record a data-subject request is answered from.
 //
-// Kept in api.storage — per account *and* per browser, like the projects, the
-// saved searches and the history — because the host has no consent field and
-// inventing one on the contact card would put data the user did not type into
-// their address book. It is a record *about* a contact, never the contact
-// itself: the person stays a real JSContact card. Pure plus api.storage; no DOM.
+// Kept through the storage seam (#68) on the customer's own server, because the
+// host has no consent field and inventing one on the contact card would put data
+// the user did not type into their address book. It is a record *about* a
+// contact, never the contact itself: the person stays a real JSContact card.
 
 import { text } from './contacts.js';
+import { read, replace } from './store.js';
 
 export const CONSENT_KEY = 'consentRecords';
 export const MAX_CONSENTS = 1000;
@@ -82,14 +82,21 @@ export function normalizeConsents(raw) {
 }
 
 
-/** The consent records, repaired. Rewrites storage when it dropped junk. */
+/**
+ * The consent records, repaired. Rewrites storage when it dropped junk.
+ *
+ * Through the seam (#68), so a consent record lives on a server rather than in
+ * one browser: it is the record a data-subject request is answered from, and a
+ * record that vanishes with site data would be worse than useless. An
+ * unavailable store reads as no records, so the page can say what is missing.
+ */
 export async function readConsents(api) {
-  const stored = await api.storage.get(CONSENT_KEY);
+  const answer = await read(api, CONSENT_KEY);
+  const stored = answer.status === 'ok' ? answer.value : null;
   const list = Array.isArray(stored) ? stored : [];
   const records = normalizeConsents(list);
-  if (records.length !== list.length) {
-    if (records.length) await api.storage.set(CONSENT_KEY, records);
-    else await api.storage.remove(CONSENT_KEY);
+  if (answer.status === 'ok' && records.length !== list.length) {
+    await replace(api, CONSENT_KEY, records, records.length === 0);
   }
   return records;
 }
@@ -107,7 +114,7 @@ export async function setConsent(api, raw) {
   if (!record) return null;
   const key = consentKey(record);
   const kept = [record, ...(await readConsents(api)).filter((item) => consentKey(item) !== key)];
-  await api.storage.set(CONSENT_KEY, normalizeConsents(kept));
+  await replace(api, CONSENT_KEY, normalizeConsents(kept), kept.length === 0);
   return record;
 }
 
@@ -117,8 +124,7 @@ export async function removeConsent(api, contactId, source) {
   const all = await readConsents(api);
   const kept = all.filter((item) => consentKey(item) !== key);
   if (kept.length === all.length) return false;
-  if (kept.length) await api.storage.set(CONSENT_KEY, kept);
-  else await api.storage.remove(CONSENT_KEY);
+  await replace(api, CONSENT_KEY, kept, kept.length === 0);
   return true;
 }
 
@@ -129,8 +135,7 @@ export async function eraseConsents(api, contactId) {
   const all = await readConsents(api);
   const kept = all.filter((item) => item.contactId !== id);
   if (kept.length !== all.length) {
-    if (kept.length) await api.storage.set(CONSENT_KEY, kept);
-    else await api.storage.remove(CONSENT_KEY);
+    await replace(api, CONSENT_KEY, kept, kept.length === 0);
   }
   return all.length - kept.length;
 }
