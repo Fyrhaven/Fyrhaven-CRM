@@ -5,6 +5,12 @@ built on Stalwart. Each plugin is published here with its **source** and its
 **build script**; installable ZIPs are attached to
 [GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases).
 
+This repository also carries the **cloud store** the Contact Manager plugin's
+records live on. A record the plugin invents cannot live in a browser and the
+webmail host has nowhere to put it, so it lives on a small dedicated service —
+see [`contact-manager-server/`](contact-manager-server/) and issue
+[#68](https://github.com/zyntrax/bulwark-plugins/issues/68).
+
 ---
 
 ## Plugins
@@ -22,17 +28,23 @@ bulwark-plugins/
 ├── README.md               # this file
 ├── .gitignore
 ├── .clinerules             # the rules for changing the code, and the contract
-└── contact-manager/        # source of the Contact Manager plugin
-    ├── manifest.json
-    ├── package.json
-    ├── vitest.config.mjs
-    ├── CHANGELOG.md
-    ├── README.md           # full documentation of the plugin
-    ├── HANDOFF.md          # where the project stands and why
-    ├── src/                # plugin source
-    ├── test/               # vitest suite
-    ├── test-utils/         # fake host API and UI-kit stand-in
-    └── scripts/            # packaging and release scripts
+├── contact-manager/        # source of the Contact Manager plugin
+│   ├── manifest.json
+│   ├── package.json
+│   ├── vitest.config.mjs
+│   ├── CHANGELOG.md
+│   ├── README.md           # full documentation of the plugin
+│   ├── HANDOFF.md          # where the project stands and why
+│   ├── src/                # plugin source
+│   ├── test/               # vitest suite
+│   ├── test-utils/         # fake host API and UI-kit stand-in
+│   └── scripts/            # packaging and release scripts
+└── contact-manager-server/ # the cloud store the plugin's records live on (#68)
+    ├── server.js           # the service — no dependencies
+    ├── server.test.js      # `node --test`
+    ├── Dockerfile
+    ├── docker-compose.yml
+    └── README.md
 ```
 
 **Installable ZIPs live on GitHub Releases.** `npm run release` builds the ZIP
