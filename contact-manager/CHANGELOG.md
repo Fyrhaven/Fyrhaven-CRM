@@ -38,6 +38,20 @@ an empty list and an unreachable server must never look alike.
 No behaviour changes yet: no store has been switched over, so every feature still
 reads where it read before. Switching them is the next step, projects first.
 
+### Changed — projects are records now
+
+**Projects moved onto the seam**, so they are the first feature to stop living in
+a browser: saved to your own server through Files (or to the cloud, if that is
+configured), and they follow you between devices. `saveProject` and
+`deleteProject` now **throw** when there is nowhere to write instead of
+pretending — a failed write is never toasted as a success.
+
+The page tells the truth about it: with no server storage at all it shows a
+notice naming what is missing rather than an empty project list, and
+`projects.localNotice` no longer claims the records are browser-only.
+
+Two permissions were added for this: **`files:read`** and **`files:write`**.
+
 ## [1.47.0] — 2026-11-03
 
 ### Added
