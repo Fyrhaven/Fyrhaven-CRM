@@ -25,6 +25,23 @@
 //    off every call rejects with "Files is not available". Nothing here may
 //    throw, and a failure is reported as such rather than as an empty store.
 
+/**
+ * `files.getText` answers like `email.getAttachmentText`: an **object**
+ * `{ text, status, truncated, … }`, not a string. Reading it as a string is what
+ * made a saved project invisible on the next open, so both shapes are handled
+ * here and anything else is an error rather than silence.
+ */
+function parseRecord(answer) {
+  const record = typeof answer === 'string' ? answer : answer?.text;
+  if (typeof record !== 'string') {
+    throw new Error(`unreadable record (status: ${answer?.status ?? 'unknown'})`);
+  }
+  if (answer?.status && answer.status !== 'ok') {
+    throw new Error(`unreadable record (status: ${answer.status})`);
+  }
+  return record ? JSON.parse(record) : null;
+}
+
 /** The folder records live in, in the user's own drive. */
 export const FILES_FOLDER = 'Contact Manager';
 
@@ -68,6 +85,7 @@ export function makeFilesStore(api) {
       cache = (async () => {
         const folderId = await findFolder();
         const values = new Map();
+        const failed = new Map();
         // The files already there, by name: a write needs the **id** of the one
         // it replaces.
         const ids = new Map();
@@ -83,15 +101,16 @@ export function makeFilesStore(api) {
             if (!name.endsWith(SUFFIX)) continue;
             const key = name.slice(0, -SUFFIX.length);
             try {
-              const text = await api.files.getText(file.id);
-              values.set(key, text ? JSON.parse(text) : null);
-            } catch {
-              // One unreadable file must not sink every store beside it.
-              values.set(key, null);
+              values.set(key, parseRecord(await api.files.getText(file.id)));
+            } catch (err) {
+              // One unreadable file must not sink the store beside it, but it
+              // must not read as *no data* either — that is how a saved record
+              // silently disappears. The failure travels with the key.
+              failed.set(key, String(err?.message ?? err));
             }
           }
         }
-        return { folderId, values, ids };
+        return { folderId, values, failed, ids };
       })().catch((err) => {
         // Do not cache a failure: the next read should try again.
         cache = null;
@@ -121,7 +140,9 @@ export function makeFilesStore(api) {
 
   return {
     async read(key) {
-      const { values } = await load();
+      const { values, failed } = await load();
+      // A record that is there but could not be read is *not* an empty store.
+      if (failed.has(key)) throw new Error(failed.get(key));
       return values.has(key) ? values.get(key) : null;
     },
     async write(key, value) {

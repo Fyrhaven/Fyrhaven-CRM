@@ -27,10 +27,16 @@ function filesApi({ seed = [], features = { files: true }, overrides = {} } = {}
         ? state.files.filter((file) => file.parentId === folderId
           && String(file.name).toLowerCase().includes(String(text).toLowerCase()))
         : []).map(info),
+      // `getText` answers like `email.getAttachmentText`: an **object**, not a
+      // string. Returning a bare string here once let a broken read pass its
+      // tests while every saved record vanished on a real host.
       'files.getText': async (fileId) => {
         const file = state.files.find((entry) => entry.id === fileId);
         if (!file) throw new Error('no such file');
-        return file.content;
+        return {
+          name: file.name, type: file.mimeType ?? 'text/plain', size: String(file.content ?? '').length,
+          format: 'text', status: 'ok', text: file.content, truncated: false,
+        };
       },
       'files.createFolder': async ({ parentId = null, name }) => {
         const folder = { id: `f${state.nextId++}`, name, kind: 'folder', parentId };
@@ -187,7 +193,10 @@ describe('the files store', () => {
     });
     const store = makeFilesStore(api);
 
-    expect(await store.read('projects')).toBeNull();
+    // It reports the failure instead of answering "no data" — a store that is
+    // there but unreadable must never look empty.
+    await expect(store.read('projects')).rejects.toThrow('too_big');
+    // and the record beside it still reads
     expect(await store.read('contactNotes')).toEqual({ a: 1 });
   });
 
@@ -221,5 +230,31 @@ describe('reopening a store', () => {
 
     expect(api.calls('files.find')).toHaveLength(0);
     expect(api.calls('files.list').filter((call) => call.args.length > 0)).toHaveLength(1);
+  });
+});
+
+// The second bug a live install found: the file was there, the project was not.
+// `getText` answers with an **object** (`{ text, status, … }`), and the store
+// read it as a string — `JSON.parse` threw, the throw was swallowed, and the
+// store looked empty. The fake now returns the documented shape, so this is the
+// test that would have caught it.
+
+describe('reading the documented answer', () => {
+  const folder = { id: 'f1', name: FILES_FOLDER, kind: 'folder', parentId: null };
+  const file = { id: 'f2', name: 'projects.json', kind: 'file', parentId: 'f1', content: '[{"id":"p1"}]' };
+
+  it('reads the text out of the object the host returns', async () => {
+    const { api } = filesApi({ seed: [folder, file] });
+    expect(await makeFilesStore(api).read('projects')).toEqual([{ id: 'p1' }]);
+  });
+
+  it('reports a record the host could not extract rather than an empty store', async () => {
+    const { api } = filesApi({
+      seed: [folder, file],
+      overrides: {
+        'files.getText': async () => ({ name: 'projects.json', status: 'no_text', text: '' }),
+      },
+    });
+    await expect(makeFilesStore(api).read('projects')).rejects.toThrow('no_text');
   });
 });
