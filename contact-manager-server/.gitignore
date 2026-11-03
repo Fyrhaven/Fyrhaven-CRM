@@ -1,0 +1,8 @@
+# A token is a workspace's whole credential: never commit one.
+.env
+.env.*
+
+# The database and its WAL sidecars.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

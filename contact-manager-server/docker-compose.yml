@@ -1,0 +1,26 @@
+# One container, one volume, one token. `docker compose up -d`.
+#
+# The plugin talks to this through the webmail host's proxy, so the store never
+# needs to be reachable from a browser directly — bind it to localhost and put a
+# TLS reverse proxy in front of it, or publish it deliberately. It must be HTTPS
+# by the time the plugin reaches it.
+services:
+  contact-manager-store:
+    build: .
+    image: contact-manager-store:1.0.0
+    restart: unless-stopped
+    environment:
+      # A token IS a workspace: `token=workspace,token=workspace`.
+      # One customer, one token. Generate with: openssl rand -hex 32
+      # Put it in .env (never in this file) — the store refuses to start without it.
+      STORE_TOKENS: ${STORE_TOKENS:?set STORE_TOKENS in .env — one token per workspace}
+      PORT: "8080"
+      STORE_DB: /data/store.sqlite
+    volumes:
+      - store-data:/data
+    ports:
+      # Deliberately localhost. Publish it only behind TLS.
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  store-data:

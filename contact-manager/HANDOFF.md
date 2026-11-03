@@ -1903,6 +1903,13 @@ feature that needs it says so. Nothing silently falls back to the browser: a
 feature that quietly kept working on one device is the bug this decision exists
 to remove.
 
+**The server itself is in this repository**, in `contact-manager-server/`: one
+file with no dependencies (`node:http` + `node:sqlite`), a `Dockerfile`, a
+`docker-compose.yml` and its own `node --test` suite. A **token is a workspace**,
+so one deployment serves many customers without any of them reaching another's
+records, and `?scope=` is the seam the team features (#23/#24) will widen. It is
+hosted by the maintainer as a cloud feature; self-hosting may follow.
+
 Shipped so far: v1.2.0 merge preview, v1.3.0 undo, v1.4.0 save-time warning,
 v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete),
 v1.7.0 Contacts page and 360° profile, v1.8.0 activity tracking (meetings,
