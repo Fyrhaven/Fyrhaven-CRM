@@ -17,6 +17,12 @@ import {
   saveConsent, subjectExportJson, subjectExportName,
 } from '../src/lib/privacy.js';
 
+/** Records live on a server (#68): consent, notes and the log all need one. */
+function filesApi() {
+  const files = filesHost();
+  return fakeApi({ host: files.host, handlers: files.handlers });
+}
+
 const FULL = makeCard({
   id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'], phones: ['+491761234567'],
   organizations: { o1: { name: 'Analytical Engines' } }, titles: { t1: { name: 'Countess' } },
@@ -116,7 +122,7 @@ describe('the deletion log', () => {
   });
 
   it('keeps the newest first, caps the list, and survives junk', async () => {
-    const api = fakeApi();
+    const api = filesApi();
     await api.storage.set(DELETION_KEY, [{ id: 'a', method: 'erase', at: 1 }, { junk: true }]);
     await recordDeletion(api, { id: 'b', method: 'anonymise' }, 2);
     const log = await readDeletions(api);
@@ -127,7 +133,7 @@ describe('the deletion log', () => {
   });
 
   it('never lets a failed write of the note reach the caller', async () => {
-    const api = fakeApi();
+    const api = filesApi();
     api.storage.set = async () => { throw new Error('quota'); };
     await expect(recordDeletion(api, { id: 'a', method: 'erase' })).resolves.toBeNull();
   });
@@ -203,7 +209,7 @@ describe('eraseSubject', () => {
 
 describe('consent changes are audited', () => {
   it('records a save and a removal, tied to the subject', async () => {
-    const api = fakeApi();
+    const api = filesApi();
     await saveConsent(api, { contactId: 'a', source: 'newsletter', basis: 'consent', grantedAt: '2026-01-01' }, 10);
     await deleteConsent(api, 'a', 'newsletter', 20);
     const entries = await readHistory(api);
@@ -213,7 +219,7 @@ describe('consent changes are audited', () => {
   });
 
   it('records nothing when the save is unusable or the removal finds nothing', async () => {
-    const api = fakeApi();
+    const api = filesApi();
     await saveConsent(api, { contactId: '', source: 'x' });
     await deleteConsent(api, 'a', 'missing');
     expect(await readHistory(api)).toEqual([]);

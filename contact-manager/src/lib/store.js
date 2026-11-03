@@ -105,6 +105,20 @@ export const recordsAvailable = async (api) => (await recordBackend(api)) !== 'u
  *   that reports to the user has `reason`.
  */
 /**
+ * Replace a whole record store with `value` — or remove the key when there is
+ * nothing left. Throws when there is nowhere to write, so a caller never reports
+ * a save that did not happen.
+ *
+ * The shape every list-shaped store wants: a store module keeps its own
+ * normalisation and decision, and this does the write and the empty case.
+ */
+export async function replace(api, key, value, isEmpty) {
+  const answer = isEmpty ? await remove(api, key) : await write(api, key, value);
+  if (answer.status !== 'ok') throw new Error(answer.reason ?? 'unconfigured');
+  return answer;
+}
+
+/**
  * Run a record operation against whichever server holds the records.
  *
  * `files` and `cloud` are the two ways to do the same thing; a throw from

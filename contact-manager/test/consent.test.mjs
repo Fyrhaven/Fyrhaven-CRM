@@ -1,6 +1,8 @@
 // The consent store (#26): the record, its expiry status, and the repairs.
 import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
+import { read, write } from '../src/lib/store.js';
 import {
   CONSENT_KEY, DEFAULT_BASIS, MAX_CONSENTS, consentKey, consentStatus, consentSummary,
   consentsFor, dateMs, daysUntilExpiry, eraseConsents, isoDate, normalizeConsent,
@@ -12,6 +14,12 @@ const record = (overrides = {}) => ({
   grantedAt: '2026-01-01', expiresAt: null, note: '', ...overrides,
 });
 const at = (iso) => Date.parse(`${iso}T00:00:00Z`);
+
+/** Consent records are records (#68): the fake needs a server to hold them. */
+function consentApi(options = {}) {
+  const files = filesHost();
+  return fakeApi({ host: files.host, handlers: { ...files.handlers, ...(options.handlers ?? {}), ...options } });
+}
 
 describe('normalizeConsent', () => {
   it('repairs a record and defaults an unknown basis', () => {
@@ -56,17 +64,17 @@ describe('normalizeConsents', () => {
 
 describe('the consent store', () => {
   it('adds, replaces and reads back', async () => {
-    const api = fakeApi();
+    const api = consentApi();
     await setConsent(api, record());
     await setConsent(api, record({ source: 'Newsletter', note: 'newer' }));
     const stored = await readConsents(api);
     expect(stored).toHaveLength(1);
     expect(stored[0].note).toBe('newer');
-    expect(await api.storage.get(CONSENT_KEY)).toEqual(stored);
+    expect((await read(api, CONSENT_KEY)).value).toEqual(stored);
   });
 
   it('filters by contact, removes one, and erases them all', async () => {
-    const api = fakeApi();
+    const api = consentApi();
     await setConsent(api, record({ contactId: 'a', source: 'newsletter' }));
     await setConsent(api, record({ contactId: 'a', source: 'events' }));
     await setConsent(api, record({ contactId: 'b', source: 'newsletter' }));
@@ -82,18 +90,18 @@ describe('the consent store', () => {
   });
 
   it('survives junk in storage and rewrites it when it dropped any', async () => {
-    const api = fakeApi();
-    await api.storage.set(CONSENT_KEY, [record(), { junk: true }]);
+    const api = consentApi();
+    await write(api, CONSENT_KEY, [record(), { junk: true }]);
     const records = await readConsents(api);
     expect(records).toHaveLength(1);
-    expect(await api.storage.get(CONSENT_KEY)).toEqual(records);
+    expect((await read(api, CONSENT_KEY)).value).toEqual(records);
   });
 
   it('removes the key entirely when the last record goes', async () => {
-    const api = fakeApi();
+    const api = consentApi();
     await setConsent(api, record());
     await eraseConsents(api, 'a');
-    expect(await api.storage.get(CONSENT_KEY)).toBeNull();
+    expect((await read(api, CONSENT_KEY)).value).toBeNull();
   });
 });
 
