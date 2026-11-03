@@ -28,10 +28,16 @@ export function filesHost({ seed = [], features = { files: true }, handlers = {}
         ? state.files.filter((file) => file.parentId === folderId
           && String(file.name).toLowerCase().includes(String(text).toLowerCase()))
         : []).map(info),
+      // `getText` answers like `email.getAttachmentText`: an **object**, not a
+      // string. Returning a bare string here once let a broken read pass its
+      // tests while every saved record vanished on a real host.
       'files.getText': async (fileId) => {
         const file = state.files.find((entry) => entry.id === fileId);
         if (!file) throw new Error('no such file');
-        return file.content;
+        return {
+          name: file.name, type: file.mimeType ?? 'text/plain', size: String(file.content ?? '').length,
+          format: 'text', status: 'ok', text: file.content, truncated: false,
+        };
       },
       'files.createFolder': async ({ parentId = null, name }) => {
         const folder = { id: `f${state.nextId++}`, name, kind: 'folder', parentId };
