@@ -455,7 +455,7 @@ has **hidden** are left out: a hidden group is a decision, not news.
 
 - **A merge chosen during import still goes through the review dialog (#4).**
   "Merge" writes the imported contact and then hands the pair to the one review
-  dialog every merge in this plugin uses (README §9.2), pre-selected to keep the
+  dialog every merge in this plugin uses (see `.clinerules`), pre-selected to keep the
   contact that was already there. Nothing is merged without the user seeing the
   plan, and the merge is undoable like any other.
 
@@ -486,7 +486,7 @@ wrote, what it skipped and what it queued for review instead of a single count.
 ### Notes
 
 This completes #7's build list apart from the auto-merge threshold, which is
-deliberately not built: every merge must go through the review dialog (§9.2), so
+deliberately not built: every merge must go through the review dialog (see `.clinerules`), so
 an automatic merge would bypass the one surface the plugin insists on.
 
 The stored ignore record is now `{ domains, tags, companies }`; a record written

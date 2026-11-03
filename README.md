@@ -21,12 +21,14 @@ built on Stalwart. Each plugin is published here with its **source** and its
 bulwark-plugins/
 ├── README.md               # this file
 ├── .gitignore
+├── .clinerules             # the rules for changing the code, and the contract
 └── contact-manager/        # source of the Contact Manager plugin
     ├── manifest.json
     ├── package.json
     ├── vitest.config.mjs
     ├── CHANGELOG.md
     ├── README.md           # full documentation of the plugin
+    ├── HANDOFF.md          # where the project stands and why
     ├── src/                # plugin source
     ├── test/               # vitest suite
     ├── test-utils/         # fake host API and UI-kit stand-in
@@ -65,9 +67,10 @@ npm run package    # builds and writes contact-manager.zip
 ```
 
 See [`contact-manager/README.md`](contact-manager/README.md) for the full
-documentation: architecture, the plugin host contract, the data model, the
-duplicate-detection and merge rules, and the conventions an AI coding
-assistant must follow when changing the code.
+documentation: architecture, the plugin host contract, the data model and the
+duplicate-detection and merge rules. The rules for changing the code are in
+[`.clinerules`](.clinerules), and where the project stands is in
+[`contact-manager/HANDOFF.md`](contact-manager/HANDOFF.md).
 
 ### Publishing a new version
 
