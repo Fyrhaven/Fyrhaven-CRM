@@ -7,6 +7,43 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.47.0] — 2026-11-03
+
+### Added
+
+- **Overdue follow-ups on the Overview (#36, the cross-contact half).** The
+  landing page now has a *Follow-ups* block: the open tasks over **every**
+  contact at once, overdue ones first and badged, then anything due within the
+  next seven days, and a count of what can wait. An overdue task used to be
+  visible only on the contact it was about.
+
+### Notes
+
+The tasks come from `api.tasks.list` through `optionalCall`, so a host without a
+task list leaves the page readable and says so rather than showing nothing. The
+seven-day window is a **local calendar day** (`new Date(y, m, d + 7)`), so a
+daylight-saving change cannot shift the boundary by an hour and drop a task; an
+overdue task is never counted as due soon. `formatDate` moved from the profile
+page into `labels.js`, so the Overview and the profile cannot disagree about what
+a date looks like.
+
+### Also in the tree: the storage seam (no behaviour change yet)
+
+The first step of the decision recorded in #68 — **the server is the source of
+truth for records this plugin invents**, because a record kept only in a browser
+is unreachable from another device and gone when site data is cleared. Nothing
+changes for a user yet: no store has been switched over.
+
+`src/lib/store.js` is now the one place that decides where a key's bytes live —
+`RECORD_KEYS` go to the dedicated plugin server, `VIEW_KEYS` stay in
+`api.storage` (view state, preferences, and the server's own address, which has
+to be readable before any server can be reached). A record write with no server
+reports *unavailable* and writes nothing locally. `src/lib/remote.js` gained the
+key/value client (`GET`/`PUT`/`DELETE /v1/store[/{key}]`) over the host's
+`http:proxy`, with the credential held by the host. `test/store.test.mjs` pins
+the routing and asserts that **every** key constant the plugin exports is
+classified, so a new store cannot be added without deciding which kind it is.
+
 ## [1.46.0] — 2026-11-02
 
 ### Added

@@ -67,6 +67,82 @@ export async function callServer(api, path, { method = 'GET', body, headers } = 
 }
 
 /**
+ * The plugin server's key/value store — where a record this plugin invents lives
+ * now that the server is the source of truth (#68).
+ *
+ * The four calls are the whole protocol:
+ *
+ *     GET    /v1/store        -> { records: { key: value, … }, revision }
+ *     GET    /v1/store/{key}  -> { key, value, revision } | 404
+ *     PUT    /v1/store/{key}  <- { value } -> { revision }
+ *     DELETE /v1/store/{key}  -> { ok: true }
+ *
+ * `scope` is the workspace the record belongs to. It defaults to the user the
+ * host's credential identifies, which is what a single-user install wants and
+ * what the team features (#23/#24) will widen.
+ *
+ * Every call answers with the same `{ status, … }` shape as `callServer`, so a
+ * caller cannot mistake "no server configured" for "no records" — the two look
+ * identical if a read is allowed to return an empty value.
+ */
+const storePath = (key, scope) => {
+  const query = scope ? `?scope=${encodeURIComponent(scope)}` : '';
+  const id = text(key);
+  return id ? `/v1/store/${encodeURIComponent(id)}${query}` : `/v1/store${query}`;
+};
+
+/** Every record in the scope, as `{ key: value }`. */
+export async function storeList(api, { scope } = {}) {
+  const answer = await callServer(api, storePath('', scope));
+  if (answer.status !== 'ok') return answer;
+  try {
+    const parsed = JSON.parse(answer.body);
+    const records = parsed?.records;
+    if (!records || typeof records !== 'object' || Array.isArray(records)) {
+      return { status: 'failed', reason: 'no records in the answer' };
+    }
+    return { status: 'ok', records, revision: parsed.revision };
+  } catch {
+    return { status: 'failed', reason: 'the answer was not JSON' };
+  }
+}
+
+/** One record. A 404 is `{ status: 'ok', value: null }` — absent, not broken. */
+export async function storeGet(api, key, { scope } = {}) {
+  const answer = await callServer(api, storePath(key, scope));
+  if (answer.status === 'failed' && answer.code === 404) return { status: 'ok', value: null };
+  if (answer.status !== 'ok') return answer;
+  try {
+    const parsed = JSON.parse(answer.body);
+    return { status: 'ok', value: parsed?.value ?? null, revision: parsed?.revision };
+  } catch {
+    return { status: 'failed', reason: 'the answer was not JSON' };
+  }
+}
+
+/** Writes one record; answers with the server's revision when it sends one. */
+export async function storePut(api, key, value, { scope } = {}) {
+  const answer = await callServer(api, storePath(key, scope), {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+    headers: { 'content-type': 'application/json' },
+  });
+  if (answer.status !== 'ok') return answer;
+  try {
+    return { status: 'ok', revision: JSON.parse(answer.body ?? '{}')?.revision };
+  } catch {
+    // A write that answered without JSON still wrote; only the revision is lost.
+    return { status: 'ok' };
+  }
+}
+
+/** Removes one record. */
+export async function storeDelete(api, key, { scope } = {}) {
+  const answer = await callServer(api, storePath(key, scope), { method: 'DELETE' });
+  return answer.status === 'ok' ? { status: 'ok' } : answer;
+}
+
+/**
  * The version the server reports — the spike endpoint.
  *
  * @returns {Promise<{status: string, version?: string, reason?: string}>}

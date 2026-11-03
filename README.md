@@ -5,13 +5,19 @@ built on Stalwart. Each plugin is published here with its **source** and its
 **build script**; installable ZIPs are attached to
 [GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases).
 
+This repository also carries the **cloud store** the Contact Manager plugin's
+records live on. A record the plugin invents cannot live in a browser and the
+webmail host has nowhere to put it, so it lives on a small dedicated service —
+see [`contact-manager-server/`](contact-manager-server/) and issue
+[#68](https://github.com/zyntrax/bulwark-plugins/issues/68).
+
 ---
 
 ## Plugins
 
 | Plugin | Version | What it does | Install |
 |---|---|---|---|
-| [**Contact Manager**](contact-manager/) | 1.46.0 | Find, review and merge duplicate contacts across all address books. One *Contact Manager* page with *Duplicates*, *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* sub-tabs, command palette scan, a duplicate digest when you come back, bulk merge by company or email domain, smarter name matching (nicknames, initials, transliteration, phonetic surnames), duplicate hints in the contact details and while saving, per-address-book duplicate policies, ignore rules (domains, tags, companies) and protected fields, per-address-book roles (viewer/editor/merger/admin, advisory) that disable the actions they do not allow, a full contact editor with create/edit/delete, a 360° contact profile (recent messages, meetings, files with downloads, open tasks with overdue flags, follow-up tasks you can create from the profile, private notes, company rollup, duplicate check) and company profiles, contact groups (distribution lists) as real contact cards with member search and a duplicates-in-a-list warning, a normalisation rules engine (built-in and user-defined rules for names, companies, phones and emails, previewed before they are applied, run on demand, on import and on edit), a change history of the plugin's own writes with the rollback that is still live, a GDPR toolkit (subject-access export, consent records with expiry, and erase/anonymise with a proof-of-deletion report), smart search with `OR`/grouping and a saved search as a bulk scope, an automation rules engine (when/if/then rules over create, edit and import, with a dry run), local projects with milestones as tasks, time and expenses with billable totals and JSON export/import, a first-run *Getting started* guide (import, scan, policies), a paged contacts list that keeps a large address book fast, smart lists from the command palette, in-app help with a search cheatsheet and keyboard shortcuts, CSV/vCard import with a per-contact decision for duplicates and export, nickname preservation, undo for merges, English and German. | [Latest release](https://github.com/zyntrax/bulwark-plugins/releases/latest) |
+| [**Contact Manager**](contact-manager/) | 1.47.0 | Find, review and merge duplicate contacts across all address books. One *Contact Manager* page with *Duplicates*, *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* sub-tabs, command palette scan, a duplicate digest when you come back, bulk merge by company or email domain, smarter name matching (nicknames, initials, transliteration, phonetic surnames), duplicate hints in the contact details and while saving, per-address-book duplicate policies, ignore rules (domains, tags, companies) and protected fields, per-address-book roles (viewer/editor/merger/admin, advisory) that disable the actions they do not allow, a full contact editor with create/edit/delete, a 360° contact profile (recent messages, meetings, files with downloads, open tasks with overdue flags, follow-up tasks you can create from the profile, private notes, company rollup, duplicate check) and company profiles, contact groups (distribution lists) as real contact cards with member search and a duplicates-in-a-list warning, a normalisation rules engine (built-in and user-defined rules for names, companies, phones and emails, previewed before they are applied, run on demand, on import and on edit), a change history of the plugin's own writes with the rollback that is still live, a GDPR toolkit (subject-access export, consent records with expiry, and erase/anonymise with a proof-of-deletion report), smart search with `OR`/grouping and a saved search as a bulk scope, an automation rules engine (when/if/then rules over create, edit and import, with a dry run), local projects with milestones as tasks, time and expenses with billable totals and JSON export/import, a first-run *Getting started* guide (import, scan, policies), a *Follow-ups* block on the Overview that shows overdue tasks over every contact at once, a paged contacts list that keeps a large address book fast, smart lists from the command palette, in-app help with a search cheatsheet and keyboard shortcuts, CSV/vCard import with a per-contact decision for duplicates and export, nickname preservation, undo for merges, English and German. | [Latest release](https://github.com/zyntrax/bulwark-plugins/releases/latest) |
 
 ---
 
@@ -22,17 +28,24 @@ bulwark-plugins/
 ├── README.md               # this file
 ├── .gitignore
 ├── .clinerules             # the rules for changing the code, and the contract
-└── contact-manager/        # source of the Contact Manager plugin
-    ├── manifest.json
-    ├── package.json
-    ├── vitest.config.mjs
-    ├── CHANGELOG.md
-    ├── README.md           # full documentation of the plugin
-    ├── HANDOFF.md          # where the project stands and why
-    ├── src/                # plugin source
-    ├── test/               # vitest suite
-    ├── test-utils/         # fake host API and UI-kit stand-in
-    └── scripts/            # packaging and release scripts
+├── contact-manager/        # source of the Contact Manager plugin
+│   ├── manifest.json
+│   ├── package.json
+│   ├── vitest.config.mjs
+│   ├── CHANGELOG.md
+│   ├── README.md           # full documentation of the plugin
+│   ├── HANDOFF.md          # where the project stands and why
+│   ├── src/                # plugin source
+│   ├── test/               # vitest suite
+│   ├── test-utils/         # fake host API and UI-kit stand-in
+│   └── scripts/            # packaging and release scripts
+└── contact-manager-server/ # the cloud store the plugin's records live on (#68)
+    ├── server.js           # the service — no dependencies, encrypted at rest
+    ├── server.test.js      # `node --test`
+    ├── Dockerfile
+    ├── docker-compose.yml  # the store + Caddy, which terminates TLS
+    ├── Caddyfile
+    └── README.md
 ```
 
 **Installable ZIPs live on GitHub Releases.** `npm run release` builds the ZIP
