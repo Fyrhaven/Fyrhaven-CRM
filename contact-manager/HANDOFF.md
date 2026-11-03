@@ -1848,13 +1848,60 @@ roadmap issue #40.
 Hard limits to remember before promising CRM data:
 
 - `api.storage` is per-account, per-browser `localStorage` — **not** a shared
-  server store. Deals, notes or pipelines the plugin invents are single-user
-  and do not sync between devices.
+  server store.
 - Contacts, address books, mail, calendar events and tasks are native APIs
   (`api.contacts`, `api.email.search`, `api.calendar`, `api.tasks`); custom
   object types and custom fields do not exist.
 - There is no server-side scheduler; background work runs only while the
   webmail is open.
+
+### Decision (2026-11-03): the server is the source of truth
+
+The maintainer ruled on the storage question — the full record is **#68** — and
+it reverses what this file used to say about local-first:
+
+- **A record the plugin invents must not live only in a browser.** Change device
+  and it is unreachable; clear site data and it is gone. So the **dedicated
+  plugin server is the source of truth** for projects, private notes, consent
+  records, the deletion log, the change history, per-book policies / ignore rules
+  / roles, automation rules, saved searches, import templates and normalisation
+  rules.
+- **Those records cannot live on the Stalwart server** — the host exposes no
+  shared store and no custom objects — so the dedicated server is the only home
+  for them, and it is a **cloud feature** (hosted; self-hosting may follow).
+- **Everything that needs no such storage keeps working with no server
+  configured.** Follow-up tasks and project *milestones* are already real host
+  tasks, so they stay free and server-side. The scan, review, merge, editor,
+  profile, company profiles, groups, health, import/export, search, bulk actions,
+  avatars, the guide and in-app help need nothing.
+- So the storage-backed features move behind the cloud tier **deliberately**.
+  #68 carries the boundary table.
+
+### The storage seam (the enabling work)
+
+Every store already reads and writes through `api.storage.get/set/remove`. The
+seam puts **one** module in front of that, so a store never knows where its bytes
+live and no feature has to be rewritten twice:
+
+- **`src/lib/store.js`** — `read(api, key)` / `write(api, key, value)` /
+  `remove(api, key)`, plus the one list that classifies a key as a **record**
+  (server) or **view state** (local), and `recordsAvailable(api)`.
+- **`src/lib/remote.js`** — the server client, a key/value API over the host's
+  `http:proxy` with the credential held by the host, so no secret ships in the
+  ZIP.
+
+The wire protocol (draft — `scope` is the workspace, defaulting to the user the
+credential identifies):
+
+    GET    /v1/store            -> { records: { key: value, … }, revision }
+    GET    /v1/store/{key}      -> { key, value, revision } | 404
+    PUT    /v1/store/{key}      <- { value } -> { revision }
+    DELETE /v1/store/{key}      -> { ok: true }
+
+With **no server configured**, a record read reports *unavailable* and the
+feature that needs it says so. Nothing silently falls back to the browser: a
+feature that quietly kept working on one device is the bug this decision exists
+to remove.
 
 Shipped so far: v1.2.0 merge preview, v1.3.0 undo, v1.4.0 save-time warning,
 v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete),

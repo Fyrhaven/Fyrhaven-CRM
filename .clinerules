@@ -146,6 +146,27 @@ Exports of src/index.js
   hooks.onAction
   activate(pluginApi)
 
+The storage seam (#68)
+  THE RULE: a record the plugin invents belongs on the server, never only in a
+    browser. `api.storage` is per-account, per-browser localStorage, so a record
+    kept there is unreachable from another device and gone when site data is
+    cleared.
+  src/lib/store.js is the ONE place that decides where a key's bytes live
+    RECORD_KEYS -> the dedicated plugin server (the source of truth)
+    VIEW_KEYS   -> api.storage: view state, preferences, and the server's own
+      address + credential id, which must be readable BEFORE a server is reached
+    read/write/remove(api, key) -> { status: 'ok' | 'unavailable' }
+    recordsAvailable(api) — what a feature asks before it reads, so it can say
+      "this needs a server" instead of showing an empty list
+    an unknown key is treated as view state; test/store.test.mjs asserts every
+      key constant the plugin exports is classified, so a new store cannot be
+      added without deciding which kind it is
+  a record write with no server reports `unavailable` and writes NOTHING locally
+    — a silent local fallback is the bug this exists to remove
+  the protocol (src/lib/remote.js, over the host's http:proxy, credential
+    host-held): GET/PUT/DELETE /v1/store[/{key}], { key, value, revision }
+  the undo batch stays local on purpose: it holds copies of removed contacts
+
 Detection
   findDuplicateGroups(cards, opts, dismissed) -> groups
   group = { signature, strength: 'strong'|'possible', reasons[], members[] }

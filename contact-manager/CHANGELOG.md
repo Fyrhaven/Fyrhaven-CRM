@@ -27,6 +27,23 @@ overdue task is never counted as due soon. `formatDate` moved from the profile
 page into `labels.js`, so the Overview and the profile cannot disagree about what
 a date looks like.
 
+### Also in the tree: the storage seam (no behaviour change yet)
+
+The first step of the decision recorded in #68 — **the server is the source of
+truth for records this plugin invents**, because a record kept only in a browser
+is unreachable from another device and gone when site data is cleared. Nothing
+changes for a user yet: no store has been switched over.
+
+`src/lib/store.js` is now the one place that decides where a key's bytes live —
+`RECORD_KEYS` go to the dedicated plugin server, `VIEW_KEYS` stay in
+`api.storage` (view state, preferences, and the server's own address, which has
+to be readable before any server can be reached). A record write with no server
+reports *unavailable* and writes nothing locally. `src/lib/remote.js` gained the
+key/value client (`GET`/`PUT`/`DELETE /v1/store[/{key}]`) over the host's
+`http:proxy`, with the credential held by the host. `test/store.test.mjs` pins
+the routing and asserts that **every** key constant the plugin exports is
+classified, so a new store cannot be added without deciding which kind it is.
+
 ## [1.46.0] — 2026-11-02
 
 ### Added
