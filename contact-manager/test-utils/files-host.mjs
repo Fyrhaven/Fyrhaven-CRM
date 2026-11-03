@@ -36,6 +36,11 @@ export function filesHost({ seed = [], features = { files: true }, handlers = {}
         return folder;
       },
       'files.create': async ({ folderId, name, content, type, replace }) => {
+        // The host refuses anything but these two (seen on a live install), so
+        // the fake does too — a wrong type must fail here, not in production.
+        if (type !== 'text/plain' && type !== 'text/markdown') {
+          throw new Error('files.create: type must be text/markdown or text/plain');
+        }
         const existing = state.files.find((file) => file.parentId === folderId && file.name === name);
         if (existing && !replace) throw new Error('already there');
         if (existing) {

@@ -18,6 +18,15 @@ top of this file must match it.
   saved is reported rather than shown as kept. The subject-access export and the
   erasure paths follow the note to its new home unchanged.
 
+### Fixed
+
+- **Saving a record to Files failed with *"type must be text/markdown or
+text/plain"*.** Reported from a live install: `files.create` refuses
+`application/json`, and 1.48.0 asked for exactly that, so every project save
+there failed. The value is written as `text/plain` now — which is what JSON is —
+and the test double refuses any other type, so the same mistake cannot ship
+again.
+
 ## [1.48.0] — 2026-11-03
 
 ### Added

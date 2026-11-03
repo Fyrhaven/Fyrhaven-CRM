@@ -22,7 +22,13 @@
 /** The folder records live in, in the user's own drive. */
 export const FILES_FOLDER = 'Contact Manager';
 
-const MIME = 'application/json';
+/**
+ * The type the host accepts for a record. `files.create` refuses anything but
+ * `text/markdown` or `text/plain` (a live install says so: *"type must be
+ * text/markdown or text/plain"*), so the value is written as **plain text** —
+ * which is what JSON is, and the extension still says what it holds.
+ */
+const MIME = 'text/plain';
 const SUFFIX = '.json';
 
 /**
