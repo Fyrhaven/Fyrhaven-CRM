@@ -62,11 +62,15 @@ export function makeFilesStore(api) {
       cache = (async () => {
         const folderId = await findFolder();
         const values = new Map();
+        // The names already there, so a write can say which file it replaces.
+        const names = new Set();
         if (folderId) {
           const files = await api.files.find({ folderId, limit: 50 });
           for (const file of files ?? []) {
             const name = String(file?.name ?? '');
-            if (file?.kind !== 'file' || !name.endsWith(SUFFIX)) continue;
+            if (file?.kind !== 'file') continue;
+            names.add(name);
+            if (!name.endsWith(SUFFIX)) continue;
             const key = name.slice(0, -SUFFIX.length);
             try {
               const text = await api.files.getText(file.id);
@@ -77,7 +81,7 @@ export function makeFilesStore(api) {
             }
           }
         }
-        return { folderId, values };
+        return { folderId, values, names };
       })().catch((err) => {
         // Do not cache a failure: the next read should try again.
         cache = null;
@@ -89,13 +93,15 @@ export function makeFilesStore(api) {
 
   async function write(key, content) {
     const current = await load();
-    await api.files.create({
-      folderId: current.folderId,
-      name: `${key}${SUFFIX}`,
-      content,
-      type: MIME,
-      replace: true,
-    });
+    const name = `${key}${SUFFIX}`;
+    // `replace` is not a flag: the host wants the **name** of the file being
+    // replaced (a live install says *"replace must be a string of 1-256
+    // characters"*). It is sent only when that file is really there, so a first
+    // write is an ordinary create.
+    const payload = { folderId: current.folderId, name, content, type: MIME };
+    if (current.names.has(name)) payload.replace = name;
+    await api.files.create(payload);
+    current.names.add(name);
     current.values.set(key, content === 'null' ? null : JSON.parse(content));
   }
 

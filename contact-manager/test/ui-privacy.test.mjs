@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
 import { makePrivacyPage } from '../src/lib/privacy-page.js';
 import { makeConsentDialog } from '../src/lib/consent-dialog.js';
 import { readConsents } from '../src/lib/consent.js';
@@ -26,16 +27,22 @@ afterEach(cleanup);
 const ADA = makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'], phones: ['+491761234567'] });
 const GRACE = makeCard({ id: 'g', name: 'Grace Hopper', emails: ['grace@example.org'] });
 
-const privacyApi = (handlers = {}) => fakeApi({
-  translations: manifest.locales,
-  handlers: {
+const privacyApi = (handlers = {}) => {
+  // Consent records are records (#68): they need a server to live on.
+  const files = filesHost();
+  return fakeApi({
+    translations: manifest.locales,
+    host: files.host,
+    handlers: {
+      ...files.handlers,
     'contacts.list': async () => [ADA, GRACE],
     'ui.confirm': async () => true,
     'contacts.update': async () => {},
     'contacts.remove': async () => {},
-    ...handlers,
-  },
-});
+      ...handlers,
+    },
+  });
+};
 
 async function renderPage(api) {
   const Page = makePrivacyPage(React, api);
