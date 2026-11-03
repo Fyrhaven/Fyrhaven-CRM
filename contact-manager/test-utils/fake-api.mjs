@@ -54,6 +54,14 @@ export function fakeApi({
       settings: { ...settings },
       onSettingsChange(fn) { settingsListeners.push(fn); return () => {}; },
     },
+    // `api.host.features` is a **property**, not a method, so the permissive
+    // namespace proxy cannot express it: without this, a feature-gated path
+    // (`api.host.features.files`) would be untestable — every read would come
+    // back as a function and never as `true`.
+    host: {
+      features: { ...(host.features ?? {}) },
+      onFeaturesChange() { return () => {}; },
+    },
     storage: {
       get: async (key) => (store.has(key) ? structuredClone(store.get(key)) : null),
       set: async (key, value) => { store.set(key, structuredClone(value)); },

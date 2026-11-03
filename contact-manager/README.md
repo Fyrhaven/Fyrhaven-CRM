@@ -103,7 +103,8 @@ contact-manager/
 ├── src/
 │   ├── index.js            # slots, hooks, activate() — wiring only
 │   └── lib/
-│       ├── store.js       # the storage seam: which key lives on the server (#68)
+│       ├── store.js       # the storage seam: which key lives on which server (#68)
+│       ├── files-store.js # records in the customer's own Files storage (#68)
 │       ├── contacts.js     # JSContact readers, loaders, settings flags
 │       ├── duplicates.js   # detection (union-find), merge planning, merging
 │       ├── name-match.js   # folding, nicknames, phonetic keys, name evidence (#8)
@@ -1404,7 +1405,8 @@ plugin host are **not** bundled, the host provides them.
 | `test/release.test.mjs` | The release guard: the manifest/package/CHANGELOG agreement, and the notes it extracts |
 | `test/ship.test.mjs` | The ship plan: which pull requests are ready, which are blocked, and retargeting a stacked one |
 | `test/labels.test.mjs` | `formatDate`: a date and a timestamp agree, an empty value is empty, and a value that is not a date is shown as it is |
-| `test/store.test.mjs` | The storage seam (#68): every key the plugin stores is classified as a record or view state, records route to the server and view state to the host storage, and a record with no server configured writes nothing locally |
+| `test/store.test.mjs` | The storage seam (#68): every key the plugin stores is classified as a record or view state, a record goes to the customer's own server when Files is on and to the cloud when it is not, and with neither it writes nothing locally |
+| `test/files-store.test.mjs` | Records in the customer's own Files storage (#68): the folder is made once and reused, a value round-trips as JSON, removal is a tombstone because the host has no delete, the folder is read once per session (the rate limits), and a failure is reported rather than cached |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
 `test/bundle.test.mjs` evaluates `dist/index.js` with a `require` that only

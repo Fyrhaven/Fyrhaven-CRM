@@ -1905,6 +1905,14 @@ it reverses what this file used to say about local-first:
   `api.accountData` needs no cloud tier at all and stays free; the cloud tier is
   for the work that genuinely needs a service. #68 carries the boundary table,
   which this correction narrows rather than widens.
+- **No silent local fallback, and the cloud is an *option*.** If
+  `api.host.features.files !== true` — an older webmail, or an admin who turned
+  Files off — a feature that needs it becomes **unavailable** with a notice
+  naming what is missing, and **the cloud tier is offered as the alternative**.
+  `api.storage` is never used for a record: a record that quietly lives in one
+  browser is the bug this whole decision exists to remove. That was the
+  maintainer's call, and it is stricter than the "warn and keep working" reading
+  it replaced.
 
 ### The storage seam (the enabling work)
 
