@@ -3,7 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeApi, proxyResponse } from '../test-utils/fake-api.mjs';
 import {
-  RECORD_KEYS, VIEW_KEYS, backendFor, isRecord, isViewKey, read, recordsAvailable, remove, write,
+  RECORD_KEYS, VIEW_KEYS, backendFor, isRecord, isViewKey, read, recordBackend,
+  recordsAvailable, remove, write,
 } from '../src/lib/store.js';
 
 // Every key constant this plugin stores, imported for real so a new store cannot
@@ -199,5 +200,64 @@ describe('recordsAvailable', () => {
     const api = fakeApi();
     api.storage.get = async () => { throw new Error('refused'); };
     expect(await recordsAvailable(api)).toBe(false);
+  });
+});
+
+// ── Where a record goes (#68) ───────────────────────────────────
+//
+// The customer's own server first, the cloud only for what the host refuses, and
+// the browser never.
+
+/** Just enough Files to see where a record goes. */
+function withFiles(handlers = {}) {
+  return fakeApi({
+    host: {
+      exposes: { files: ['list', 'find', 'getText', 'create', 'createFolder'] },
+      features: { files: true },
+    },
+    handlers: {
+      'files.list': async () => [{ id: 'f1', name: 'Contact Manager', kind: 'folder', parentId: null }],
+      'files.find': async () => [],
+      'files.create': async ({ name }) => ({ file: { id: 'x', name } }),
+      'files.getText': async () => 'null',
+      ...handlers,
+    },
+  });
+}
+
+describe('where a record goes', () => {
+  it('prefers the customer\'s own server, and never the browser', async () => {
+    const api = withFiles();
+    expect(await recordBackend(api)).toBe('files');
+
+    await write(api, PROJECTS_KEY, [{ id: 'p1' }]);
+
+    expect(api.calls('files.create')).toHaveLength(1);
+    expect(api.calls('proxy.fetch')).toHaveLength(0);
+    expect(await api.storage.get(PROJECTS_KEY)).toBeNull();
+  });
+
+  it('uses the cloud when the host has no Files', async () => {
+    const api = await withServer({
+      'proxy.fetch': async () => proxyResponse(JSON.stringify({ key: 'projects', value: [] })),
+    });
+
+    expect(await recordBackend(api)).toBe('cloud');
+    expect(await read(api, PROJECTS_KEY)).toEqual({ status: 'ok', value: [] });
+  });
+
+  it('is unavailable with neither, and writes nothing locally', async () => {
+    const api = fakeApi();
+
+    expect(await recordBackend(api)).toBe('unavailable');
+    expect(await write(api, PROJECTS_KEY, [])).toMatchObject({ status: 'unavailable' });
+    expect(await api.storage.get(PROJECTS_KEY)).toBeNull();
+  });
+
+  it('reports a Files failure rather than an empty store', async () => {
+    const api = withFiles({ 'files.list': async () => { throw new Error('Files is not available'); } });
+
+    expect(await read(api, PROJECTS_KEY))
+      .toEqual({ status: 'unavailable', reason: 'Files is not available' });
   });
 });

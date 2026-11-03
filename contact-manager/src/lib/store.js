@@ -26,6 +26,7 @@
 // deciding which kind it is.
 
 import { readRemoteUrl, storeDelete, storeGet, storePut } from './remote.js';
+import { filesAvailable, makeFilesStore } from './files-store.js';
 
 /** Records: the server is the source of truth (#68 carries the boundary table). */
 export const RECORD_KEYS = new Set([
@@ -55,18 +56,44 @@ export const isViewKey = (key) => VIEW_KEYS.has(key);
  */
 export const backendFor = (key) => (isRecord(key) ? 'remote' : 'local');
 
+// The files store is per-session — its cache is what keeps a page load inside
+// the host's rate limits — so one instance is kept per `api` rather than made
+// per call. Keyed by the api, not held in a single slot, so a second api (a
+// test, or a second host in the same realm) gets its own.
+const filesStores = new WeakMap();
+const filesFor = (api) => {
+  let store = filesStores.get(api);
+  if (!store) {
+    store = makeFilesStore(api);
+    filesStores.set(api, store);
+  }
+  return store;
+};
+
 /**
- * Whether records can be read and written at all. A feature that needs the cloud
- * tier asks this *before* it reads, so it can say "this needs a server" instead
- * of showing an empty list.
+ * Where a record's bytes live right now:
+ *
+ * - `'files'` — the customer's own Stalwart, which is the first choice: their
+ *   server, their backups, no cloud and no secret.
+ * - `'cloud'` — the dedicated plugin server, for a host that cannot or will not
+ *   enable Files, and for the work the host refuses by design.
+ * - `'unavailable'` — neither. A record feature says so and offers the cloud
+ *   tier; it does **not** quietly fall back to the browser.
  */
-export async function recordsAvailable(api) {
+export async function recordBackend(api) {
+  if (filesAvailable(api)) return 'files';
   try {
-    return Boolean(await readRemoteUrl(api));
+    return (await readRemoteUrl(api)) ? 'cloud' : 'unavailable';
   } catch {
-    return false;
+    return 'unavailable';
   }
 }
+
+/**
+ * Whether records can be read and written at all. A feature asks this *before*
+ * it reads, so it can say what is missing instead of showing an empty list.
+ */
+export const recordsAvailable = async (api) => (await recordBackend(api)) !== 'unavailable';
 
 /**
  * Read a key. The answer says *why* it is empty, so a caller can tell "nothing
@@ -77,11 +104,38 @@ export async function recordsAvailable(api) {
  *   that refused — a caller that only needs the value treats them alike, and one
  *   that reports to the user has `reason`.
  */
+/**
+ * Run a record operation against whichever server holds the records.
+ *
+ * `files` and `cloud` are the two ways to do the same thing; a throw from
+ * either is reported as `unavailable` rather than propagated, because every
+ * caller of this seam is a page that has to stay readable.
+ */
+async function recordOp(api, key, files, cloud) {
+  const backend = await recordBackend(api);
+  try {
+    if (backend === 'files') return await files(filesFor(api), key);
+    if (backend === 'cloud') {
+      const answer = await cloud(key);
+      if (answer.status === 'ok') return answer;
+      return { status: 'unavailable', reason: answer.reason ?? answer.status };
+    }
+  } catch (err) {
+    return { status: 'unavailable', reason: String(err?.message ?? err) };
+  }
+  // The same word the cloud client uses for "there is nowhere to put this": the
+  // seam cannot tell *why* the user has no storage, only that they have none.
+  return { status: 'unavailable', reason: 'unconfigured' };
+}
+
 export async function read(api, key) {
   if (!isRecord(key)) return { status: 'ok', value: await api.storage.get(key) };
-  const answer = await storeGet(api, key);
-  if (answer.status === 'ok') return { status: 'ok', value: answer.value };
-  return { status: 'unavailable', reason: answer.reason ?? answer.status };
+  return recordOp(
+    api,
+    key,
+    async (store, k) => ({ status: 'ok', value: await store.read(k) }),
+    (k) => storeGet(api, k),
+  );
 }
 
 /** Write a key. A record write with nowhere to go reports `unavailable`. */
@@ -90,9 +144,15 @@ export async function write(api, key, value) {
     await api.storage.set(key, value);
     return { status: 'ok' };
   }
-  const answer = await storePut(api, key, value);
-  if (answer.status === 'ok') return { status: 'ok', revision: answer.revision };
-  return { status: 'unavailable', reason: answer.reason ?? answer.status };
+  return recordOp(
+    api,
+    key,
+    async (store, k) => {
+      await store.write(k, value);
+      return { status: 'ok' };
+    },
+    (k) => storePut(api, k, value),
+  );
 }
 
 /** Remove a key. */
@@ -101,7 +161,13 @@ export async function remove(api, key) {
     await api.storage.remove(key);
     return { status: 'ok' };
   }
-  const answer = await storeDelete(api, key);
-  if (answer.status === 'ok') return { status: 'ok' };
-  return { status: 'unavailable', reason: answer.reason ?? answer.status };
+  return recordOp(
+    api,
+    key,
+    async (store, k) => {
+      await store.remove(k);
+      return { status: 'ok' };
+    },
+    (k) => storeDelete(api, k),
+  );
 }
