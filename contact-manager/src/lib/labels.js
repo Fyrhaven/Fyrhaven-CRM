@@ -4,6 +4,18 @@
 import { contactName, primaryEmail, primaryPhone } from './contacts.js';
 import { undoWindowMs } from './undo.js';
 
+/**
+ * A stored date or timestamp as the user's own date. One formatter, so the
+ * Overview and the profile cannot disagree about what "2026-11-02" looks like —
+ * and a value that is not a date is shown as it is rather than as "Invalid Date".
+ */
+export function formatDate(value, locale) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString(locale || undefined);
+}
+
 export const strengthKey = (group) => {
   if (group?.strength === 'strong') return 'group.strongBadge';
   if (group?.strength === 'manual') return 'group.manualBadge';

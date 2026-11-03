@@ -72,3 +72,32 @@ export function taskBuckets(tasks, now = new Date()) {
     rest: list.filter((task) => !isOverdue(task, now)),
   };
 }
+
+/** How far ahead "due soon" reaches, in days. */
+export const UPCOMING_DAYS = 7;
+
+/**
+ * Due today or within `days` — but never an overdue task, which is its own
+ * bucket. The limit is a **local calendar day** (`new Date(y, m, d + days)`),
+ * so a daylight-saving change cannot shift it by an hour and drop a task.
+ */
+export function isDueSoon(task, now = new Date(), days = UPCOMING_DAYS) {
+  const due = text(task?.due);
+  if (!isDate(due)) return false;
+  const today = todayIso(now);
+  if (due < today) return false;
+  const limit = todayIso(new Date(now.getFullYear(), now.getMonth(), now.getDate() + days));
+  return due <= limit;
+}
+
+/**
+ * The three buckets the Overview shows: what is overdue, what is due soon, and
+ * what can wait. This is what makes an overdue task visible without opening the
+ * contact it is about.
+ */
+export function taskSummary(tasks, now = new Date()) {
+  const { overdue, rest } = taskBuckets(tasks, now);
+  const soon = rest.filter((task) => isDueSoon(task, now));
+  const later = rest.filter((task) => !isDueSoon(task, now));
+  return { overdue, soon, later, total: overdue.length + rest.length };
+}

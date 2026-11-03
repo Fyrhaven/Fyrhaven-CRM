@@ -19,13 +19,15 @@ import { readHistory } from './history.js';
 import { healthSummary } from './health.js';
 import { readRegion } from './normalise.js';
 import { findDuplicates, importContacts, newCompany, newContact, newGroup, newProject, openHelp, undoMerge, automationRules } from './actions.js';
-import { undoWindowMinutes } from './labels.js';
+import { formatDate, undoWindowMinutes } from './labels.js';
 import { readUndo } from './undo.js';
 import { ACTION_BAR } from './layout.js';
 import { readPolicies, readIgnore } from './book-policies.js';
 import { acknowledge, buildDigest, digestWindowDays, groupSignatures, readDigestState } from './digest.js';
 import { readOnboarding } from './onboarding.js';
 import { makeOnboardingCard } from './onboarding-card.js';
+import { optionalCall } from './optional.js';
+import { taskSummary } from './tasks.js';
 
 export function makeHomePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useState } = React;
@@ -43,7 +45,7 @@ export function makeHomePage(React, api) {
     const load = useCallback(async () => {
       setState({ status: 'loading' });
       try {
-        const [cards, bookList, projects, region, undo, lastScan, policies, ignore, dismissed, told, history, onboarding] = await Promise.all([
+        const [cards, bookList, projects, region, undo, lastScan, policies, ignore, dismissed, told, history, onboarding, openTasks] = await Promise.all([
           loadCards(api),
           loadBooks(api),
           readProjects(api),
@@ -56,6 +58,9 @@ export function makeHomePage(React, api) {
           readDigestState(api),
           readHistory(api),
           readOnboarding(api),
+          // Tasks are optional context, like the profile's: a host without them
+          // leaves this page readable and says so.
+          optionalCall(() => api.tasks.list({ includeCompleted: false })),
         ]);
         const books = bookNamesById(bookList);
         const groups = findDuplicateGroups(cards, { ...matchOptions(api.plugin?.settings), region, policies, ignore }, []);
@@ -97,6 +102,10 @@ export function makeHomePage(React, api) {
           undoable: undo.length,
           lastScan: lastScan && typeof lastScan === 'object' ? lastScan : null,
           onboarding,
+          // What needs doing, over every contact at once (#36): the overdue
+          // ones are visible here rather than only on the contact they are
+          // about. `tasks` is null when the host has no task list at all.
+          tasks: openTasks === null ? null : taskSummary(openTasks),
         });
       } catch {
         setState({ status: 'error' });
@@ -154,6 +163,31 @@ export function makeHomePage(React, api) {
         ? h(Button, { variant: 'secondary', icon: 'undo', onClick: () => void undoMerge(api).then(() => onDataChanged?.()) }, t('action.undoCommand'))
         : null);
 
+    // What needs doing, over every contact at once (#36). An overdue task used
+    // to be visible only on the contact it is about; here it is on the page that
+    // answers "what needs attention". A host with no task list says so.
+    const taskLine = (task, late) => h(Row, { key: task.id, gap: 2, wrap: true },
+      late ? h(Badge, { tone: 'danger' }, t('profile.taskOverdue')) : null,
+      h(Text, null, task.title),
+      task.due ? h(Text, { tone: 'muted' }, formatDate(task.due, api.i18n.getLocale())) : null);
+
+    const taskBlock = () => {
+      if (!state.tasks) {
+        return h(Section, { title: t('home.followUps') },
+          h(Text, { tone: 'muted' }, t('home.tasksUnavailable')));
+      }
+      const { overdue, soon, later } = state.tasks;
+      // Nothing to chase: no empty section on the landing page.
+      if (!overdue.length && !soon.length) return null;
+      return h(Section, { title: t('home.followUps'), description: t('home.followUpsHint') },
+        h(Stack, { gap: 1 },
+          ...overdue.map((task) => taskLine(task, true)),
+          ...soon.map((task) => taskLine(task, false)),
+          later.length
+            ? h(Text, { tone: 'muted' }, t('home.followUpsLater', { count: later.length }))
+            : null));
+    };
+
     const row = (key, title, line, badge, tab) => h(ListRow, {
       key,
       title,
@@ -187,6 +221,7 @@ export function makeHomePage(React, api) {
               : null,
             h(InfoBar, { tone: state.groups.length ? 'warning' : 'success' },
               state.groups.length ? duplicateLine() : t('home.duplicatesClean')),
+            taskBlock(),
             h(Card, null,
               h(Stack, { gap: 2 },
                 h(Heading, { level: 2 }, t('home.menu')),
