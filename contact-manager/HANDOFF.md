@@ -1911,10 +1911,30 @@ to remove.
 
 **The server itself is in this repository**, in `contact-manager-server/`: one
 file with no dependencies (`node:http` + `node:sqlite`), a `Dockerfile`, a
-`docker-compose.yml` and its own `node --test` suite. A **token is a workspace**,
-so one deployment serves many customers without any of them reaching another's
-records, and `?scope=` is the seam the team features (#23/#24) will widen. It is
-hosted by the maintainer as a cloud feature; self-hosting may follow.
+`docker-compose.yml` with TLS at the edge (Caddy, automatic certificates) and its
+own `node --test` suite. A **token is a workspace**, so one deployment serves
+many customers without any of them reaching another's records, and `?scope=` is
+the seam the team features (#23/#24) will widen. It is hosted by the maintainer
+as a cloud feature; self-hosting may follow.
+
+**Values are encrypted at rest.** Each workspace has its own 256-bit key
+(AES-256-GCM, fresh IV per write); that key is stored wrapped by a master key
+that lives in the server's environment and never in the database, so a stolen
+file, volume or backup is opaque. **The limit, stated in the server's README
+rather than implied away: the running server must unwrap a key to serve it, so
+whoever operates the service can read the data.**
+
+**The better home for these records is the customer's own server, and it is one
+host change away.** Stalwart already implements **JMAP Metadata**
+(`urn:ietf:params:jmap:metadata`) — a per-account key/value store with a *shared*
+and a *private* root, containers, quotas and change tracking — but Bulwark does
+not expose it to plugins, and a plugin has no other server-side write (see
+`api.plugin.settings`, which is read-only). Issue **#68** carries the request,
+with the Stalwart file paths as evidence. If it lands: the records move to the
+customer's Stalwart, no cloud is needed for storage at all, and a key kept in the
+*shared* section gives an org automatic access for everyone on its server while
+the cloud operator cannot read a thing. The **record envelope is identical**
+either way, so that is a key-location change, not a data migration.
 
 Shipped so far: v1.2.0 merge preview, v1.3.0 undo, v1.4.0 save-time warning,
 v1.5.0 nickname preservation, v1.6.0 contact editor (create/edit/delete),

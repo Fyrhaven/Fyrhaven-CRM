@@ -40,10 +40,11 @@ bulwark-plugins/
 │   ├── test-utils/         # fake host API and UI-kit stand-in
 │   └── scripts/            # packaging and release scripts
 └── contact-manager-server/ # the cloud store the plugin's records live on (#68)
-    ├── server.js           # the service — no dependencies
+    ├── server.js           # the service — no dependencies, encrypted at rest
     ├── server.test.js      # `node --test`
     ├── Dockerfile
-    ├── docker-compose.yml
+    ├── docker-compose.yml  # the store + Caddy, which terminates TLS
+    ├── Caddyfile
     └── README.md
 ```
 
