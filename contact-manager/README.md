@@ -51,7 +51,8 @@ signatures, the last scan summary).
 
 | Surface | Where it appears | What it does |
 |---|---|---|
-| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* |
+| `app-page` slot | Navigation rail → *Contact Manager* | The whole plugin. Its body is a tab strip: *Overview* (the main page: headline state, the follow-ups block, a menu of the palette tasks, and a row into every section), *Duplicates* (statistics, duplicate groups, hide/restore, multi-select, *Review…*), *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* |
+| *Follow-ups* block | Contact Manager → *Overview* | The open tasks over **every** contact at once (#36): overdue first and badged, then what is due within seven days, then a count of what can wait. Hidden when there is nothing to chase; says so when the host has no task list |
 | Getting started guide | Contact Manager → *Overview*, on first run | A short card that walks a first clean-up — import, scan (which opens the review dialog), set policies — running the same actions the menu and the palette run. It records that it is done, and the Overview menu re-opens it (#39, the onboarding half) |
 | *Policies* button | Contact Manager → *Duplicates* header | Opens the **address-book policies** dialog: whether each book is scanned, each match strategy per book (*Default* / *On* / *Off*), and global ignore rules by email domain or tag (#7) |
 | *Roles* button | Contact Manager → *Duplicates* header | Opens the **address-book roles** dialog (#23): the role held on each book — *Viewer* / *Editor* / *Merger* / *Admin* — which disables the actions it does not allow. Advisory only; the host is not enforcing it |
@@ -1221,8 +1222,19 @@ note.
 access happens *inside* the `try`, so a host with no tasks namespace fails there
 rather than at the call site.
 
-Still to come from #36: a cross-contact *My tasks* view with overdue/upcoming
-filters, and reminders — which need a timer hook the plugin does not have.
+**The cross-contact half (v1.47.0).** The Overview's *Follow-ups* block lists the
+open tasks over **every** contact at once, so an overdue task is visible without
+opening the contact it is about — the issue's last *done when*. `taskSummary`
+splits them into overdue / due soon / later, and `isDueSoon` measures the window
+in **local calendar days** (`new Date(y, m, d + 7)`), so a daylight-saving change
+cannot shift the boundary by an hour and drop a task; an overdue task is never
+counted as due soon. The tasks come from `api.tasks.list` through `optionalCall`,
+so a host without a task list leaves the page readable and says so — the same
+rule as the profile. The block renders nothing when there is nothing to chase,
+rather than an empty section on the landing page.
+
+Still to come from #36: per-contact *completion history*, and reminders — which
+need a timer hook the plugin does not have.
 
 ### 6.21 Private notes on a contact (`src/lib/notes.js`, `markdown.js`, `notes-section.js`, v1.46.0) — #38
 
@@ -1359,6 +1371,7 @@ plugin host are **not** bundled, the host provides them.
 | `test/ui-notes.test.mjs` | The Private notes section: add, the marks as elements, per-contact isolation and delete (#38) |
 | `test/release.test.mjs` | The release guard: the manifest/package/CHANGELOG agreement, and the notes it extracts |
 | `test/ship.test.mjs` | The ship plan: which pull requests are ready, which are blocked, and retargeting a stacked one |
+| `test/labels.test.mjs` | `formatDate`: a date and a timestamp agree, an empty value is empty, and a value that is not a date is shown as it is |
 | `test/bundle.test.mjs` | The **built** bundle: exported slots/hooks, `activate`, `onAction`, `shouldShow`, and that every string and every settings label exists in **en** and **de** |
 
 `test/bundle.test.mjs` evaluates `dist/index.js` with a `require` that only

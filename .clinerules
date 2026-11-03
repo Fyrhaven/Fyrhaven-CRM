@@ -256,6 +256,13 @@ Follow-up tasks (#36)
   openFollowUpTask(api, card) opens the editor and creates the task; a failure is
     reported (api.tasks is reached INSIDE the try, so an absent namespace is caught)
   the profile badges overdue tasks and lists them first
+  taskSummary(tasks, now) -> { overdue, soon, later, total } — what the Overview
+    shows; the window is a LOCAL CALENDAR DAY (new Date(y, m, d + 7)), and an
+    overdue task is never also "due soon"
+  the Overview reads api.tasks.list through optionalCall and says so when the
+    host has no task list; it renders nothing when there is nothing to chase
+  formatDate(value, locale) lives in labels.js — ONE formatter for both pages,
+    and a value that is not a date is shown as it is, not as "Invalid Date"
 
 Private notes (#38, the private half)
   a note is a record ABOUT the contact in api.storage (key 'contactNotes'), never
