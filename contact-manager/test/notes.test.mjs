@@ -6,6 +6,14 @@ import {
   normalizeNote, normalizeNotes, noteId, notesFor, readNotes, saveNote, writeNotes,
 } from '../src/lib/notes.js';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { read, write } from '../src/lib/store.js';
+import { filesHost } from '../test-utils/files-host.mjs';
+
+/** Notes are records (#68): the fake needs the customer's own Files storage. */
+function notesApi() {
+  const files = filesHost();
+  return fakeApi({ host: files.host, handlers: files.handlers });
+}
 
 const at = (iso) => ({ id: `n-${iso}`, at: iso, text: 'note' });
 
@@ -68,28 +76,28 @@ describe('normalizeNotes', () => {
 
 describe('readNotes / writeNotes', () => {
   it('reads an empty store as empty', async () => {
-    expect(await readNotes(fakeApi())).toEqual({});
+    expect(await readNotes(notesApi())).toEqual({});
   });
 
   it('round-trips a store', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     const store = { c1: [{ id: 'n1', at: '2026-01-01T00:00:00Z', text: 'hello' }] };
     await writeNotes(api, store);
     expect(await readNotes(api)).toEqual(store);
   });
 
   it('rewrites storage when junk was dropped', async () => {
-    const api = fakeApi();
-    await api.storage.set(NOTES_KEY, { c1: [{ id: 'n1', text: 'a' }, { text: 'no id' }] });
+    const api = notesApi();
+    await write(api, NOTES_KEY, { c1: [{ id: 'n1', text: 'a' }, { text: 'no id' }] });
     expect(await readNotes(api)).toEqual({ c1: [{ id: 'n1', at: '', text: 'a' }] });
-    expect(await api.storage.get(NOTES_KEY)).toEqual({ c1: [{ id: 'n1', at: '', text: 'a' }] });
+    expect((await read(api, NOTES_KEY)).value).toEqual({ c1: [{ id: 'n1', at: '', text: 'a' }] });
   });
 
   it('removes the key when nothing is left to store', async () => {
-    const api = fakeApi();
-    await api.storage.set(NOTES_KEY, { c1: [{ id: 'n1', text: 'a' }] });
+    const api = notesApi();
+    await write(api, NOTES_KEY, { c1: [{ id: 'n1', text: 'a' }] });
     await writeNotes(api, { c1: [{ id: 'n1' }] });
-    expect(await api.storage.get(NOTES_KEY)).toBeNull();
+    expect((await read(api, NOTES_KEY)).value).toBeNull();
   });
 });
 
@@ -134,7 +142,7 @@ describe('makeNote / noteId', () => {
 
 describe('saveNote / deleteNote', () => {
   it('stores a note about one contact, newest first', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     await saveNote(api, 'c1', 'first', { id: 'n1', now: Date.parse('2026-01-01T00:00:00Z') });
     await saveNote(api, 'c1', 'second', { id: 'n2', now: Date.parse('2026-02-01T00:00:00Z') });
 
@@ -143,7 +151,7 @@ describe('saveNote / deleteNote', () => {
   });
 
   it('keeps each contact apart', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     await saveNote(api, 'c1', 'about one', { id: 'n1' });
     await saveNote(api, 'c2', 'about two', { id: 'n2' });
 
@@ -153,7 +161,7 @@ describe('saveNote / deleteNote', () => {
   });
 
   it('caps the notes per contact, dropping the oldest', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     for (let i = 0; i < MAX_PER_CONTACT + 5; i++) {
       await saveNote(api, 'c1', `note ${i}`, { id: `n${i}`, now: 1000 + i });
     }
@@ -163,14 +171,14 @@ describe('saveNote / deleteNote', () => {
   });
 
   it('ignores an empty note or an empty contact id', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     await saveNote(api, 'c1', '   ', { id: 'n1' });
     await saveNote(api, '', 'hello', { id: 'n2' });
     expect(await readNotes(api)).toEqual({});
   });
 
   it('deletes one note and forgets the contact when the last one goes', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     await saveNote(api, 'c1', 'first', { id: 'n1', now: 1 });
     await saveNote(api, 'c1', 'second', { id: 'n2', now: 2 });
 
@@ -179,13 +187,13 @@ describe('saveNote / deleteNote', () => {
 
     await deleteNote(api, 'c1', 'n2');
     expect(await readNotes(api)).toEqual({});
-    expect(await api.storage.get(NOTES_KEY)).toBeNull();
+    expect((await read(api, NOTES_KEY)).value).toBeNull();
   });
 });
 
 describe('eraseNotes', () => {
   it('takes every note about one contact and leaves the rest', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     await saveNote(api, 'c1', 'a', { id: 'n1' });
     await saveNote(api, 'c1', 'b', { id: 'n2' });
     await saveNote(api, 'c2', 'c', { id: 'n3' });
@@ -198,7 +206,7 @@ describe('eraseNotes', () => {
   });
 
   it('reports nothing removed when there was nothing', async () => {
-    const api = fakeApi();
+    const api = notesApi();
     expect(await eraseNotes(api, 'c1')).toBe(0);
   });
 });
