@@ -152,9 +152,12 @@ The storage seam (#68)
     kept there is unreachable from another device and gone when site data is
     cleared.
   src/lib/store.js is the ONE place that decides where a key's bytes live
-    RECORD_KEYS -> the dedicated plugin server (the source of truth)
-    VIEW_KEYS   -> api.storage: view state, preferences, and the server's own
-      address + credential id, which must be readable BEFORE a server is reached
+    RECORD_KEYS -> the dedicated plugin server (the source of truth), including
+      the phone `region` preference — the maintainer's call is that it follows
+      the user, so with no server it is unset and national phone numbers stop
+      matching their international spelling (a free feature, degraded)
+    VIEW_KEYS   -> api.storage: view state, and the server's own address +
+      credential id, which must be readable BEFORE a server is reached
     read/write/remove(api, key) -> { status: 'ok' | 'unavailable' }
     recordsAvailable(api) — what a feature asks before it reads, so it can say
       "this needs a server" instead of showing an empty list

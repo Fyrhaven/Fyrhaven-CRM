@@ -32,11 +32,16 @@ export const RECORD_KEYS = new Set([
   'projects', 'contactNotes', 'consentRecords', 'deletionLog', 'changeHistory',
   'bookPolicies', 'bookIgnore', 'bookRoles', 'automationRules', 'savedSearches',
   'importMappings', 'normalizeRules', 'dismissedGroups', 'lastScan', 'scanDigest',
+  // A preference rather than a record, but the maintainer's call: it follows the
+  // user. NOTE the consequence — phone matching is a free feature and the region
+  // sharpens it, so with no server the region is unset and national numbers stop
+  // matching their international spelling. See the handoff.
+  'normalizeRegion',
 ]);
 
-/** View state, preferences, and the server's own address: these stay local. */
+/** View state, and the server's own address: these stay local. */
 export const VIEW_KEYS = new Set([
-  'onboarding', 'undoBatches', 'lastCleanup', 'normalizeRegion',
+  'onboarding', 'undoBatches', 'lastCleanup',
   'remoteUrl', 'remoteCredentialId',
 ]);
 
