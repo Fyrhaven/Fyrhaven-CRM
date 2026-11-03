@@ -11,6 +11,7 @@ import {
   notesLine, orgName, phoneEntries, titleName,
 } from './contacts.js';
 import { makeDuplicateSection } from './detail-section.js';
+import { makeNotesSection } from './notes-section.js';
 import {
   attachmentsForMessages, companyDomains, companyNameOf, companyOf, eventsForContact,
   calendarRange, formatBytes, isCompany, peopleOfCompany, tasksForContact, timelineForContact,
@@ -39,6 +40,7 @@ export function makeProfilePage(React, api) {
   const { createElement: h, useRef, useCallback, useEffect, useMemo, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
   const Duplicates = makeDuplicateSection(React, api);
+  const Notes = makeNotesSection(React, api);
   const Avatar = makeAvatar(React);
 
   return function ProfilePage({ revision } = {}) {
@@ -663,6 +665,7 @@ export function makeProfilePage(React, api) {
                       ? h(Text, { tone: 'muted' }, t('profile.noTasks'))
                       : null,
                     ...taskRows()),
+                  h(Notes, { contact: selected, revision }),
                   context.degraded.length
                     ? h(Text, { tone: 'muted' }, t('profile.degraded', {
                         parts: context.degraded.map((part) => t(`profile.degraded.${part}`)).join(', '),
