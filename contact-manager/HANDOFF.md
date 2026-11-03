@@ -1847,13 +1847,30 @@ non-goals live in **issue #54**
 (https://github.com/zyntrax/bulwark-plugins/issues/54), linked from the
 roadmap issue #40.
 
-Hard limits to remember before promising CRM data:
+Hard limits to remember before promising CRM data — **corrected against the
+host's own generated documentation** (see `.clinerules`, "The host contract"):
 
-- `api.storage` is per-account, per-browser `localStorage` — **not** a shared
-  server store.
+- `api.storage` is per-account, per-browser `localStorage`, **1 MB per account**
+  — not a shared server store. A record kept there is unreachable from another
+  device and gone when site data is cleared.
+- **There *is* server-side storage a plugin can use.** Finding it took far longer
+  than it should have, because this file used to say the opposite:
+  - **`api.files`** — Stalwart's file storage (1.20+, `files:read`/`files:write`,
+    gated on `api.host.features.files`): server-side, cross-device, no size
+    problem. Writes go only into the user's **own** drive — never into a folder
+    shared with others — and there is no delete or share call. So it is
+    **per-user**, and team-*readable* only if the owner shares the folder in the
+    Files app.
+  - **`api.accountData`** — at most **4 KB** of JSON in a **mail account's** Inbox
+    metadata (1.19+, `email:read`/`email:write`, Stalwart 1.0+), namespaced per
+    plugin and **shared by everyone who can open that account**. Small, invisible
+    to other JMAP clients, and the one genuinely *shared* server-side slot.
 - Contacts, address books, mail, calendar events and tasks are native APIs
-  (`api.contacts`, `api.email.search`, `api.calendar`, `api.tasks`); custom
-  object types and custom fields do not exist.
+  (`api.contacts`, `api.email.search`, `api.calendar`, `api.tasks`). Custom object
+  types and custom fields still do not exist — but a plugin **can** hold a
+  credential (`configSchema` `secret`, admin-set and installation-wide, used
+  through `api.proxy`) and a per-user setting (`settingsSchema`, which takes
+  `string` and `select` too).
 - There is no server-side scheduler; background work runs only while the
   webmail is open.
 
@@ -1868,16 +1885,26 @@ it reverses what this file used to say about local-first:
   records, the deletion log, the change history, per-book policies / ignore rules
   / roles, automation rules, saved searches, import templates and normalisation
   rules.
-- **Those records cannot live on the Stalwart server** — the host exposes no
-  shared store and no custom objects — so the dedicated server is the only home
-  for them, and it is a **cloud feature** (hosted; self-hosting may follow).
+- **An earlier version of this note said those records "cannot live on the
+  Stalwart server". That was wrong**, and correcting it is the point of this
+  paragraph: `api.files` and `api.accountData` *are* server-side, and between them
+  they cover the bulk records (files, per user) and a small shared value (account
+  data, per account). **The customer's own server is the first home for these
+  records**, not ours.
+- The dedicated server is therefore **not** the first choice for storage. It is
+  for what the host refuses — team-*writable* shared state, a scheduler,
+  cross-user automation and integrations — and it is a **cloud feature** (hosted;
+  self-hosting may follow), with an admin-set `configSchema` `secret` as its
+  credential rather than a token kept in the browser.
 - **Everything that needs no such storage keeps working with no server
   configured.** Follow-up tasks and project *milestones* are already real host
   tasks, so they stay free and server-side. The scan, review, merge, editor,
   profile, company profiles, groups, health, import/export, search, bulk actions,
   avatars, the guide and in-app help need nothing.
-- So the storage-backed features move behind the cloud tier **deliberately**.
-  #68 carries the boundary table.
+- **The paid boundary moves with it.** A feature whose data fits `api.files` or
+  `api.accountData` needs no cloud tier at all and stays free; the cloud tier is
+  for the work that genuinely needs a service. #68 carries the boundary table,
+  which this correction narrows rather than widens.
 
 ### The storage seam (the enabling work)
 

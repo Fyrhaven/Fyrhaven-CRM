@@ -286,8 +286,39 @@ The webmail loads the plugin as **CommonJS** and provides three externals:
 
 * `react` — the UI library,
 * `@plugin-host` — the plugin API (`api.contacts`, `api.addressBooks`,
-  `api.ui`, `api.i18n`, `api.storage`, `api.toast`, `api.log`, `api.plugin`),
+  `api.files`, `api.accountData`, `api.ui`, `api.i18n`, `api.storage`,
+  `api.toast`, `api.log`, `api.plugin`, `api.host`, and more),
 * `@plugin-host/ui` — the UI kit (components only, no logic).
+
+> **Where the contract is written down.** The host's documentation is
+> **generated from the webmail source** (`scripts/gen-docs.mjs`), so *it* is the
+> source of truth and this file is only a summary:
+>
+> * the plugin guide — the full `api` object, the hooks, the UI surfaces and the
+>   method-permission table: <https://github.com/bulwarkmail/plugins/blob/main/WRITING_PLUGINS.md>
+> * the `manifest.json` reference — permissions, `settingsSchema`, `configSchema`,
+>   `credentials`, `httpOrigins`: <https://bulwarkmail.org/docs/extensions/manifest>
+> * the permission table: <https://extensions.bulwarkmail.org/api/v2/permissions>
+>
+> **When this file and those disagree, they win.** This summary was once wrong in
+> ways that mattered — see #75 — so check the generated docs before relying on a
+> name here.
+
+**The pieces this plugin relies on, as the host documents them:**
+
+| Call | What it really is |
+|---|---|
+| `api.storage` | `localStorage` — per signed-in account, shared by the plugin's frames, **1 MB per account**. Not server-side, and shared with nobody. |
+| `api.contacts`, `api.addressBooks` | native JSContact cards — server-side, shared per address book |
+| `api.files` | **Stalwart's file storage** (1.20+, `files:read`/`files:write`, gated by `api.host.features.files`). Server-side and cross-device; writes go only into the user's own drive, never into a folder shared with others, and there is no delete or share call |
+| `api.accountData` | **a small (≤ 4 KB) JSON value in a mail account's Inbox metadata** (1.19+, `email:read`/`email:write`, Stalwart 1.0+). Namespaced `org.bulwarkmail.plugin.<plugin id>`, invisible to other JMAP clients, and **shared by everyone who can open that account** — the team-mailbox case |
+| `api.tasks`, `api.calendar`, `api.email` | optional context — see the note below |
+| `api.proxy` + `credentials` | the secret proxy: the host holds the credential and adds it to the request, so the plugin never sees a secret. A `configSchema` `secret` is admin-set and **installation-wide** (`scope: 'admin'`); `scope: 'user'` is one per user, connected in a dialog the host draws |
+
+`manifest.json` is the other half: `permissions`, `settingsSchema` (`boolean`,
+`string`, `number`, `select` — per user, drawn in Settings), `configSchema`
+(admin-set, including `secret`, drawn on the plugin's page in the admin console),
+`credentials`, `locales`, and `httpOrigins` / `frameOrigins` / `apiPostPaths`.
 
 > **The optional APIs are not part of this contract.** `api.email`, `api.tasks`
 > and `api.calendar` are context the plugin can live without, and the host does
