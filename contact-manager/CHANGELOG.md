@@ -7,6 +7,16 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.50.0] — 2026-11-03
+
+### Changed
+
+- **Consent records are records on your server now (#26, #68).** They went the
+  same way as projects and notes, through the storage seam — which matters more
+  here than anywhere: a consent record is what a data-subject request is answered
+  from, and one that vanished with site data would be worse than useless. The
+  subject-access export, the erasure paths and the audit entry are unchanged.
+
 ## [1.49.0] — 2026-11-03
 
 ### Changed
