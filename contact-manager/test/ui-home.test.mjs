@@ -9,6 +9,7 @@ import path from 'node:path';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import { makeHomePage } from '../src/lib/home-page.js';
 import { findDuplicateGroups } from '../src/lib/duplicates.js';
+import { todayIso } from '../src/lib/tasks.js';
 import { makeCard } from './fixtures.mjs';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
@@ -24,14 +25,18 @@ const TWIN = makeCard({ id: 'b', name: 'A. Lovelace', emails: ['ada@example.org'
 /** The signature of the ADA/TWIN group, as the page computes it. */
 const adaTwinSignature = () => findDuplicateGroups([ADA, TWIN], {}, [])[0].signature;
 
-function homeApi(handlers = {}, settings = {}) {
+function homeApi(handlers = {}, settings = {}, host = {}) {
   return fakeApi({
     translations: manifest.locales,
     settings,
+    host,
     handlers: {
       'contacts.list': async () => [ADA, TWIN],
       'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
       'ui.openDialog': async () => null,
+      // A host with a task list and nothing to chase: the common case, and the
+      // one the other tests here want. `tasks.list` is overridden per test.
+      'tasks.list': async () => [],
       ...handlers,
     },
   });
@@ -259,6 +264,59 @@ describe('the duplicate digest', () => {
     await visible.storage.set('lastScan', { when: new Date().toISOString(), contacts: 2, books: 1 });
     await renderPage(visible);
     expect(screen.getByText('Duplicate digest')).toBeTruthy();
+  });
+});
+
+// ── Follow-ups over every contact (#36) ─────────────────────────
+//
+// The Overview is the page that answers "what needs attention", so an overdue
+// task has to be visible here rather than only on the contact it is about. The
+// dates are relative to today, so the test cannot rot.
+
+describe('the follow-ups block', () => {
+  const dayOffset = (days) => {
+    const now = new Date();
+    return todayIso(new Date(now.getFullYear(), now.getMonth(), now.getDate() + days));
+  };
+
+  const task = (id, title, due) => ({ id, title, due });
+
+  it('shows the overdue ones first, then what is due soon', async () => {
+    const api = homeApi({
+      'tasks.list': async () => [
+        task('t3', 'Ask Ada about the engine', dayOffset(30)),
+        task('t1', 'Call Ada Lovelace', dayOffset(-2)),
+        task('t2', 'Send Grace Hopper the invoice', dayOffset(3)),
+      ],
+    });
+    await renderPage(api);
+
+    expect(screen.getByText('Follow-ups')).toBeTruthy();
+    // only the past-due one is badged
+    expect(screen.getAllByText('Overdue')).toHaveLength(1);
+
+    const late = screen.getByText('Call Ada Lovelace');
+    const soon = screen.getByText('Send Grace Hopper the invoice');
+    expect(late.compareDocumentPosition(soon) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // and the rest is a count, not a list
+    expect(screen.getByText('1 more later')).toBeTruthy();
+  });
+
+  it('says nothing when there is nothing to chase', async () => {
+    const api = homeApi({
+      'tasks.list': async () => [task('t1', 'Ask Ada about the engine', dayOffset(30))],
+    });
+    await renderPage(api);
+
+    expect(screen.queryByText('Follow-ups')).toBeNull();
+  });
+
+  it('says so when the host has no task list', async () => {
+    const api = homeApi({}, {}, { absent: ['tasks'] });
+    await renderPage(api);
+
+    expect(screen.getByText('Follow-ups')).toBeTruthy();
+    expect(screen.getByText('The task list is not available on this host.')).toBeTruthy();
   });
 });
 

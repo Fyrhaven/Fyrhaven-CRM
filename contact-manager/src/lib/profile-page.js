@@ -26,7 +26,7 @@ import { ACTION_BAR, CONTENT_PANE, ROW_WITH_AVATAR, SAVED_ITEM, SCROLL_AREA, SPL
 import { avatarFor } from './avatar.js';
 import { makeAvatar } from './avatar-view.js';
 import { groupFromSelection } from './duplicates.js';
-import { toastMergeResult } from './labels.js';
+import { formatDate, toastMergeResult } from './labels.js';
 import { applyBulkEdit, deleteContacts } from './bulk.js';
 import { contactsToFile } from './export.js';
 import { buildIndex, countsForIndex, isBlankQuery, matchIndexed, parseQuery } from './search.js';
@@ -690,10 +690,5 @@ const fileMeta = (file) => [file.type, formatBytes(file.size)].filter(Boolean).j
 
 
 
-function formatDate(value, locale) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString(locale || undefined);
-}
+
 
