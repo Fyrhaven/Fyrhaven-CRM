@@ -258,3 +258,25 @@ describe('reading the documented answer', () => {
     await expect(makeFilesStore(api).read('projects')).rejects.toThrow('no_text');
   });
 });
+
+// `list()` returns the user's own drive **and the top items others shared with
+// them**, so a folder someone else shared with this name must not be used:
+// writes into a shared folder are refused, and reading it would be reading
+// somebody else's records as your own.
+
+describe('a folder that is not mine', () => {
+  it('ignores a shared folder with the same name, and makes its own', async () => {
+    const shared = {
+      id: 'acct:9', name: FILES_FOLDER, kind: 'folder', parentId: null, shared: true, owner: 'ada',
+    };
+    const { api, state } = filesApi({
+      overrides: { 'files.list': async () => [shared] },
+    });
+
+    await makeFilesStore(api).write('projects', []);
+
+    // it did not write into the shared one, and it made its own
+    expect(state.files.find((file) => file.name === 'projects.json')?.parentId).not.toBe('acct:9');
+    expect(state.folders.map((folder) => folder.name)).toEqual([FILES_FOLDER]);
+  });
+});

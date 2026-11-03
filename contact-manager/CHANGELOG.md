@@ -7,6 +7,33 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.50.5] — 2026-11-03
+
+### Fixed
+
+- **A `Contact Manager` folder someone else shared would be used instead of the
+  user's own.** `files.list()` returns *the user's own drive **and the top items
+  others shared with them***, so a folder with this name that another account
+  made was picked up — and writes into a shared folder are refused, so saving
+  would fail, and reading it would mean reading somebody else's records as your
+  own. The lookup now takes only a folder this user **owns** (`shared`/`owner`
+  aside), and makes its own otherwise.
+
+### Notes
+
+**Two users do not collide on `projects.json`.** Each person's records live in
+**their own** drive, so two colleagues each have their own
+`Contact Manager/projects.json`; the shared case above is the only way the two
+could ever meet, and it is now excluded. Records are also **not** shared until
+the user shares the folder in the Files app, and then read-only.
+
+A file **per record** (`projects/<id>.json`) is the natural next step once
+records can be written by more than one person — it would make a concurrent edit
+or one corrupt file a local problem instead of a whole-list rewrite. It is not
+free: the seam's API is whole-store (`read`/`write` by key), so it would become
+record-level, and a bulk edit would cost one write per record against the host's
+20-a-minute cap. Worth doing — with the cloud tier, where shared writes exist.
+
 ## [1.50.4] — 2026-11-03
 
 ### Fixed
