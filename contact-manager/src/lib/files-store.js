@@ -68,8 +68,9 @@ export function makeFilesStore(api) {
       cache = (async () => {
         const folderId = await findFolder();
         const values = new Map();
-        // The names already there, so a write can say which file it replaces.
-        const names = new Set();
+        // The files already there, by name: a write needs the **id** of the one
+        // it replaces.
+        const ids = new Map();
         if (folderId) {
           // `list(folderId)` lists what is *in* a folder; `find` searches by
           // name/path and, with no `text`, need not return the folder's contents
@@ -78,7 +79,7 @@ export function makeFilesStore(api) {
           for (const file of files ?? []) {
             const name = String(file?.name ?? '');
             if (file?.kind !== 'file') continue;
-            names.add(name);
+            ids.set(name, file.id);
             if (!name.endsWith(SUFFIX)) continue;
             const key = name.slice(0, -SUFFIX.length);
             try {
@@ -90,7 +91,7 @@ export function makeFilesStore(api) {
             }
           }
         }
-        return { folderId, values, names };
+        return { folderId, values, ids };
       })().catch((err) => {
         // Do not cache a failure: the next read should try again.
         cache = null;
@@ -103,14 +104,18 @@ export function makeFilesStore(api) {
   async function write(key, content) {
     const current = await load();
     const name = `${key}${SUFFIX}`;
-    // `replace` is not a flag: the host wants the **name** of the file being
-    // replaced (a live install says *"replace must be a string of 1-256
-    // characters"*). It is sent only when that file is really there, so a first
-    // write is an ordinary create.
+    // `replace` is neither a flag nor a name: it is the **id** of the file being
+    // replaced. Two live installs taught this one — first *"replace must be a
+    // string of 1-256 characters"*, then *no file or folder with id
+    // "projects.json"*. It is sent only when that file is really there, so a
+    // first write is an ordinary create.
     const payload = { folderId: current.folderId, name, content, type: MIME };
-    if (current.names.has(name)) payload.replace = name;
-    await api.files.create(payload);
-    current.names.add(name);
+    const existingId = current.ids.get(name);
+    if (existingId) payload.replace = existingId;
+    const answer = await api.files.create(payload);
+    // Keep the id the host reports, so the *next* write replaces this file.
+    const savedId = answer?.file?.id ?? existingId;
+    if (savedId) current.ids.set(name, savedId);
     current.values.set(key, content === 'null' ? null : JSON.parse(content));
   }
 
