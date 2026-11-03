@@ -1,26 +1,47 @@
-# One container, one volume, one token. `docker compose up -d`.
+# The store, with TLS in front of it. `docker compose up -d`.
 #
-# The plugin talks to this through the webmail host's proxy, so the store never
-# needs to be reachable from a browser directly — bind it to localhost and put a
-# TLS reverse proxy in front of it, or publish it deliberately. It must be HTTPS
-# by the time the plugin reaches it.
+# **TLS is not optional and not a note in a README.** A workspace token and the
+# records it unlocks both travel between the webmail and this service, so the
+# service is never published directly: it sits on the compose network and only
+# Caddy can reach it, and Caddy gets a real certificate automatically.
+#
+# The store itself speaks HTTP on the private network. That is deliberate — one
+# place terminates TLS, and it is the place that has the certificate.
 services:
-  contact-manager-store:
+  store:
     build: .
     image: contact-manager-store:1.0.0
     restart: unless-stopped
     environment:
       # A token IS a workspace: `token=workspace,token=workspace`.
       # One customer, one token. Generate with: openssl rand -hex 32
-      # Put it in .env (never in this file) — the store refuses to start without it.
       STORE_TOKENS: ${STORE_TOKENS:?set STORE_TOKENS in .env — one token per workspace}
+      # Wraps every workspace's data key. Values are encrypted at rest with it;
+      # lose it and the database is unreadable. Generate with: openssl rand -base64 32
+      STORE_MASTER_KEY: ${STORE_MASTER_KEY:?set STORE_MASTER_KEY in .env — 32 bytes, base64}
       PORT: "8080"
       STORE_DB: /data/store.sqlite
     volumes:
       - store-data:/data
+    # No `ports:` on purpose. Publishing this would publish the plaintext hop.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - store
+    environment:
+      # The name the plugin will be pointed at. Caddy gets a certificate for it.
+      CRM_DOMAIN: ${CRM_DOMAIN:?set CRM_DOMAIN in .env — the public hostname}
     ports:
-      # Deliberately localhost. Publish it only behind TLS.
-      - "127.0.0.1:8080:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
   store-data:
+  caddy-data:
+  caddy-config:

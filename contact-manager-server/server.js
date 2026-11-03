@@ -23,6 +23,7 @@
 // team features (#23/#24) will widen; it is not a security boundary.
 
 import { createServer as createHttpServer } from 'node:http';
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -38,6 +39,62 @@ export const DEFAULT_SCOPE = 'default';
 
 /** Storage keys are slugs: no slashes, no traversal, no surprises in a path. */
 const KEY_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+
+// ── Encryption at rest ──────────────────────────────────────────
+//
+// **Nothing is stored as clear text.** Every value is sealed with its
+// workspace's own 256-bit key (AES-256-GCM, a fresh IV per write), and that key
+// is itself stored **wrapped** by a master key that lives in the server's
+// environment and never in the database. A stolen database file, volume or
+// backup is therefore opaque.
+//
+// What this does *not* do: the running server must unwrap a workspace's key in
+// order to serve it, so **whoever operates this service can read the data**. That
+// is a deliberate, documented limit of a server-held key — see README, "What this
+// protects and what it does not". A workspace whose operator must not be able to
+// read it needs the key held by the customer instead.
+
+/** `v1.<iv>.<tag>.<ciphertext>`, each part base64 — one shape for every sealed blob. */
+const SEAL_PREFIX = 'v1';
+
+const b64 = (buffer) => Buffer.from(buffer).toString('base64');
+
+/** Seals a string with a 32-byte key. A fresh random IV every time, so equal values differ. */
+export function seal(key, plaintext) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(String(plaintext), 'utf8'), cipher.final()]);
+  return [SEAL_PREFIX, b64(iv), b64(cipher.getAuthTag()), b64(ciphertext)].join('.');
+}
+
+/** Opens a sealed string. Throws when the key is wrong or the blob was tampered with. */
+export function open(key, sealed) {
+  const parts = String(sealed ?? '').split('.');
+  if (parts.length !== 4 || parts[0] !== SEAL_PREFIX) throw new Error('not a sealed value');
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(parts[1], 'base64'));
+  decipher.setAuthTag(Buffer.from(parts[2], 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(parts[3], 'base64')), decipher.final()]).toString('utf8');
+}
+
+/** Reads the master key from its environment variable. Refuses anything but 32 bytes. */
+export function parseMasterKey(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  let key;
+  try {
+    key = Buffer.from(text, 'base64');
+  } catch {
+    return null;
+  }
+  return key.length === 32 ? key : null;
+}
+
+/** A constant-time comparison, so a token cannot be discovered one byte at a time. */
+function sameToken(a, b) {
+  const left = Buffer.from(String(a ?? ''), 'utf8');
+  const right = Buffer.from(String(b ?? ''), 'utf8');
+  return left.length === right.length && timingSafeEqual(left, right);
+}
 
 /**
  * The `token=workspace,…` list as a Map. A token written on its own is its own
@@ -56,10 +113,18 @@ export function parseTokens(value) {
   return tokens;
 }
 
-/** The token a request carries: the bearer header, or `?token=` for a host that cannot set one. */
-function tokenOf(req, url) {
+/**
+ * The token a request carries.
+ *
+ * The **header** is the only way in by default. `?token=` exists for a host that
+ * genuinely cannot set one, and is **off unless asked for** (`ALLOW_QUERY_TOKEN`)
+ * because a token in a URL ends up in access logs, proxy logs, browser history
+ * and `Referer` headers — a leak that no amount of TLS prevents.
+ */
+function tokenOf(req, url, { allowQueryToken = false } = {}) {
   const bearer = /^Bearer\s+(.+)$/i.exec(String(req.headers?.authorization ?? '').trim());
   if (bearer) return bearer[1].trim();
+  if (!allowQueryToken) return '';
   return String(url.searchParams.get('token') ?? '').trim();
 }
 
@@ -82,8 +147,39 @@ export function openStore(path = ':memory:') {
       revision INTEGER NOT NULL
     );
     INSERT OR IGNORE INTO counter (id, revision) VALUES (1, 0);
+    CREATE TABLE IF NOT EXISTS workspaces (
+      workspace   TEXT PRIMARY KEY,
+      wrapped_key TEXT NOT NULL,
+      created     TEXT NOT NULL
+    );
   `);
   return db;
+}
+
+/**
+ * Each workspace's data key, created on first use and kept **wrapped** by the
+ * master key. The plain key exists only in memory while the server is running.
+ */
+export function workspaceKeys(db, masterKey) {
+  const cache = new Map();
+  return {
+    /** The 32-byte key for a workspace, creating and wrapping one when it is new. */
+    get(workspace) {
+      const cached = cache.get(workspace);
+      if (cached) return cached;
+      const row = db.prepare('SELECT wrapped_key FROM workspaces WHERE workspace = ?').get(workspace);
+      let key;
+      if (row) {
+        key = Buffer.from(open(masterKey, row.wrapped_key), 'base64');
+      } else {
+        key = randomBytes(32);
+        db.prepare('INSERT INTO workspaces (workspace, wrapped_key, created) VALUES (?, ?, ?)')
+          .run(workspace, seal(masterKey, b64(key)), new Date().toISOString());
+      }
+      cache.set(workspace, key);
+      return key;
+    },
+  };
 }
 
 /**
@@ -93,7 +189,7 @@ export function openStore(path = ':memory:') {
  * "something changed" without diffing — and a future sync can ask for
  * everything above the revision it last saw.
  */
-export function storeOps(db) {
+export function storeOps(db, keys) {
   const revision = () => db.prepare('SELECT revision FROM counter WHERE id = 1').get().revision;
   const bump = () => {
     db.prepare('UPDATE counter SET revision = revision + 1 WHERE id = 1').run();
@@ -106,21 +202,23 @@ export function storeOps(db) {
         .prepare('SELECT key, value FROM records WHERE workspace = ? AND scope = ?')
         .all(workspace, scope);
       const records = {};
-      for (const row of rows) records[row.key] = JSON.parse(row.value);
+      // A row that will not open means the key changed or the file was tampered
+      // with: fail loudly rather than serve a hole in the data.
+      for (const row of rows) records[row.key] = JSON.parse(open(keys.get(workspace), row.value));
       return records;
     },
     get(workspace, scope, key) {
       const row = db
         .prepare('SELECT value FROM records WHERE workspace = ? AND scope = ? AND key = ?')
         .get(workspace, scope, key);
-      return row ? JSON.parse(row.value) : null;
+      return row ? JSON.parse(open(keys.get(workspace), row.value)) : null;
     },
     put(workspace, scope, key, value) {
       db.prepare(`
         INSERT INTO records (workspace, scope, key, value, updated) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT (workspace, scope, key)
         DO UPDATE SET value = excluded.value, updated = excluded.updated
-      `).run(workspace, scope, key, JSON.stringify(value), new Date().toISOString());
+      `).run(workspace, scope, key, seal(keys.get(workspace), JSON.stringify(value)), new Date().toISOString());
       return bump();
     },
     remove(workspace, scope, key) {
@@ -140,6 +238,11 @@ const send = (res, status, body) => {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(text),
+    // The edge sets HSTS too, but the app should not depend on being behind one.
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-content-type-options': 'nosniff',
+    'referrer-policy': 'no-referrer',
+    'cache-control': 'no-store',
   });
   res.end(text);
 };
@@ -171,8 +274,18 @@ function readBody(req, limit = MAX_VALUE_BYTES + 4096) {
  * server* has to answer before a credential is configured, and neither reveals
  * anything but a version string. Everything under `/v1/store` needs a token.
  */
-export function createRequestHandler(db, { tokens = new Map() } = {}) {
-  const ops = storeOps(db);
+export function createRequestHandler(db, { tokens = new Map(), keys, allowQueryToken = false } = {}) {
+  const ops = storeOps(db, keys);
+
+  /** The workspace a request belongs to, matched in constant time. */
+  const workspaceOf = (req, url) => {
+    const presented = tokenOf(req, url, { allowQueryToken });
+    if (!presented) return undefined;
+    for (const [token, workspace] of tokens) {
+      if (sameToken(token, presented)) return workspace;
+    }
+    return undefined;
+  };
 
   return async function handle(req, res) {
     let url;
@@ -188,7 +301,7 @@ export function createRequestHandler(db, { tokens = new Map() } = {}) {
       return send(res, 200, { ok: true, version: VERSION });
     }
 
-    const workspace = tokens.get(tokenOf(req, url));
+    const workspace = workspaceOf(req, url);
     if (!workspace) return send(res, 401, { error: 'unauthorized' });
 
     const scope = String(url.searchParams.get('scope') ?? '').trim() || DEFAULT_SCOPE;
@@ -246,10 +359,11 @@ export function createRequestHandler(db, { tokens = new Map() } = {}) {
 }
 
 /** A listening server over its own database, for `main` and for the tests. */
-export function createStoreServer({ dbPath = ':memory:', tokenList = '' } = {}) {
+export function createStoreServer({ dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false } = {}) {
   const db = openStore(dbPath);
   const tokens = parseTokens(tokenList);
-  const server = createHttpServer(createRequestHandler(db, { tokens }));
+  const keys = workspaceKeys(db, masterKey);
+  const server = createHttpServer(createRequestHandler(db, { tokens, keys, allowQueryToken }));
   server.on('close', () => {
     try {
       db.close();
@@ -266,14 +380,24 @@ if (isMain) {
   const port = Number(process.env.PORT ?? 8080);
   const dbPath = process.env.STORE_DB ?? '/data/store.sqlite';
   const tokenList = process.env.STORE_TOKENS ?? '';
+  const masterKey = parseMasterKey(process.env.STORE_MASTER_KEY);
+  // Both of these are "the container must not come up half-safe" checks: an open
+  // store serves everyone, and a store whose master key is missing or the wrong
+  // length would either refuse to open the data or be trivially guessable.
   if (!parseTokens(tokenList).size) {
-    // An open store on the internet is worse than a container that will not
-    // start: refuse loudly rather than serve everyone.
     console.error('STORE_TOKENS is empty — set at least one token (token=workspace).');
     process.exit(1);
   }
-  const { server, tokens } = createStoreServer({ dbPath, tokenList });
+  if (!masterKey) {
+    console.error('STORE_MASTER_KEY must be 32 bytes, base64 — generate with: openssl rand -base64 32');
+    process.exit(1);
+  }
+  const allowQueryToken = process.env.ALLOW_QUERY_TOKEN === '1';
+  if (allowQueryToken) {
+    console.warn('ALLOW_QUERY_TOKEN=1 — tokens may appear in URLs and therefore in logs. Prefer a header.');
+  }
+  const { server, tokens } = createStoreServer({ dbPath, tokenList, masterKey, allowQueryToken });
   server.listen(port, () => {
-    console.log(`contact-manager-store v${VERSION} listening on :${port} — ${tokens.size} token(s), db ${dbPath}`);
+    console.log(`contact-manager-store v${VERSION} listening on :${port} — ${tokens.size} token(s), db ${dbPath}, values encrypted at rest`);
   });
 }

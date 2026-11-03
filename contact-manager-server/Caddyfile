@@ -1,0 +1,29 @@
+# TLS at the edge for the Contact Manager cloud store (#68).
+#
+# Caddy obtains and renews a real certificate for $CRM_DOMAIN automatically, and
+# redirects HTTP to HTTPS by default. The store behind it is never published, so
+# this is the only way in — and the only hop that has to be trusted.
+#
+# The plugin reaches this through the webmail host's proxy, so nothing here needs
+# to be reachable from a browser directly; it needs to be reachable from the
+# Bulwark server, and it must be HTTPS when it is.
+
+{$CRM_DOMAIN} {
+	encode zstd gzip
+
+	# The app sends these too; the edge sends them even for a request the app
+	# never sees (a 404 from Caddy, a redirect from HTTP).
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Bodies are capped in the app; this stops a huge upload before it is read.
+	request_body {
+		max_size 2MB
+	}
+
+	reverse_proxy store:8080
+}
