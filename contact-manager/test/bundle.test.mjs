@@ -7,6 +7,7 @@ import path from 'node:path';
 import * as React from 'react';
 import { cleanup } from '@testing-library/react';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
 import * as kit from '../test-utils/ui-kit.mjs';
 
 const ROOT = process.cwd();
@@ -27,11 +28,22 @@ function load(api) {
   return mod.exports.default ?? mod.exports;
 }
 
-const pluginApi = (settings = {}, handlers = {}) => fakeApi({
-  translations: manifest.locales,
-  settings,
-  handlers: { 'contacts.list': async () => [], 'addressBooks.list': async () => [], ...handlers },
-});
+const pluginApi = (settings = {}, handlers = {}) => {
+  // Records live on a server (#68), so the bundle's fake needs one: the
+  // customer's own Files storage, wired through the same documented surface.
+  const files = filesHost();
+  return fakeApi({
+    translations: manifest.locales,
+    settings,
+    host: files.host,
+    handlers: {
+      ...files.handlers,
+      'contacts.list': async () => [],
+      'addressBooks.list': async () => [],
+      ...handlers,
+    },
+  });
+};
 
 describe('built plugin', () => {
   it('exports its slots and hooks, each surface covered by a permission', () => {
@@ -40,7 +52,7 @@ describe('built plugin', () => {
     for (const slot of Object.values(plugin.slots)) expect(typeof slot.component).toBe('function');
     expect(typeof plugin.hooks.onAction).toBe('function');
     expect(typeof plugin.activate).toBe('function');
-    for (const permission of ['contacts:read', 'contacts:write', 'ui:app-page', 'ui:contacts', 'ui:commands', 'http:proxy']) {
+    for (const permission of ['contacts:read', 'contacts:write', 'ui:app-page', 'ui:contacts', 'ui:commands', 'files:read', 'files:write', 'http:proxy']) {
       expect(manifest.permissions, permission).toContain(permission);
     }
   });
@@ -143,13 +155,19 @@ describe('built plugin', () => {
     expect(noisy).toEqual([]);
   });
 
-  it('the new-project action stores the project it created', async () => {
+  it('the new-project action stores the project on the server it created', async () => {
+    const files = filesHost();
     const api = pluginApi({}, {
       'ui.openDialog': async () => ({ saved: 'created', project: { id: 'p1', name: 'Website' } }),
     });
+    // the same Files fake, so the write can be read back where it landed (#68)
+    api.files.create = files.handlers['files.create'];
+    api.files.createFolder = files.handlers['files.createFolder'];
     const plugin = load(api);
     await plugin.hooks.onAction({ surface: 'command-palette', actionId: 'new-project', context: {} });
-    expect(api.storageSnapshot().projects.map((project) => project.id)).toEqual(['p1']);
+    expect(files.state.created.map((file) => file.name)).toEqual(['projects.json']);
+    // and the browser holds no copy of a project
+    expect(api.storageSnapshot().projects).toBeUndefined();
     expect(api.calls('toast.success').at(-1).args[0]).toBe('Project created.');
   });
 

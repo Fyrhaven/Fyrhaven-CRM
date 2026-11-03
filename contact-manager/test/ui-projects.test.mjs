@@ -6,8 +6,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
 import { makeProjectsPage } from '../src/lib/projects-page.js';
 import { makeProjectDialog } from '../src/lib/project-dialog.js';
+import { write } from '../src/lib/store.js';
+import { readProjects } from '../src/lib/projects.js';
 import { makeCard } from './fixtures.mjs';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
@@ -51,9 +54,14 @@ const TIME_PROJECT = {
 };
 
 function projectsApi(handlers = {}) {
+  // Projects are records now (#68), so the fake needs a server to put them on:
+  // the customer's own Files storage, which is the first choice.
+  const files = filesHost();
   return fakeApi({
     translations: manifest.locales,
+    host: files.host,
     handlers: {
+      ...files.handlers,
       'contacts.list': async () => [...CARDS, COMPANY],
       'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
       'contacts.search': async () => [],
@@ -79,7 +87,7 @@ describe('projects page', () => {
 
   it('lists the projects and shows the selected one with its links and milestones', async () => {
     const api = projectsApi();
-    await api.storage.set('projects', [PROJECT]);
+    await write(api, 'projects', [PROJECT]);
     await renderPage(api);
 
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
@@ -100,8 +108,8 @@ describe('projects page', () => {
 
     await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'New project' })[0]); });
 
-    await waitFor(() => expect(api.storageSnapshot().projects).toHaveLength(1));
-    expect(api.storageSnapshot().projects[0]).toMatchObject({ id: 'p9', name: 'Intranet' });
+    await waitFor(async () => expect((await readProjects(api))).toHaveLength(1));
+    expect((await readProjects(api))[0]).toMatchObject({ id: 'p9', name: 'Intranet' });
     // the page reloads, so the new project is listed and selected
     await waitFor(() => expect(screen.getAllByText('Intranet').length).toBeGreaterThan(0));
     expect(api.calls('toast.success').at(-1).args[0]).toBe('Project created.');
@@ -111,13 +119,13 @@ describe('projects page', () => {
     const api = projectsApi({
       'ui.openDialog': async () => ({ saved: 'updated', project: { ...PROJECT, name: 'Website v2' } }),
     });
-    await api.storage.set('projects', [PROJECT]);
+    await write(api, 'projects', [PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Edit project' })); });
 
-    await waitFor(() => expect(api.storageSnapshot().projects[0].name).toBe('Website v2'));
+    await waitFor(async () => expect((await readProjects(api))[0].name).toBe('Website v2'));
     expect(api.calls('toast.success').at(-1).args[0]).toBe('Project updated.');
   });
 
@@ -125,7 +133,8 @@ describe('projects page', () => {
     const api = projectsApi({
       'ui.openDialog': async () => ({ saved: 'created', project: { ...PROJECT, id: 'p9', name: 'Intranet' } }),
     });
-    api.storage.set = async () => { throw new Error('quota exceeded'); };
+    // Break the store the record actually goes to, not the browser (#68).
+    api.files.create = async () => { throw new Error('quota exceeded'); };
     await renderPage(api);
 
     await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'New project' })[0]); });
@@ -137,7 +146,7 @@ describe('projects page', () => {
 
   it('lays the project list and the project detail out as a split', async () => {
     const api = projectsApi();
-    await api.storage.set('projects', [PROJECT]);
+    await write(api, 'projects', [PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
@@ -160,7 +169,7 @@ describe('projects page', () => {
 
   it('marks a milestone done when its task is no longer open', async () => {
     const api = projectsApi({ 'tasks.list': async () => [] });
-    await api.storage.set('projects', [PROJECT]);
+    await write(api, 'projects', [PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getByText('Kickoff')).toBeTruthy());
     expect(screen.getByText('Done')).toBeTruthy();
@@ -168,7 +177,7 @@ describe('projects page', () => {
 
   it('creates a milestone as a task and stores it on the project', async () => {
     const api = projectsApi();
-    await api.storage.set('projects', [PROJECT]);
+    await write(api, 'projects', [PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
@@ -181,26 +190,26 @@ describe('projects page', () => {
     await waitFor(() => expect(api.calls('tasks.create')).toHaveLength(1));
     expect(api.calls('tasks.create')[0].args[0])
       .toEqual({ title: 'Website: Launch', description: 'Rebuild', due: '2026-12-01' });
-    const stored = api.storageSnapshot().projects.find((project) => project.id === 'p1');
+    const stored = (await readProjects(api)).find((project) => project.id === 'p1');
     expect(stored.milestones.map((milestone) => milestone.title)).toEqual(['Kickoff', 'Launch']);
     expect(stored.milestones[1].taskId).toBe('t-new');
   });
 
   it('deletes a project after a confirmation, without touching its tasks', async () => {
     const api = projectsApi({ 'ui.confirm': async () => true });
-    await api.storage.set('projects', [PROJECT]);
+    await write(api, 'projects', [PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Delete project' })); });
-    await waitFor(() => expect(api.storageSnapshot().projects).toBeUndefined());
+    await waitFor(async () => expect((await readProjects(api))).toEqual([]));
     expect(api.calls('tasks.remove')).toHaveLength(0);
     expect(api.calls('toast.success').at(-1).args[0]).toBe('Project deleted.');
   });
 
   it('adds time and shows the running totals', async () => {
     const api = projectsApi();
-    await api.storage.set('projects', [TIME_PROJECT]);
+    await write(api, 'projects', [TIME_PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
@@ -215,14 +224,14 @@ describe('projects page', () => {
     });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add time' })); });
 
-    await waitFor(() => expect(api.storageSnapshot().projects[0].timeEntries).toHaveLength(3));
-    expect(api.storageSnapshot().projects[0].timeEntries[2])
+    await waitFor(async () => expect((await readProjects(api))[0].timeEntries).toHaveLength(3));
+    expect((await readProjects(api))[0].timeEntries[2])
       .toMatchObject({ minutes: 45, note: 'Extra', billable: true });
   });
 
   it('adds an expense and removes a time entry', async () => {
     const api = projectsApi();
-    await api.storage.set('projects', [TIME_PROJECT]);
+    await write(api, 'projects', [TIME_PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
@@ -230,18 +239,18 @@ describe('projects page', () => {
       fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '7.25' } });
     });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add expense' })); });
-    await waitFor(() => expect(api.storageSnapshot().projects[0].expenses).toHaveLength(2));
-    expect(api.storageSnapshot().projects[0].expenses[1]).toMatchObject({ amount: 7.25, billable: true });
+    await waitFor(async () => expect((await readProjects(api))[0].expenses).toHaveLength(2));
+    expect((await readProjects(api))[0].expenses[1]).toMatchObject({ amount: 7.25, billable: true });
 
     // the first Remove button belongs to the first time entry
     await act(async () => { fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0]); });
-    await waitFor(() => expect(api.storageSnapshot().projects[0].timeEntries).toHaveLength(1));
-    expect(api.storageSnapshot().projects[0].timeEntries[0].id).toBe('te2');
+    await waitFor(async () => expect((await readProjects(api))[0].timeEntries).toHaveLength(1));
+    expect((await readProjects(api))[0].timeEntries[0].id).toBe('te2');
   });
 
   it('exports the projects through the host, the only way out of the sandbox', async () => {
     const api = projectsApi();
-    await api.storage.set('projects', [TIME_PROJECT]);
+    await write(api, 'projects', [TIME_PROJECT]);
     await renderPage(api);
     await waitFor(() => expect(screen.getAllByText('Website').length).toBeGreaterThan(0));
 
