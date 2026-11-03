@@ -21,6 +21,7 @@ import {
   milestoneTaskDraft, newId, openMilestoneIds, parseExport, projectTotal,
   readProjects, saveProject, totalMinutes,
 } from './projects.js';
+import { recordBackend } from './store.js';
 
 export function makeProjectsPage(React, api) {
   const { createElement: h, useCallback, useEffect, useMemo, useRef, useState } = React;
@@ -31,6 +32,8 @@ export function makeProjectsPage(React, api) {
     const [cards, setCards] = useState([]);
     const [openTasks, setOpenTasks] = useState([]);
     const [status, setStatus] = useState('loading');
+    // Where the records live right now: 'files', 'cloud' or 'unavailable' (#68).
+    const [storage, setStorage] = useState('unavailable');
     const [selectedId, setSelectedId] = useState('');
     const [draft, setDraft] = useState({ title: '', due: '' });
     const [timeDraft, setTimeDraft] = useState({ at: '', minutes: '', note: '', billable: true });
@@ -44,6 +47,9 @@ export function makeProjectsPage(React, api) {
         const [stored, list] = await Promise.all([readProjects(api), loadCards(api).catch(() => [])]);
         setProjects(stored);
         setCards(list);
+        // A record store that is not there must not look like "no projects yet"
+        // (#68): say what is missing, and that the cloud tier offers it.
+        setStorage(await recordBackend(api));
         setSelectedId((current) => (stored.some((project) => project.id === current) ? current : stored[0]?.id ?? ''));
         setStatus('ready');
       } catch {
@@ -338,6 +344,10 @@ export function makeProjectsPage(React, api) {
             }))),
       }),
       h(InfoBar, { tone: 'neutral' }, t('projects.localNotice')),
+      storage === 'unavailable'
+        ? h(InfoBar, { tone: 'warning', title: t('storage.unavailable.title') },
+            t('storage.unavailable.body'))
+        : null,
       status === 'loading' ? h(Text, { tone: 'muted' }, t('projects.loading')) : null,
       status === 'error' ? h(EmptyState, { title: t('projects.unavailable') }) : null,
       status === 'ready'

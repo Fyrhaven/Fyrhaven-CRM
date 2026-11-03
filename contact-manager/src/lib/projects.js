@@ -1,11 +1,14 @@
-// Projects: client work tracked **locally** in this browser. Bulwark gives a
-// plugin no server-side custom object store, so a project record lives in
-// api.storage — per account *and* per browser — and does not sync between
-// devices. Milestones are the deliberate exception: each one is a real task
-// created with `api.tasks.create`, so its due date and completion are shared
+// Projects: client work tracked as **records**, not in the browser. Bulwark gives
+// a plugin no custom object store, but it does give it two servers: Stalwart's
+// file storage (`api.files`) and an optional cloud tier — so a project lives on
+// the customer's own server through the storage seam (#68), and follows the user
+// between devices. Milestones are the exception twice over: each one is a real
+// task created with `api.tasks.create`, so its due date and completion are shared
 // like any other task and survive a reload.
 //
-// Pure model plus api.storage / api.tasks calls; no DOM.
+// Pure model plus the storage seam / api.tasks calls; no DOM.
+
+import { read, remove, write } from './store.js';
 
 export const PROJECTS_KEY = 'projects';
 export const PROJECT_SCHEMA_VERSION = 1;
@@ -240,19 +243,26 @@ export function mergeProjects(existing, incoming) {
 /** Merges an imported list into storage; returns how many projects are stored. */
 export async function importProjects(api, incoming) {
   const merged = mergeProjects(await readProjects(api), incoming);
-  if (merged.length) await api.storage.set(PROJECTS_KEY, merged);
+  if (merged.length) await write(api, PROJECTS_KEY, merged);
   return merged.length;
 }
 
-/** The projects in storage, repaired. Rewrites storage when it dropped junk. */
+/**
+ * The projects in storage, repaired. Rewrites storage when it dropped junk.
+ *
+ * Read through the seam (#68), so where a project lives is not this module's
+ * business: the customer's own Files storage, the cloud, or nowhere. A store that
+ * is *unavailable* reads as **no projects** rather than throwing, so the page can
+ * say what is missing instead of failing to draw.
+ */
 export async function readProjects(api) {
-  const stored = await api.storage.get(PROJECTS_KEY);
-  const list = asArray(stored);
+  const answer = await read(api, PROJECTS_KEY);
+  const list = asArray(answer.status === 'ok' ? answer.value : null);
   const projects = normalizeProjects(list);
   const changed = projects.length !== list.length || list.some((item) => !normalizeProject(item));
-  if (changed) {
-    if (projects.length) await api.storage.set(PROJECTS_KEY, projects);
-    else await api.storage.remove(PROJECTS_KEY);
+  if (changed && answer.status === 'ok') {
+    if (projects.length) await write(api, PROJECTS_KEY, projects);
+    else await remove(api, PROJECTS_KEY);
   }
   return projects;
 }
@@ -262,15 +272,19 @@ export async function saveProject(api, project) {
   const clean = normalizeProject(project);
   if (!clean) throw new Error('invalid project');
   const projects = await readProjects(api);
-  await api.storage.set(PROJECTS_KEY, [...projects.filter((p) => p.id !== clean.id), clean]);
+  const answer = await write(api, PROJECTS_KEY, [...projects.filter((p) => p.id !== clean.id), clean]);
+  // A write with nowhere to go must not look like a save.
+  if (answer.status !== 'ok') throw new Error(answer.reason ?? 'no storage configured');
   return clean;
 }
 
-/** Drops the local record only — linked tasks and contacts are untouched. */
+/** Drops the record only — linked tasks and contacts are untouched. */
 export async function deleteProject(api, id) {
   const projects = await readProjects(api);
   const next = projects.filter((project) => project.id !== id);
-  if (next.length) await api.storage.set(PROJECTS_KEY, next);
-  else await api.storage.remove(PROJECTS_KEY);
+  const answer = next.length
+    ? await write(api, PROJECTS_KEY, next)
+    : await remove(api, PROJECTS_KEY);
+  if (answer.status !== 'ok') throw new Error(answer.reason ?? 'no storage configured');
   return projects.length - next.length;
 }
