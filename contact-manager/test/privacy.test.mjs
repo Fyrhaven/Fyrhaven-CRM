@@ -2,6 +2,8 @@
 // and the proof-of-deletion log.
 import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
+import { read } from '../src/lib/store.js';
 import { makeCard } from './fixtures.mjs';
 import { isAnonymisedCard, isMergeable } from '../src/lib/contacts.js';
 import { readConsents, setConsent } from '../src/lib/consent.js';
@@ -144,7 +146,11 @@ describe('the deletion log', () => {
 
 describe('anonymiseSubject', () => {
   it('overwrites the card, drops its consents and records the change', async () => {
-    const api = fakeApi({ handlers: { 'contacts.update': async () => {} } });
+    const files = filesHost();
+    const api = fakeApi({
+      host: files.host,
+      handlers: { ...files.handlers, 'contacts.update': async () => {} },
+    });
     await setConsent(api, { contactId: 'a', source: 'newsletter', basis: 'consent', grantedAt: '2026-01-01' });
     await saveNote(api, 'a', 'a private thought', { id: 'n1' });
     const result = await anonymiseSubject(api, FULL, { now: 1000 });
@@ -157,7 +163,7 @@ describe('anonymiseSubject', () => {
     expect(await readConsents(api)).toEqual([]);
     // the private notes go too, or the anonymisation would be a half-measure
     expect(result.notes).toBe(1);
-    expect(await readNotes(api)).toEqual({});
+    expect((await read(api, 'contactNotes')).value).toBeNull();
     expect((await readDeletions(api))[0]).toMatchObject({ id: 'a', method: 'anonymise', books: ['b1'] });
     expect((await readHistory(api))[0]).toMatchObject({ kind: 'anonymise', subject: 'a' });
   });
@@ -165,7 +171,11 @@ describe('anonymiseSubject', () => {
 
 describe('eraseSubject', () => {
   it('deletes the card, drops its consents, and leaves a proof of deletion', async () => {
-    const api = fakeApi({ handlers: { 'contacts.remove': async () => {} } });
+    const files = filesHost();
+    const api = fakeApi({
+      host: files.host,
+      handlers: { ...files.handlers, 'contacts.remove': async () => {} },
+    });
     await setConsent(api, { contactId: 'a', source: 'newsletter', basis: 'consent', grantedAt: '2026-01-01' });
     await saveNote(api, 'a', 'a private thought', { id: 'n1' });
     const result = await eraseSubject(api, FULL, { now: 1000 });
@@ -175,7 +185,7 @@ describe('eraseSubject', () => {
     expect(await readConsents(api)).toEqual([]);
     // erasure takes the private notes with it
     expect(result.notes).toBe(1);
-    expect(await readNotes(api)).toEqual({});
+    expect((await read(api, 'contactNotes')).value).toBeNull();
     expect((await readDeletions(api))[0]).toMatchObject({ id: 'a', method: 'erase' });
     expect((await readHistory(api))[0]).toMatchObject({ kind: 'erase' });
     // the delete left an undo record, like every other delete

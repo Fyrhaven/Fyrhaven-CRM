@@ -7,6 +7,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
+import { read, write } from '../src/lib/store.js';
 import { makeNotesSection } from '../src/lib/notes-section.js';
 import { readNotes } from '../src/lib/notes.js';
 import { makeCard } from './fixtures.mjs';
@@ -19,7 +21,9 @@ const ADA = makeCard({ id: 'a', name: 'Ada Lovelace', emails: ['ada@example.org'
 const GRACE = makeCard({ id: 'g', name: 'Grace Hopper' });
 
 function sectionApi(handlers = {}) {
-  return fakeApi({ translations: manifest.locales, handlers });
+  // Notes are records (#68): the section reads the customer's own Files storage.
+  const files = filesHost();
+  return fakeApi({ translations: manifest.locales, host: files.host, handlers: { ...files.handlers, ...handlers } });
 }
 
 async function renderSection(api, contact = ADA) {
@@ -64,12 +68,12 @@ describe('private notes section', () => {
     await click(en()['notes.add']);
 
     expect(screen.getByText(en()['notes.empty'])).toBeTruthy();
-    expect(await readNotes(api)).toEqual({});
+    expect((await read(api, 'contactNotes')).value).toBeNull();
   });
 
   it('renders the marks a note uses, as elements and never as markup', async () => {
     const api = sectionApi();
-    await api.storage.set('contactNotes', {
+    await write(api, 'contactNotes', {
       a: [{ id: 'n1', at: '2026-01-01T00:00:00Z', text: 'Called **Ada** about @ada at `noon`' }],
     });
     await renderSection(api);
@@ -81,7 +85,7 @@ describe('private notes section', () => {
 
   it('shows only the notes about the contact that is open', async () => {
     const api = sectionApi();
-    await api.storage.set('contactNotes', {
+    await write(api, 'contactNotes', {
       a: [{ id: 'n1', at: '2026-01-01T00:00:00Z', text: 'about Ada' }],
       g: [{ id: 'n2', at: '2026-01-01T00:00:00Z', text: 'about Grace' }],
     });
@@ -98,7 +102,7 @@ describe('private notes section', () => {
 
   it('deletes a note', async () => {
     const api = sectionApi();
-    await api.storage.set('contactNotes', {
+    await write(api, 'contactNotes', {
       a: [{ id: 'n1', at: '2026-01-01T00:00:00Z', text: 'gone soon' }],
     });
     await renderSection(api);
@@ -106,13 +110,14 @@ describe('private notes section', () => {
     await click(en()['notes.delete']);
 
     await waitFor(() => expect(screen.getByText(en()['notes.empty'])).toBeTruthy());
-    expect(await readNotes(api)).toEqual({});
+    expect((await read(api, 'contactNotes')).value).toBeNull();
   });
 
   it('says when a note could not be saved, rather than swallowing it', async () => {
     const api = sectionApi();
     await renderSection(api);
-    api.storage.set = async () => { throw new Error('refused'); };
+    // Break the store the note actually goes to (#68), not the browser.
+    api.files.create = async () => { throw new Error('refused'); };
 
     await type('this will not save');
     await click(en()['notes.add']);

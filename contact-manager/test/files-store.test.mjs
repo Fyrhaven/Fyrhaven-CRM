@@ -96,7 +96,7 @@ describe('the files store', () => {
     expect(state.created.at(-1)).toMatchObject({
       name: 'projects.json',
       content: JSON.stringify([{ id: 'p2' }]),
-      type: 'application/json',
+      type: 'text/plain',
       replace: true,
     });
   });
