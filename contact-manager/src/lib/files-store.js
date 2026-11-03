@@ -74,7 +74,12 @@ export function makeFilesStore(api) {
 
   async function findFolder() {
     const listing = await api.files.list();
-    const existing = (listing ?? []).find((item) => item?.kind === 'folder' && item?.name === FILES_FOLDER);
+    // `list()` returns *the user's own drive **and the top items others shared
+    // with them***, so a folder someone else made with this name would be picked
+    // up — and writes into a shared folder are refused. Only a folder this user
+    // owns may be used: `shared` marks somebody else's, `owner` names whose.
+    const existing = (listing ?? []).find((item) => item?.kind === 'folder'
+      && item?.name === FILES_FOLDER && !item?.shared && !item?.owner);
     if (existing) return existing.id;
     const created = await api.files.createFolder({ parentId: null, name: FILES_FOLDER });
     return created?.id ?? null;
