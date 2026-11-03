@@ -46,6 +46,7 @@ export const QUERY_EXAMPLES = [
  * something a user would want to read.
  */
 export const WHATS_NEW = [
+  { version: '1.46.0', note: 'help.whatsNew.1_46_0' },
   { version: '1.45.0', note: 'help.whatsNew.1_45_0' },
   { version: '1.44.0', note: 'help.whatsNew.1_44_0' },
   { version: '1.43.0', note: 'help.whatsNew.1_43_0' },
