@@ -1886,6 +1886,12 @@ live and no feature has to be rewritten twice:
 - **`src/lib/store.js`** — `read(api, key)` / `write(api, key, value)` /
   `remove(api, key)`, plus the one list that classifies a key as a **record**
   (server) or **view state** (local), and `recordsAvailable(api)`.
+  **The phone `region` is a record**, by the maintainer's call, so it follows the
+  user. The consequence to keep in mind: phone matching is a *free* feature and
+  the region sharpens it, so with no server configured the region is unset and a
+  nationally written number (`0176…`) stops matching its international spelling
+  (`+49 176…`). That is the one place where this decision reaches into a feature
+  that needs no storage.
 - **`src/lib/remote.js`** — the server client, a key/value API over the host's
   `http:proxy` with the credential held by the host, so no secret ships in the
   ZIP.

@@ -58,6 +58,9 @@ describe('the classification', () => {
     expect(backendFor(NOTES_KEY)).toBe('remote');
     expect(backendFor(CONSENT_KEY)).toBe('remote');
     expect(backendFor(ONBOARDING_KEY)).toBe('local');
+    // the phone region is a preference, but the maintainer's call is that it
+    // follows the user rather than the browser
+    expect(backendFor(REGION_KEY)).toBe('remote');
     // the server's own address and credential cannot live on the server
     expect(isRecord(REMOTE_URL_KEY)).toBe(false);
     expect(isRecord(REMOTE_CREDENTIAL_KEY)).toBe(false);
