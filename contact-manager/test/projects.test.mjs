@@ -2,6 +2,8 @@
 // real tasks.
 import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
+import { read, write } from '../src/lib/store.js';
 import {
   EXPORT_FORMAT, PROJECTS_KEY, billableExpenses, billableMinutes, deleteProject,
   emptyExpense, emptyMilestone, emptyProject, emptyTimeEntry, exportPayload,
@@ -78,9 +80,15 @@ describe('links and milestones', () => {
   });
 });
 
+/** Projects are records (#68): the fake needs the customer's own Files storage. */
+const projectsApi = () => {
+  const files = filesHost();
+  return fakeApi({ host: files.host, handlers: files.handlers });
+};
+
 describe('project storage', () => {
   it('saves, reads, replaces and deletes records', async () => {
-    const api = fakeApi();
+    const api = projectsApi();
     expect(await readProjects(api)).toEqual([]);
 
     await saveProject(api, emptyProject('p1', { name: 'Website' }));
@@ -93,18 +101,18 @@ describe('project storage', () => {
     expect(await deleteProject(api, 'p1')).toBe(1);
     expect((await readProjects(api)).map((p) => p.id)).toEqual(['p2']);
     expect(await deleteProject(api, 'p2')).toBe(1);
-    expect(api.storageSnapshot()[PROJECTS_KEY]).toBeUndefined();
+    expect((await read(api, PROJECTS_KEY)).value).toBeNull();
   });
 
   it('drops junk from storage on read', async () => {
-    const api = fakeApi();
-    await api.storage.set(PROJECTS_KEY, [{ id: 'p1', name: 'A' }, { id: '' }, 'nope']);
+    const api = projectsApi();
+    await write(api, PROJECTS_KEY, [{ id: 'p1', name: 'A' }, { id: '' }, 'nope']);
     expect((await readProjects(api)).map((p) => p.id)).toEqual(['p1']);
-    expect(api.storageSnapshot()[PROJECTS_KEY]).toHaveLength(1);
+    expect((await read(api, PROJECTS_KEY)).value).toHaveLength(1);
   });
 
   it('refuses to save an unusable record', async () => {
-    const api = fakeApi();
+    const api = projectsApi();
     await expect(saveProject(api, { id: '', name: '' })).rejects.toThrow('invalid project');
   });
 });
@@ -184,7 +192,7 @@ describe('export and import', () => {
   });
 
   it('imports into storage', async () => {
-    const api = fakeApi();
+    const api = projectsApi();
     await saveProject(api, emptyProject('p1', { name: 'Old' }));
     const total = await importProjects(api, [
       emptyProject('p1', { name: 'New' }),
@@ -192,5 +200,32 @@ describe('export and import', () => {
     ]);
     expect(total).toBe(2);
     expect((await readProjects(api)).map((p) => p.name)).toEqual(['New', 'Added']);
+  });
+});
+
+// ── Where a project lives (#68) ─────────────────────────────────
+//
+// A project is a record: the customer's own server first. With no server at all
+// the store is *unavailable*, and a save must fail loudly rather than pretend.
+
+describe('project storage without a server', () => {
+  it('reads as no projects rather than throwing, so the page can still draw', async () => {
+    const api = fakeApi();
+    expect(await readProjects(api)).toEqual([]);
+  });
+
+  it('refuses a save, so a failed write is never toasted as a success', async () => {
+    const api = fakeApi();
+    await expect(saveProject(api, emptyProject('p1', { name: 'Website' })))
+      .rejects.toThrow('unconfigured');
+    // and nothing was left behind in the browser
+    expect(await api.storage.get(PROJECTS_KEY)).toBeNull();
+  });
+
+  it('keeps the project off the browser when Files is on', async () => {
+    const api = projectsApi();
+    await saveProject(api, emptyProject('p1', { name: 'Website' }));
+    expect(api.calls('files.create')).toHaveLength(1);
+    expect(await api.storage.get(PROJECTS_KEY)).toBeNull();
   });
 });
