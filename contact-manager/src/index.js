@@ -43,6 +43,7 @@ import { makePoliciesDialog } from './lib/policies-dialog.js';
 import { makeRolesDialog } from './lib/roles-dialog.js';
 import { makeSmartListsDialog } from './lib/smart-lists-dialog.js';
 import { makeHelpDialog } from './lib/help-dialog.js';
+import { makeServerDialog } from './lib/server-dialog.js';
 import { makeTaskDialog } from './lib/task-dialog.js';
 import {
   describeCapabilities, describeSurface, detectCapabilities, probeOptionalApis, unavailableNamespaces,
@@ -50,7 +51,7 @@ import {
 import { runAutomationForCard } from './lib/automation.js';
 import {
   automationRules, checkServer, findDuplicates, importContacts, newCompany, newContact, newGroup, newProject,
-  normalisationRules, openHelp, smartLists, undoMerge,
+  normalisationRules, openHelp, openServer, smartLists, undoMerge,
 } from './lib/actions.js';
 
 const enabled = (pluginApi) => pluginApi.plugin.settings.enabled !== false;
@@ -91,6 +92,7 @@ const PoliciesDialog = makePoliciesDialog(React, api);
 const RolesDialog = makeRolesDialog(React, api);
 const SmartListsDialog = makeSmartListsDialog(React, api);
 const HelpDialog = makeHelpDialog(React, api);
+const ServerDialog = makeServerDialog(React, api);
 const TaskDialog = makeTaskDialog(React, api);
 function DialogSlot(props) {
   if (props?.editor) return React.createElement(EditorDialog, props);
@@ -107,6 +109,7 @@ function DialogSlot(props) {
   if (props?.rolesDialog) return React.createElement(RolesDialog, props);
   if (props?.smartLists) return React.createElement(SmartListsDialog, props);
   if (props?.help) return React.createElement(HelpDialog, props);
+  if (props?.serverEditor) return React.createElement(ServerDialog, { ...props, ...props.serverEditor });
   if (props?.taskEditor) return React.createElement(TaskDialog, { ...props, ...props.taskEditor });
   return React.createElement(ReviewDialog, props);
 }
@@ -152,6 +155,7 @@ export const hooks = {
     if (actionId === 'smart-lists') return smartLists(api);
     if (actionId === 'help') return openHelp(api);
     if (actionId === 'check-server') return checkServer(api);
+    if (actionId === 'cloud-server') return openServer(api);
     if (actionId === 'normalisation-rules') return normalisationRules(api);
     if (actionId === 'automation-rules') return automationRules(api);
     return undefined;
@@ -203,6 +207,7 @@ async function publish(pluginApi) {
     { id: 'smart-lists', label: t('action.smartLists'), icon: 'filter' },
     { id: 'help', label: t('action.help'), icon: 'book-user' },
     { id: 'check-server', label: t('action.checkServer'), icon: 'cloud' },
+    { id: 'cloud-server', label: t('action.cloudServer'), icon: 'cloud' },
     ...(pending.length ? [{ id: 'undo-merge', label: t('action.undoCommand'), icon: 'undo' }] : []),
   ]);
   await pluginApi.ui.setActions('contact-list-actions', [

@@ -71,6 +71,7 @@ signatures, the last scan summary).
 | *Follow up* button | Contact Manager → *Contacts*, on the open contact | Opens the **follow-up task** editor (#36): title (prefilled), due date, priority and notes, created as a real host task. The profile's task list shows the contact's tasks with anything past due badged *Overdue*, first |
 | *Private notes* section | Contact Manager → *Contacts*, on the open contact | Notes kept on your server about the contact (#38, the private half): write, read back with a timestamp, delete. Private by construction — a note is a record of its own through the storage seam, never a card field, so nothing shared can show it. Free text, `note:` and `has:note` in the search box find them too. A small documented subset of marks (`**bold**`, `*italic*`, `` `code` ``, `@mention`) is rendered as elements, never as markup. The subject-access export carries them, and erasure removes them |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
+| *Cloud server* (Overview menu, palette) | Contact Manager → *Overview* menu | Points the plugin at a Contact Manager server (#68): the address, then the **host** asks for the workspace token and keeps it. The plugin remembers only where the server is; *Disconnect* forgets it. On success it reports the version the server answered |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
 | Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
@@ -1340,6 +1341,37 @@ when the page opened.
 server, and the page catches a failed read as "no notes", so search keeps working
 over the cards alone — the #68 rule that a record feature degrades instead of
 breaking the page.
+
+### 6.23 Pointing the plugin at a server (`src/lib/remote.js`, `server-dialog.js`, v1.52.0) — #68
+
+The cloud tier had a client and a server and no way to join them: `remote.js`
+read the address from storage and **nothing ever wrote it**, and the manifest
+declared no credential, so `api.proxy.fetch` had no token to attach. Two gaps,
+and both were silent — the plugin simply reported `unconfigured` for ever.
+
+**The token belongs to the host, so the dialog never sees it.**
+`manifest.json` declares `credentials.store` (`scope: "user"`, `inject:
+bearer`); *Connect* calls `api.proxy.connect('store', { mode: 'password',
+server })`, which is the host's own dialog. The plugin learns `{ connected,
+origin, credentialId }` and nothing else — no secret ever enters the bundle, and
+`api.proxy.fetch` injects it server-side, which is what makes a paid tier
+possible without an API key in the ZIP.
+
+**Nothing is written until the host says `connected`.** A cancelled dialog, a
+refused token and a webmail without `api.proxy.connect` are three different
+answers to the user, and only a success touches storage — so a cancelled connect
+cannot leave the plugin pointed at a server it cannot authenticate to.
+
+**The dialog returns a choice; the funnel writes.** `server-dialog.js` returns
+`{ connect: { url } }` or `{ disconnect: true }` and `actions.js#openServer`
+performs it, which is the rule the review dialog, the editor and the import
+wizard already follow. It matters more here: `api.proxy.connect` *opens a dialog
+of the host's own*, and a plugin dialog that tried to drive that from inside
+itself would be nesting host surfaces nobody has promised works.
+
+**A successful connect immediately asks for the version**, so a wrong address or
+a refused token is reported at once instead of at the first record the user tries
+to save.
 
 ---
 
