@@ -95,6 +95,51 @@ async function loadOrders() {
   }
 }
 
+async function loadCatalog() {
+  const answer = await call('/v1/admin/products');
+  const box = $('#catalog');
+  box.replaceChildren();
+  for (const product of answer.products) {
+    box.append(el('div', { class: 'row' },
+      el('div', {},
+        el('strong', { text: `${product.label} · ${product.price}` }),
+        el('div', {
+          class: 'muted',
+          text: `${product.code} · ${product.kind} · ${product.active ? 'active' : 'off'}`
+            + (product.stripePriceId ? ' · Stripe price set' : ' · no Stripe price yet'),
+        })),
+      el('div', { class: 'actions' },
+        el('button', {
+          type: 'button',
+          text: product.stripePriceId ? 'Recreate in Stripe' : 'Create in Stripe',
+          onclick: async () => {
+            try {
+              status('Asking Stripe…');
+              const made = await call(`/v1/admin/products/${product.id}/stripe`, { method: 'POST' });
+              status(`Stripe price ${made.product.stripePriceId} created for ${product.code}.`);
+              await loadCatalog();
+            } catch (err) {
+              status(String(err.message ?? err), true);
+            }
+          },
+        }),
+        el('button', {
+          type: 'button',
+          text: product.active ? 'Turn off' : 'Turn on',
+          onclick: async () => {
+            try {
+              await call(`/v1/admin/products/${product.id}/active`, {
+                method: 'POST', body: { active: !product.active },
+              });
+              await loadCatalog();
+            } catch (err) {
+              status(String(err.message ?? err), true);
+            }
+          },
+        }))));
+  }
+}
+
 async function loadAccounts() {
   const answer = await call('/v1/admin/accounts');
   $('#payments').textContent = answer.payments.provider === 'stripe'
@@ -171,7 +216,7 @@ document.querySelectorAll('[data-tab]').forEach((button) => {
     const tab = button.dataset.tab;
     status('');
     try {
-      await (tab === 'orders' ? loadOrders() : loadAccounts());
+      await (tab === 'orders' ? loadOrders() : tab === 'accounts' ? loadAccounts() : loadCatalog());
       show(tab);
     } catch (err) {
       status(String(err.message ?? err), true);
@@ -191,3 +236,28 @@ if (token()) {
 } else {
   show('orders');
 }
+
+document.querySelector('[data-form="product"]').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const data = new FormData(event.target);
+  try {
+    await call('/v1/admin/products', {
+      method: 'POST',
+      body: {
+        code: data.get('code'),
+        label: data.get('label'),
+        kind: data.get('kind'),
+        interval: data.get('interval'),
+        amount: Number(data.get('amount')),
+        currency: data.get('currency'),
+        description: data.get('description'),
+      },
+    });
+    event.target.reset();
+    status('Product saved. Create its Stripe price next.');
+    await loadCatalog();
+    show('catalog');
+  } catch (err) {
+    status(String(err.message ?? err), true);
+  }
+});

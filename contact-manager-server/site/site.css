@@ -39,3 +39,10 @@ footer { max-width: 720px; margin: 0 auto; padding: 0 20px 40px; font-size: .88r
 .row:last-child { border-bottom: 0; }
 code { background: #f4f5f7; padding: 1px 5px; border-radius: 4px; }
 @media (prefers-color-scheme: dark) { code { background: #1b1e24; } }
+
+.plans { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 12px; }
+.plan { border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 8px; align-content: start; }
+.plan .price { font-size: 1.25rem; font-weight: 600; }
+.grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; max-width: none; }
+.grid label { font-size: .88rem; }
+.grid button { grid-column: 1 / -1; justify-self: start; }

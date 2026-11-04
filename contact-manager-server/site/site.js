@@ -12,6 +12,17 @@ const status = (message, isError = false) => {
   line.className = isError ? 'status error' : 'status';
 };
 
+const el = (tag, props = {}, ...children) => {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    if (key === 'onclick') node.addEventListener('click', value);
+    else if (key === 'text') node.textContent = value;
+    else node.setAttribute(key, value);
+  }
+  for (const child of children) node.append(child);
+  return node;
+};
+
 const TOKEN_KEY = 'cm-session';
 
 const token = () => localStorage.getItem(TOKEN_KEY) ?? '';
@@ -126,6 +137,60 @@ document.querySelectorAll('form[data-form]').forEach((form) => {
   });
 });
 
+const products = { list: [] };
+
+/** The shop window: every active product with its price and a buy button. */
+async function loadProducts() {
+  try {
+    const answer = await call('/v1/products');
+    products.list = answer.products;
+    const box = $('#products');
+    box.replaceChildren();
+    if (!answer.products.length) {
+      box.append(el('p', { class: 'muted', text: 'Nothing is for sale right now.' }));
+      return;
+    }
+    for (const product of answer.products) {
+      box.append(el('div', { class: 'plan' },
+        el('strong', { text: product.label }),
+        el('div', { class: 'price', text: product.price }),
+        el('div', { class: 'muted', text: product.description }),
+        el('button', {
+          type: 'button',
+          text: product.kind === 'license' ? 'Buy the licence' : 'Subscribe',
+          onclick: () => order(productId(product)),
+        })));
+    }
+  } catch (err) {
+    status(String(err.message ?? err), true);
+  }
+}
+
+const productId = (product) => product.id;
+
+/** Orders one product; the payment status decides what the customer is told. */
+async function order(id) {
+  if (!token()) {
+    show('signup');
+    status('Create an account first — the order belongs to it.');
+    return;
+  }
+  try {
+    const answer = await call('/v1/account/order', { method: 'POST', body: { productId: id } });
+    if (answer.payment.status === 'redirect' && answer.payment.url) {
+      window.location.href = answer.payment.url;
+      return;
+    }
+    const note = $('#order-note');
+    note.hidden = false;
+    note.textContent = `Order ${answer.order.id} is ${answer.order.status}. An invoice follows — the plan is switched on when it is paid.`;
+    show('account');
+    await loadAccount();
+  } catch (err) {
+    status(String(err.message ?? err), true);
+  }
+}
+
 document.querySelectorAll('[data-action]').forEach((button) => {
   button.addEventListener('click', async () => {
     const action = button.dataset.action;
@@ -138,15 +203,9 @@ document.querySelectorAll('[data-action]').forEach((button) => {
       return;
     }
     if (action === 'order') {
-      try {
-        const answer = await call('/v1/account/order', { method: 'POST', body: { plan: 'cloud' } });
-        const note = $('#order-note');
-        note.hidden = false;
-        note.textContent = `Order ${answer.order.id} is ${answer.order.status}. An invoice follows — the plan is switched on when it is paid.`;
-      } catch (err) {
-        status(String(err.message ?? err), true);
-      }
-      return;
+      const first = products.list.find((entry) => entry.kind === 'subscription') ?? products.list[0];
+      if (!first) return status('Nothing is for sale right now.', true);
+      return order(first.id);
     }
     if (action === 'delete') {
       const sure = window.confirm('Delete your account, its sessions and every record in it? This cannot be undone.');
@@ -167,3 +226,6 @@ document.querySelectorAll('[data-action]').forEach((button) => {
 // stays on the landing panel, which is what a stranger should see.
 if (token()) void loadAccount();
 else show('intro');
+
+// The shop window is public, so it loads before anything else.
+void loadProducts();

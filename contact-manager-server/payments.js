@@ -62,13 +62,17 @@ export const paymentsAvailable = (config) => config.provider === 'stripe' && Boo
  *
  * @returns {Promise<{status: 'ok'|'unconfigured'|'failed', url?: string, id?: string, reason?: string}>}
  */
-export async function createCheckout(config, { order, account, fetch = globalThis.fetch } = {}) {
+export async function createCheckout(config, { order, account, priceId = '', mode = '', fetch = globalThis.fetch } = {}) {
   if (!paymentsAvailable(config)) return { status: 'unconfigured' };
   if (!order?.id || !account?.id) return { status: 'failed', reason: 'an order and an account are needed' };
+  // A catalogue price wins over the single configured one: the product says what
+  // is being sold, and the operator may sell several things.
+  const price = priceId || config.priceId;
+  if (!price) return { status: 'unconfigured' };
 
   const form = new URLSearchParams();
-  form.set('mode', config.mode);
-  form.set('line_items[0][price]', config.priceId);
+  form.set('mode', mode || config.mode);
+  form.set('line_items[0][price]', price);
   form.set('line_items[0][quantity]', '1');
   form.set('success_url', `${config.publicUrl}/?paid=1`);
   form.set('cancel_url', `${config.publicUrl}/?paid=0`);
@@ -145,4 +149,52 @@ export function planFromEvent(event) {
     return { accountId, orderId: text(object.metadata?.orderId), plan: 'cloud' };
   }
   return null;
+}
+
+
+/**
+ * Creates the Stripe product and price a catalogue entry needs.
+ *
+ * Called from the admin panel, so a price is never typed twice and can never
+ * drift from what the store charges. Recurring intervals become a monthly/yearly
+ * price; a one-off (`once`) becomes a single payment.
+ *
+ * @returns {Promise<{status: 'ok'|'unconfigured'|'failed', productId?: string, priceId?: string, reason?: string}>}
+ */
+export async function createStripePrice(config, product, { fetch = globalThis.fetch } = {}) {
+  if (config.provider !== 'stripe') return { status: 'unconfigured' };
+  if (!product?.label || !Number.isFinite(product.amount)) return { status: 'failed', reason: 'a label and an amount are needed' };
+
+  const post = async (path, form) => {
+    const response = await fetch(`https://api.stripe.com${path}`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${config.secretKey}`,
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: form.toString(),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(payload?.error?.message ?? `HTTP ${response.status}`);
+    return payload;
+  };
+
+  try {
+    const created = await post('/v1/products', new URLSearchParams({
+      name: product.label,
+      ...(product.description ? { description: product.description } : {}),
+    }));
+    const priceForm = new URLSearchParams({
+      product: created.id,
+      unit_amount: String(product.amount),
+      currency: String(product.currency || 'eur').toLowerCase(),
+    });
+    if (product.interval === 'month' || product.interval === 'year') {
+      priceForm.set('recurring[interval]', product.interval);
+    }
+    const price = await post('/v1/prices', priceForm);
+    return { status: 'ok', productId: created.id, priceId: price.id };
+  } catch (err) {
+    return { status: 'failed', reason: String(err?.message ?? err) };
+  }
 }

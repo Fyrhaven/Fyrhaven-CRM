@@ -96,6 +96,12 @@ export function openAccountTables(db) {
       created    TEXT NOT NULL
     );
   `);
+  // Added after orders shipped, so an existing database is migrated in place.
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN product_id TEXT NOT NULL DEFAULT ''");
+  } catch {
+    // already there
+  }
 }
 
 /**
@@ -187,11 +193,17 @@ export function accountOps(db, { trialDays = DEFAULT_TRIAL_DAYS } = {}) {
     },
 
     /** Records an order request; the payment itself is the next step. */
-    placeOrder(accountId, plan = 'cloud', now = Date.now()) {
+    placeOrder(accountId, plan = 'cloud', { productId = '', now = Date.now() } = {}) {
       const id = `o${randomBytes(6).toString('hex')}`;
-      db.prepare('INSERT INTO orders (id, account_id, plan, status, created) VALUES (?, ?, ?, ?, ?)')
-        .run(id, String(accountId), PLANS.includes(plan) ? plan : 'cloud', 'pending', iso(now));
-      return { id, plan: PLANS.includes(plan) ? plan : 'cloud', status: 'pending', createdAt: iso(now) };
+      db.prepare('INSERT INTO orders (id, account_id, plan, product_id, status, created) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(id, String(accountId), PLANS.includes(plan) ? plan : 'cloud', String(productId ?? ''), 'pending', iso(now));
+      return {
+        id,
+        plan: PLANS.includes(plan) ? plan : 'cloud',
+        productId: String(productId ?? ''),
+        status: 'pending',
+        createdAt: iso(now),
+      };
     },
 
     /** Every order, newest first, with the email it belongs to — the admin list. */
@@ -214,7 +226,10 @@ export function accountOps(db, { trialDays = DEFAULT_TRIAL_DAYS } = {}) {
     order(id) {
       const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(String(id ?? ''));
       return order
-        ? { id: order.id, accountId: order.account_id, plan: order.plan, status: order.status, createdAt: order.created }
+        ? {
+          id: order.id, accountId: order.account_id, plan: order.plan,
+          productId: order.product_id ?? '', status: order.status, createdAt: order.created,
+        }
         : undefined;
     },
 

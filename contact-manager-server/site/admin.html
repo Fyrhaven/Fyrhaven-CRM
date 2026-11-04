@@ -13,6 +13,7 @@
     <nav>
       <button data-tab="orders" type="button">Orders</button>
       <button data-tab="accounts" type="button">Accounts</button>
+      <button data-tab="catalog" type="button">Catalog</button>
       <button data-action="signout" type="button" hidden>Lock</button>
     </nav>
   </header>
@@ -38,6 +39,32 @@
         <p class="muted">Pending orders are requests: settle one when the money has arrived.</p>
         <div id="orders"></div>
       </div>
+      <div data-panel="catalog" hidden>
+        <h2>What is for sale</h2>
+        <p class="muted">Add a product, then let the panel create its Stripe price — a price typed twice drifts.</p>
+        <div id="catalog"></div>
+        <h3>Add or update a product</h3>
+        <form data-form="product" class="grid">
+          <label>Code <input name="code" required placeholder="cloud-monthly"></label>
+          <label>Label <input name="label" required placeholder="Contact Manager Cloud — monthly"></label>
+          <label>Kind
+            <select name="kind">
+              <option value="subscription">subscription</option>
+              <option value="license">license (self-hosted)</option>
+            </select></label>
+          <label>Interval
+            <select name="interval">
+              <option value="month">month</option>
+              <option value="year">year</option>
+              <option value="once">once</option>
+            </select></label>
+          <label>Amount (cents) <input name="amount" type="number" min="0" required placeholder="600"></label>
+          <label>Currency <input name="currency" value="EUR" maxlength="3"></label>
+          <label>Description <input name="description"></label>
+          <button type="submit">Save product</button>
+        </form>
+      </div>
+
       <div data-panel="accounts" hidden>
         <h2>Accounts</h2>
         <div id="accounts"></div>
