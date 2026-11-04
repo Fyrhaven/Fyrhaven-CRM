@@ -1,0 +1,42 @@
+# The store behind a reverse proxy you **already** run — nginx-proxy-manager,
+# Traefik, Caddy somewhere else. `docker compose -f docker-compose.host.yml up -d`
+# (from this folder, with a `.env` next to it).
+#
+# Same service as `docker-compose.yml`, minus its own Caddy: nothing is
+# published on the host, the store joins the network the proxy already uses, and
+# TLS stays where it already is. Point a proxy host at
+#
+#     contact-manager-store:8080
+#
+# so the store is never reachable from the internet except through that proxy —
+# there is no plaintext hop to find, and no second certificate to renew.
+#
+# Choose the network with `PROXY_NETWORK` when your proxy is on a differently
+# named one (`docker network ls`).
+services:
+  store:
+    build: .
+    image: contact-manager-store:1.0.0
+    container_name: contact-manager-store
+    restart: unless-stopped
+    environment:
+      # A token IS a workspace: `token=workspace,token=workspace`.
+      STORE_TOKENS: ${STORE_TOKENS:?set STORE_TOKENS in .env — one token per workspace}
+      # Wraps every workspace's data key. Lose it and the database is unreadable.
+      STORE_MASTER_KEY: ${STORE_MASTER_KEY:?set STORE_MASTER_KEY in .env — 32 bytes, base64}
+      PORT: "8080"
+      STORE_DB: /data/store.sqlite
+    volumes:
+      - store-data:/data
+    networks:
+      - proxy
+    # No `ports:` on purpose. The proxy reaches it by name on the network.
+
+volumes:
+  store-data:
+
+networks:
+  proxy:
+    external: true
+    # Whatever your proxy is attached to: `opt_default`, `npm_default`, `traefik`…
+    name: ${PROXY_NETWORK:-opt_default}
