@@ -339,8 +339,9 @@ Follow-up tasks (#36)
     and a value that is not a date is shown as it is, not as "Invalid Date"
 
 Private notes (#38, the private half)
-  a note is a record ABOUT the contact in api.storage (key 'contactNotes'), never
-    a card field — so it is private by construction, not by a visibility flag
+  a note is a record ABOUT the contact through the storage seam (key
+    'contactNotes'), never a card field — so it is private by construction, not
+    by a visibility flag
   normalizeNotes: real contacts, real notes, de-duped by id, capped per contact
     and in total; readNotes rewrites on repair and removes the key when empty
   notesFor(all, contactId) -> newest first, WITHOUT mutating the stored list
@@ -349,6 +350,9 @@ Private notes (#38, the private half)
     an unmatched mark stays literal; a matched pair IS emphasis
     tokens are rendered as ELEMENTS, so a note can never become markup
   the subject-access export carries the notes, and erase/anonymise drop them
+  a saved note is searchable at once: the Contacts page owns ONE copy of the
+    record and passes it to the section as `notes` + `onChange`, so the search
+    index is rebuilt from the same read the section renders
   no author: the host exposes no user identity, and inventing one would be a lie
 
 Merging
@@ -413,6 +417,10 @@ Smart search
     negations filters the list instead of showing everything
   buildIndex(cards, { books }) derives the searchable strings once;
     matchIndexed(entry, parsed) and countsForIndex(index, queries) reuse it
+  buildIndex(cards, { books, notes }) takes the private-note record (#38) as an
+    option, so a note the plugin keeps is searched where a card note is — free
+    text, `note:` and `has:note` alike; EVERY surface that counts matches passes
+    it (the Contacts page and the palette dialog), or the two disagree
   fields: name email phone company note tag book has is
   adjacent terms are AND; OR binds looser; ( ) groups; OR is case-insensitive
   tag: is whole, book: takes a name or an id

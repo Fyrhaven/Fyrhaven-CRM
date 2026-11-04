@@ -7,6 +7,26 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.51.0] — 2026-11-04
+
+### Added
+
+- **The Contacts search finds your private notes (#38).** Until now a note was
+  readable only from the contact it was written on: looking for the one where
+  you wrote *"met at the conference"* meant opening contacts until you found it.
+  Free text, `note:` and `has:note` now see a private note exactly where they
+  see the card's own, so the word is enough. The **command palette's smart
+  lists count the same matches** as the page, and a note is searchable **the
+  moment it is saved** — the page holds one copy of the note record and hands it
+  to both the search index and the *Private notes* section, so the two cannot
+  drift.
+
+### Changed
+
+- **The Private notes hint tells the truth again.** It still said the notes were
+  kept *in this browser*; they have lived on your server since 1.49.0. It now
+  says so, and mentions that the search box finds them.
+
 ## [1.50.5] — 2026-11-03
 
 ### Fixed
