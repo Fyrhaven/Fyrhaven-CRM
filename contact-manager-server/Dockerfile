@@ -7,7 +7,10 @@
 FROM node:24-alpine
 
 WORKDIR /app
-COPY package.json server.js ./
+COPY package.json server.js accounts.js ./
+
+# The signup/ordering site (#148) is static files, served by the store itself.
+COPY site ./site
 
 # The database lives on a volume, never in an image layer.
 ENV PORT=8080 \

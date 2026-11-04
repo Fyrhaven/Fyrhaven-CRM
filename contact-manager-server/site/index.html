@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact Manager Cloud</title>
+  <link rel="stylesheet" href="/site.css">
+</head>
+<body>
+  <header>
+    <strong>Contact Manager Cloud</strong>
+    <nav>
+      <button data-view="signup" type="button">Create an account</button>
+      <button data-view="login" type="button">Sign in</button>
+      <button data-view="account" type="button" hidden>Your account</button>
+      <button data-view="signout" type="button" hidden>Sign out</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="intro">
+      <h1>Your contact records, on a server that is not your browser</h1>
+      <p>
+        The Contact Manager plugin keeps projects, private notes, consent records
+        and its change history as <em>records</em>. They can live on your own mail
+        server — or here, so they follow you between devices and can be shared
+        with the people you work with.
+      </p>
+      <p class="muted">
+        This is the same service your plugin talks to. Your workspace token is a
+        password to it: never paste it anywhere else.
+      </p>
+    </section>
+
+    <section id="signup" hidden>
+      <h2>Create an account</h2>
+      <p class="muted">A trial starts immediately. No card is taken here.</p>
+      <form data-form="signup">
+        <label>Email <input name="email" type="email" autocomplete="username" required></label>
+        <label>Password <input name="password" type="password" autocomplete="new-password" minlength="10" required></label>
+        <button type="submit">Start the trial</button>
+      </form>
+    </section>
+
+    <section id="login" hidden>
+      <h2>Sign in</h2>
+      <form data-form="login">
+        <label>Email <input name="email" type="email" autocomplete="username" required></label>
+        <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section id="account" hidden>
+      <h2>Your account</h2>
+      <dl>
+        <dt>Email</dt><dd data-field="email">—</dd>
+        <dt>Plan</dt><dd data-field="plan">—</dd>
+        <dt>Runs until</dt><dd data-field="expires">—</dd>
+        <dt>Records</dt><dd data-field="usage">—</dd>
+      </dl>
+      <p id="order-note" class="muted" hidden></p>
+      <div class="actions">
+        <button data-action="order" type="button">Order the cloud plan</button>
+        <button data-action="token" type="button">Show my workspace token</button>
+        <button data-action="delete" type="button" class="danger">Delete my account and data</button>
+      </div>
+      <pre id="token" hidden></pre>
+    </section>
+
+    <p id="status" role="status" class="status"></p>
+  </main>
+
+  <footer>
+    <p class="muted">
+      This service holds your records encrypted at rest with a key it keeps; the
+      operator can read them. What that means is in the service README.
+    </p>
+  </footer>
+
+  <script src="/site.js" type="module"></script>
+</body>
+</html>
