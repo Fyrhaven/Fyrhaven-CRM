@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import {
-  CREDENTIAL_ID, REMOTE_CREDENTIAL_KEY, REMOTE_URL_KEY, callServer, connectServer, disconnectServer,
-  normalizeServerUrl, readRemoteUrl, readServerState, serverVersion, writeRemoteUrl,
+  CLOUD_ORIGIN, CREDENTIAL_ID, REMOTE_CREDENTIAL_KEY, REMOTE_MODE_KEY, REMOTE_URL_KEY, accountInfo,
+  callServer, connectServer, disconnectServer, normalizeServerUrl, readRemoteUrl, readServerMode,
+  readServerState, serverVersion, writeRemoteUrl, writeServerMode,
 } from '../src/lib/remote.js';
 
 const api = (handlers = {}) => fakeApi({ handlers });
@@ -131,12 +132,12 @@ describe('connecting the host-held credential (#68)', () => {
 
   it('reports what the plugin is pointed at, and whether it could be', async () => {
     const subject = api();
-    expect(await readServerState(subject)).toEqual({ url: '', credentialId: '', canConnect: true });
+    expect(await readServerState(subject)).toMatchObject({ url: '', credentialId: '', canConnect: true, mode: 'self' });
 
     await subject.storage.set(REMOTE_URL_KEY, 'https://crm.example.com');
     await subject.storage.set(REMOTE_CREDENTIAL_KEY, 'store');
     expect(await readServerState(subject))
-      .toEqual({ url: 'https://crm.example.com', credentialId: 'store', canConnect: true });
+      .toMatchObject({ url: 'https://crm.example.com', credentialId: 'store', canConnect: true });
 
     const old = fakeApi({ host: { exposes: { proxy: ['fetch'] } } });
     expect((await readServerState(old)).canConnect).toBe(false);
@@ -158,5 +159,73 @@ describe('connecting the host-held credential (#68)', () => {
     expect(normalizeServerUrl('crm.example.com/')).toBe('https://crm.example.com');
     expect(normalizeServerUrl('https://crm.example.com')).toBe('https://crm.example.com');
     expect(normalizeServerUrl('  ')).toBe('');
+  });
+});
+
+
+describe('the two ways in: cloud and self-hosted (#147)', () => {
+  const api = (handlers = {}) => fakeApi({
+    handlers: {
+      'proxy.connect': async () => ({ connected: true, origin: CLOUD_ORIGIN, credentialId: 'store' }),
+      'proxy.fetch': async () => ({ status: 200, ok: true, headers: {}, body: '{"plan":"cloud","entitled":true}' }),
+      ...handlers,
+    },
+  });
+
+  it('defaults to a server of your own', async () => {
+    const subject = api();
+    expect(await readServerMode(subject)).toBe('self');
+    expect((await readServerState(subject)).mode).toBe('self');
+  });
+
+  it('remembers the mode, and ignores a value it does not know', async () => {
+    const subject = api();
+    expect(await writeServerMode(subject, 'cloud')).toBe('cloud');
+    expect(subject.storageSnapshot()[REMOTE_MODE_KEY]).toBe('cloud');
+    expect(await writeServerMode(subject, 'nonsense')).toBe('self');
+    expect(await readServerMode(subject)).toBe('self');
+  });
+
+  it('sends a cloud sign-in to the fixed service, whatever the field held', async () => {
+    const subject = api();
+
+    await connectServer(subject, 'https://someone-elses.example', { mode: 'cloud' });
+
+    // the address is the service's, not the one in a stale input
+    expect(subject.calls('proxy.connect')[0].args)
+      .toEqual([CREDENTIAL_ID, { mode: 'password', server: CLOUD_ORIGIN }]);
+    expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBe(CLOUD_ORIGIN);
+  });
+
+  it('sends a self-hosted connect to the address the user typed', async () => {
+    const subject = api();
+    await connectServer(subject, 'box.example', { mode: 'self' });
+    expect(subject.calls('proxy.connect')[0].args)
+      .toEqual([CREDENTIAL_ID, { mode: 'password', server: 'https://box.example' }]);
+  });
+
+  it('reads the plan the server reports, and never guesses it', async () => {
+    const subject = api({
+      'proxy.fetch': async () => ({
+        status: 200,
+        ok: true,
+        headers: {},
+        body: '{"plan":"trial","entitled":false,"expiresAt":"2026-01-02T00:00:00Z","account":{"email":"a@b.se"},"licences":[{"key":"CM-AAAA"}]}',
+      }),
+    });
+    await writeRemoteUrl(subject, 'https://crm.example');
+
+    expect(await accountInfo(subject)).toMatchObject({
+      status: 'ok', plan: 'trial', entitled: false, email: 'a@b.se', expiresAt: '2026-01-02T00:00:00Z',
+    });
+    expect((await accountInfo(subject)).licences).toHaveLength(1);
+  });
+
+  it('reports an unconfigured server and a broken answer as answers, not throws', async () => {
+    expect((await accountInfo(fakeApi({}))).status).toBe('unconfigured');
+
+    const broken = api({ 'proxy.fetch': async () => ({ status: 200, ok: true, headers: {}, body: 'nope' }) });
+    await writeRemoteUrl(broken, 'https://crm.example');
+    expect((await accountInfo(broken)).status).toBe('failed');
   });
 });

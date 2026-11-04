@@ -47,7 +47,7 @@ describe('the cloud server dialog', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en()['server.connect'] })); });
 
     // a choice, not a write: the funnel in actions.js does the connecting
-    expect(calls).toEqual([{ connect: { url: 'crm.mailz.se' } }]);
+    expect(calls).toEqual([{ connect: { url: 'crm.mailz.se', mode: 'self' } }]);
   });
 
   it('offers the address it is already pointed at, and a way to forget it', async () => {
@@ -87,8 +87,12 @@ describe('opening it from the palette', () => {
     expect(api.calls('proxy.connect')[0].args).toEqual(['store', { mode: 'password', server: 'https://crm.mailz.se' }]);
     expect(api.storageSnapshot()[REMOTE_URL_KEY]).toBe('https://crm.mailz.se');
     expect(api.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBe('store');
+    // the mode is remembered, so the dialog opens where the user left it
+    expect(api.storageSnapshot().remoteMode).toBe('self');
     expect(api.calls('toast.success').map((call) => call.args[0]))
-      .toEqual(['Connected to https://crm.mailz.se.', 'Server 1.0.0 answered.']);
+      .toEqual(['Connected to https://crm.mailz.se.']);
+    // and the plan is asked for, not assumed
+    expect(api.calls('proxy.fetch')).toHaveLength(1);
   });
 
   it('stores nothing and says why when the host refused', async () => {
@@ -133,7 +137,8 @@ describe('opening it from the palette', () => {
 
     await openServer(api);
 
-    expect(seen[0].extraProps.serverEditor.state)
-      .toEqual({ url: 'https://crm.mailz.se', credentialId: '', canConnect: true });
+    expect(seen[0].extraProps.serverEditor.state).toMatchObject({
+      url: 'https://crm.mailz.se', credentialId: '', canConnect: true, mode: 'self',
+    });
   });
 });

@@ -6,8 +6,8 @@
 > for changing the code are in [`.clinerules`](../.clinerules).
 
 ## Current State
-- **Version**: 1.53.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: a project now says **where it lives**, and you choose (#68) — `storage: personal` is the user's own Files drive (*only you* can open it) and `storage: cloud` is the Contact Manager server (shared with the workspace); the project dialog asks when both are configured, the list row and the project card carry a badge (*Only you* / *Shared*) and the sentence behind it, and the record is read from **both** servers and merged, so moving one rewrites both halves. The storage seam grew an explicit target (`readAs`/`writeAs`/`removeAs`) that reports unavailable rather than quietly using the other server — a record the user placed somewhere must never turn up somewhere else. On top of 1.52.0 — pointing the plugin at a dedicated server (#68, connect half) — and 1.51.0, the Contacts search finding the private notes (#38).
+- **Version**: 1.54.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: the server settings now ask **which** server (#147) — *Dedicated server* opens with two ways in: **Cloud** (fixed address, a *Sign in* button, the token from the website) or **my own server** (type the address); the choice is remembered, a cloud sign-in can never be sent to a stale address, and `GET /v1/account` is asked afterwards so a lapsed plan says so instead of failing at the first save. On top of 1.53.0 — a project says where it lives.
 - **Cloud store deployed (2026-11-04)**: the service in
   `contact-manager-server/` now runs on the maintainer's mail host as the compose
   project **`contact-manager-store`** — image built from this repository, on the

@@ -80,7 +80,7 @@ describe('built plugin', () => {
         { id: 'smart-lists', label: 'Smart lists', icon: 'filter' },
         { id: 'help', label: 'Help', icon: 'book-user' },
         { id: 'check-server', label: 'Check the server', icon: 'cloud' },
-        { id: 'cloud-server', label: 'Cloud server…', icon: 'cloud' },
+        { id: 'cloud-server', label: 'Dedicated server…', icon: 'cloud' },
       ]);
     expect(api.calls('ui.setActions')[1].args[1])
       .toEqual([{ id: 'scan-selection', label: 'Find duplicates in selection', icon: 'copy' }]);
