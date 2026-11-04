@@ -1,6 +1,6 @@
-# Contact Manager — a Bulwark Mail plugin
+# Fyrhaven CRM — a Bulwark Mail plugin
 
-Find, review and merge **duplicate contacts** across all address books, drawn
+Fyrhaven CRM — find, review and merge **duplicate contacts** across all address books, drawn
 entirely with Bulwark's own UI kit so it looks like part of the app. It is
 meant to grow into a general contact-management addon.
 

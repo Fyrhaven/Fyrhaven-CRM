@@ -1,4 +1,4 @@
-# Handoff - Contact Manager Plugin
+# Handoff — Fyrhaven CRM
 
 > The authoritative record of where this plugin stands and why. It lives in the
 > repository at `contact-manager/HANDOFF.md` and is published on GitHub on the
@@ -6,8 +6,8 @@
 > for changing the code are in [`.clinerules`](../.clinerules).
 
 ## Current State
-- **Version**: 1.54.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: the server settings now ask **which** server (#147) — *Dedicated server* opens with two ways in: **Cloud** (fixed address, a *Sign in* button, the token from the website) or **my own server** (type the address); the choice is remembered, a cloud sign-in can never be sent to a stale address, and `GET /v1/account` is asked afterwards so a lapsed plan says so instead of failing at the first save. On top of 1.53.0 — a project says where it lives.
+- **Version**: 1.55.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: **renamed to Fyrhaven CRM** (display name, docs, GitHub) — the plugin id, storage keys and ZIP names are unchanged, so an existing install updates in place; the id/tag/folder rename is a separate mechanical change. Before that: the server settings ask **which** server (#147) — *Dedicated server* opens with two ways in: **Cloud** (fixed address, a *Sign in* button, the token from the website) or **my own server** (type the address); the choice is remembered, a cloud sign-in can never be sent to a stale address, and `GET /v1/account` is asked afterwards so a lapsed plan says so instead of failing at the first save. On top of 1.53.0 — a project says where it lives.
 - **Cloud store deployed (2026-11-04)**: the service in
   `contact-manager-server/` now runs on the maintainer's mail host as the compose
   project **`contact-manager-store`** — image built from this repository, on the
