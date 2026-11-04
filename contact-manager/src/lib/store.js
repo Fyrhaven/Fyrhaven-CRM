@@ -43,7 +43,7 @@ export const RECORD_KEYS = new Set([
 /** View state, and the server's own address: these stay local. */
 export const VIEW_KEYS = new Set([
   'onboarding', 'undoBatches', 'lastCleanup',
-  'remoteUrl', 'remoteCredentialId',
+  'remoteUrl', 'remoteCredentialId', 'remoteMode',
 ]);
 
 export const isRecord = (key) => RECORD_KEYS.has(key);

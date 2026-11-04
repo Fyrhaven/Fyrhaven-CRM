@@ -7,6 +7,26 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.54.0] — 2026-11-04
+
+### Added
+
+- **The server settings now ask *which* server, not just where (#147).** The
+  dialog is *Dedicated server* and offers two ways in: **Contact Manager Cloud**
+  — the service, with a fixed address that is shown as a fact and never as an
+  editable field, and a *Sign in* button — or **my own server**, where you type
+  the address. The choice is remembered, so the dialog opens where you left it.
+- **Connected is not the same as entitled.** After a successful connect the plugin
+  asks `GET /v1/account` and reports the plan and its expiry; a lapsed plan says
+  so ("records can be read, not written") instead of failing at the first save,
+  and an installer token is reported as unlimited.
+
+### Notes
+
+The cloud address is in `remote.js` (`CLOUD_ORIGIN`) and is not read from storage:
+pointing a subscriber at someone else's server is a support call nobody wants. A
+self-hosted install keeps typing its own address, exactly as before.
+
 ## [1.53.0] — 2026-11-04
 
 ### Added
