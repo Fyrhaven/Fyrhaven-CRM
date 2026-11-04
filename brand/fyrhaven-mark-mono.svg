@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Fyrhaven (mono)">
+  <title>Fyrhaven — single colour</title>
+  <!-- One colour, `currentColor`, for stamps, invoices, embossing and any place
+       a second ink would be a cost. The beam is a gap, not a tint. -->
+  <g fill="currentColor">
+    <polygon points="35,19.5 63,10 63,29 35,23" opacity="0.35"/>
+    <ellipse cx="31" cy="53.5" rx="17" ry="3.4"/>
+    <polygon points="25.6,51 29.2,27 34.8,27 38.4,51"/>
+    <rect x="24.6" y="24.6" width="14.8" height="2.6" rx="1.1"/>
+    <rect x="28.6" y="19.4" width="6.8" height="5.4"/>
+    <polygon points="27.4,19.4 32,14.4 36.6,19.4"/>
+  </g>
+  <!-- the two bands are cut out of the tower, so the silhouette stays whole -->
+  <g fill="#000" opacity="0">
+    <polygon points="29.9,31.5 34.1,31.5 34.5,36.5 29.5,36.5"/>
+    <polygon points="29,40 35,40 35.5,45.5 28.5,45.5"/>
+  </g>
+</svg>

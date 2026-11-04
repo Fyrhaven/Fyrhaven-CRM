@@ -2,7 +2,17 @@
    Deliberately plain: it is served by the store itself, so it must stay small
    enough to read in one sitting and must not need a build step. */
 
-:root { color-scheme: light dark; --muted: #6b7280; --line: #d7dae0; --acc: #2563eb; }
+:root {
+  color-scheme: light dark;
+  /* Fyrhaven palette: two neutrals, one signal colour, one light. */
+  --ink: #0E2233;
+  --paper: #F7F9FA;
+  --line: #d7dae0;
+  --muted: #5B7382;
+  --acc: #0E2233;
+  --signal: #C8453B;
+  --beam: #F2B441;
+}
 * { box-sizing: border-box; }
 body { margin: 0; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; color: #111; }
 header { display: flex; gap: 16px; align-items: center; justify-content: space-between;
@@ -46,3 +56,11 @@ code { background: #f4f5f7; padding: 1px 5px; border-radius: 4px; }
 .grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; max-width: none; }
 .grid label { font-size: .88rem; }
 .grid button { grid-column: 1 / -1; justify-self: start; }
+
+header strong { letter-spacing: -0.2px; }
+header strong::before {
+  content: ''; display: inline-block; width: 18px; height: 18px; margin-right: 8px;
+  vertical-align: -4px; border-radius: 5px;
+  background: var(--ink) url('/favicon.svg') center / cover no-repeat;
+}
+footer a { color: var(--acc); }

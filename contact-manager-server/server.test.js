@@ -354,7 +354,7 @@ describe('accounts, sessions and the site (#148)', () => {
 
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type'), /text\/html/);
-    assert.match(body, /Contact Manager Cloud/);
+    assert.match(body, /Fyrhaven/);
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   });
 
