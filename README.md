@@ -1,12 +1,13 @@
-# Bulwark Mail plugins
+# Fyrhaven — Bulwark Mail plugins
 
 Plugins for [Bulwark Mail](https://github.com/zyntrax/bulwark) — the webmail
 built on Stalwart. Each plugin is published here with its **source** and its
 **build script**; installable ZIPs are attached to
 [GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases).
 
-This repository also carries the **cloud store** the Contact Manager plugin's
-records live on. A record the plugin invents cannot live in a browser and the
+The flagship plugin here is **Fyrhaven CRM** — contacts, companies, projects and
+time for Bulwark Mail (it began as a duplicate finder and outgrew the name). This
+repository also carries the **record server** those records live on. A record the plugin invents cannot live in a browser and the
 webmail host has nowhere to put it, so it lives on a small dedicated service —
 see [`contact-manager-server/`](contact-manager-server/) and issue
 [#68](https://github.com/zyntrax/bulwark-plugins/issues/68).

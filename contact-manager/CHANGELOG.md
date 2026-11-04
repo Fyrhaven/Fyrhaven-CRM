@@ -7,6 +7,20 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.55.0] — 2026-11-04
+
+### Changed
+
+- **The plugin is now Fyrhaven CRM.** The name a host and a user see, the docs and
+  the GitHub project all say it, and the description says what it became: contacts,
+  companies, projects and time — not just a duplicate remover. The icon is the
+  lighthouse mark from `brand/`: the beam is what makes it readable at 16 px, the
+  stripes live in the lockup where there is room for them.
+- **Nothing to migrate.** The plugin id, the storage keys and the ZIP/tag names are
+  unchanged, so the update lands in place and every record stays where it is. The
+  id/tag/folder rename (`contact-manager` → `fyrhaven-crm`) is a separate,
+  mechanical change with its own release.
+
 ## [1.54.0] — 2026-11-04
 
 ### Added
