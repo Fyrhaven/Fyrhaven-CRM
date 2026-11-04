@@ -28,6 +28,13 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
+import {
+  accountOps, accountWorkspace, DEFAULT_TRIAL_DAYS, openAccountTables, SESSION_DAYS,
+} from './accounts.js';
+
 
 export const VERSION = '1.0.0';
 
@@ -153,6 +160,9 @@ export function openStore(path = ':memory:') {
       created     TEXT NOT NULL
     );
   `);
+  // Accounts and sessions (#148). Safe on an existing database: every statement
+  // is IF NOT EXISTS, so a store that predates accounts opens unchanged.
+  openAccountTables(db);
   return db;
 }
 
@@ -233,6 +243,24 @@ export function storeOps(db, keys) {
 
 // ── HTTP ────────────────────────────────────────────────────────
 
+/** The pages the service itself serves (#148). No build step, no bundler. */
+const SITE_FILES = { '/': 'index.html', '/index.html': 'index.html', '/site.js': 'site.js', '/site.css': 'site.css' };
+const SITE_TYPES = {
+  'index.html': 'text/html; charset=utf-8',
+  'site.js': 'text/javascript; charset=utf-8',
+  'site.css': 'text/css; charset=utf-8',
+};
+const SITE_DIR = fileURLToPath(new URL('./site/', import.meta.url));
+
+/** One file from `site/`, or null. Names come from SITE_FILES, never the URL. */
+async function siteFile(name) {
+  try {
+    return await readFile(new URL(name, `file://${SITE_DIR}`), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
 const send = (res, status, body) => {
   const text = JSON.stringify(body);
   res.writeHead(status, {
@@ -274,17 +302,64 @@ function readBody(req, limit = MAX_VALUE_BYTES + 4096) {
  * server* has to answer before a credential is configured, and neither reveals
  * anything but a version string. Everything under `/v1/store` needs a token.
  */
-export function createRequestHandler(db, { tokens = new Map(), keys, allowQueryToken = false } = {}) {
+export function createRequestHandler(db, {
+  tokens = new Map(), keys, allowQueryToken = false, accounts = null, trialDays = DEFAULT_TRIAL_DAYS,
+  requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
+} = {}) {
   const ops = storeOps(db, keys);
+  const people = accounts ?? accountOps(db, { trialDays });
 
-  /** The workspace a request belongs to, matched in constant time. */
-  const workspaceOf = (req, url) => {
+  /**
+   * Who is asking, and what they may do (#148).
+   *
+   * Two kinds of caller live side by side: an **installer's token** from
+   * `STORE_TOKENS`, which is a workspace and always entitled, and an **account
+   * session**, whose workspace is derived from the account and whose entitlement
+   * is its plan. Legacy tokens keep working exactly as before — an existing
+   * install notices nothing.
+   */
+  const authenticate = (req, url) => {
     const presented = tokenOf(req, url, { allowQueryToken });
-    if (!presented) return undefined;
+    if (!presented) return null;
     for (const [token, workspace] of tokens) {
-      if (sameToken(token, presented)) return workspace;
+      if (sameToken(token, presented)) {
+        return { workspace, account: null, token: presented, plan: 'installer', expiresAt: '', entitled: true };
+      }
     }
-    return undefined;
+    const account = people.sessionAccount(presented, now());
+    if (!account) return null;
+    const view = people.view(account, now());
+    return {
+      workspace: accountWorkspace(account.id),
+      account: view,
+      token: presented,
+      plan: view.plan,
+      expiresAt: view.expiresAt,
+      // A trial or a subscription that has run out may still READ — so the user
+      // can export what is theirs — but cannot write.
+      entitled: !view.overdue,
+    };
+  };
+
+  /** Records and bytes a workspace holds — the usage line and the quota. */
+  const usageOf = (workspace) => {
+    const row = db.prepare('SELECT COUNT(*) AS records, COALESCE(SUM(LENGTH(value)), 0) AS bytes FROM records WHERE workspace = ?')
+      .get(workspace);
+    return { records: Number(row.records ?? 0), bytes: Number(row.bytes ?? 0), maxRecords, maxBytes };
+  };
+
+  // One bucket per token, refilled every minute. Cheap, in memory, and enough to
+  // stop a script; the host's own proxy also rate-limits.
+  const buckets = new Map();
+  const tooMany = (who) => {
+    const minute = Math.floor(now() / 60_000);
+    const entry = buckets.get(who);
+    if (!entry || entry.minute !== minute) {
+      buckets.set(who, { minute, count: 1 });
+      return false;
+    }
+    entry.count += 1;
+    return entry.count > requestsPerMinute;
   };
 
   return async function handle(req, res) {
@@ -301,9 +376,99 @@ export function createRequestHandler(db, { tokens = new Map(), keys, allowQueryT
       return send(res, 200, { ok: true, version: VERSION });
     }
 
-    const workspace = workspaceOf(req, url);
-    if (!workspace) return send(res, 401, { error: 'unauthorized' });
+    // The site (#148): the page a customer signs up and orders on. Static files,
+    // no build step, served by the same container as the API.
+    if (method === 'GET' && SITE_FILES[path]) {
+      const body = await siteFile(SITE_FILES[path]);
+      if (body === null) return send(res, 404, { error: 'not found' });
+      res.writeHead(200, {
+        'content-type': SITE_TYPES[SITE_FILES[path]],
+        'content-length': Buffer.byteLength(body),
+        'cache-control': 'no-cache',
+        'x-content-type-options': 'nosniff',
+      });
+      return res.end(body);
+    }
 
+    const client = req.socket?.remoteAddress ?? 'unknown';
+    const body = async () => {
+      const raw = await readBody(req);
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    };
+
+    // ── Open endpoints: sign up, sign in ────────────────────────────────
+    if (method === 'POST' && (path === '/v1/accounts' || path === '/v1/sessions')) {
+      if (tooMany(`open:${client}`)) return send(res, 429, { error: 'too many requests' });
+      const payload = await body();
+      if (!payload || typeof payload !== 'object') return send(res, 400, { error: 'body is not JSON' });
+
+      if (path === '/v1/accounts') {
+        const answer = await people.signup({ email: payload.email, password: payload.password, now: now() });
+        if (answer.status === 'invalid-email') return send(res, 400, { error: 'that email address is not valid' });
+        if (answer.status === 'too-short') return send(res, 400, { error: 'the password needs at least 10 characters' });
+        if (answer.status === 'too-long') return send(res, 400, { error: 'the password is too long' });
+        if (answer.status === 'exists') return send(res, 409, { error: 'that email already has an account' });
+        return send(res, 201, { ok: true, token: answer.token, account: answer.account });
+      }
+
+      const answer = await people.login({ email: payload.email, password: payload.password, now: now() });
+      if (answer.status !== 'ok') return send(res, 401, { error: 'email or password is wrong' });
+      return send(res, 200, { ok: true, token: answer.token, account: answer.account });
+    }
+
+    // ── Everything below needs a token ─────────────────────────────────
+    const who = authenticate(req, url);
+    if (!who) return send(res, 401, { error: 'unauthorized' });
+    if (tooMany(who.token)) return send(res, 429, { error: 'too many requests' });
+
+    if (path === '/v1/account') {
+      if (method === 'GET') {
+        return send(res, 200, {
+          ok: true,
+          workspace: who.workspace,
+          plan: who.plan,
+          expiresAt: who.expiresAt,
+          entitled: who.entitled,
+          account: who.account,
+          usage: usageOf(who.workspace),
+        });
+      }
+      // Leaving: the account, its sessions, its orders, its records and the
+      // wrapped key all go. Without the key the rows are unreadable, which is
+      // what makes this an erasure rather than a flag.
+      if (method === 'DELETE') {
+        if (!who.account) return send(res, 409, { error: 'an installer token has no account' });
+        const workspace = who.workspace;
+        people.deleteAccount(who.account.id);
+        db.prepare('DELETE FROM records WHERE workspace = ?').run(workspace);
+        db.prepare('DELETE FROM workspaces WHERE workspace = ?').run(workspace);
+        return send(res, 200, { ok: true, deleted: true });
+      }
+      return send(res, 405, { error: 'method not allowed' });
+    }
+
+    if (path === '/v1/account/order') {
+      if (method !== 'POST') return send(res, 405, { error: 'method not allowed' });
+      if (!who.account) return send(res, 409, { error: 'an installer token has no account' });
+      const payload = (await body()) ?? {};
+      const order = people.placeOrder(who.account.id, payload.plan ?? 'cloud', now());
+      return send(res, 202, { ok: true, order, note: 'pending — an invoice follows' });
+    }
+
+    if (path === '/v1/sessions' && method === 'DELETE') {
+      people.logout(who.token);
+      return send(res, 200, { ok: true });
+    }
+
+    // A trial or subscription that has run out may read (so the user can export
+    // what is theirs) but not write. 402 says "not paid", not "not allowed".
+    const mayWrite = who.entitled;
+
+    const workspace = who.workspace;
     const scope = String(url.searchParams.get('scope') ?? '').trim() || DEFAULT_SCOPE;
 
     try {
@@ -329,6 +494,10 @@ export function createRequestHandler(db, { tokens = new Map(), keys, allowQueryT
         return send(res, 200, { key, value, revision: ops.revision() });
       }
 
+      if (!mayWrite) {
+        return send(res, 402, { error: 'no active subscription', plan: who.plan, expiresAt: who.expiresAt });
+      }
+
       if (method === 'PUT') {
         const raw = await readBody(req);
         let parsed;
@@ -341,7 +510,20 @@ export function createRequestHandler(db, { tokens = new Map(), keys, allowQueryT
           return send(res, 400, { error: 'body needs a value' });
         }
         const encoded = JSON.stringify(parsed.value);
-        if (Buffer.byteLength(encoded) > MAX_VALUE_BYTES) return send(res, 413, { error: 'too large' });
+        const size = Buffer.byteLength(encoded);
+        if (size > MAX_VALUE_BYTES) return send(res, 413, { error: 'too large' });
+
+        // Quota: a workspace has a record count and a byte budget, so one
+        // account cannot fill the disk. Rewriting a record only costs the delta.
+        const usage = usageOf(workspace);
+        const previous = ops.get(workspace, scope, key);
+        const previousBytes = previous === null ? 0 : Buffer.byteLength(JSON.stringify(previous));
+        if (previous === null && usage.records >= maxRecords) {
+          return send(res, 409, { error: 'record limit reached', usage });
+        }
+        if (usage.bytes - previousBytes + size > maxBytes) {
+          return send(res, 409, { error: 'storage limit reached', usage });
+        }
         return send(res, 200, { revision: ops.put(workspace, scope, key, parsed.value) });
       }
 
@@ -359,11 +541,14 @@ export function createRequestHandler(db, { tokens = new Map(), keys, allowQueryT
 }
 
 /** A listening server over its own database, for `main` and for the tests. */
-export function createStoreServer({ dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false } = {}) {
+export function createStoreServer({
+  dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false,
+  trialDays = DEFAULT_TRIAL_DAYS, now,
+} = {}) {
   const db = openStore(dbPath);
   const tokens = parseTokens(tokenList);
   const keys = workspaceKeys(db, masterKey);
-  const server = createHttpServer(createRequestHandler(db, { tokens, keys, allowQueryToken }));
+  const server = createHttpServer(createRequestHandler(db, { tokens, keys, allowQueryToken, trialDays, now }));
   server.on('close', () => {
     try {
       db.close();
@@ -396,7 +581,13 @@ if (isMain) {
   if (allowQueryToken) {
     console.warn('ALLOW_QUERY_TOKEN=1 — tokens may appear in URLs and therefore in logs. Prefer a header.');
   }
-  const { server, tokens } = createStoreServer({ dbPath, tokenList, masterKey, allowQueryToken });
+  // A trial length of 0 turns the trial off: a new account then has to be put
+  // on a plan before it can write anything.
+  const trialDays = Number(process.env.STORE_TRIAL_DAYS ?? DEFAULT_TRIAL_DAYS);
+  const { server, tokens } = createStoreServer({
+    dbPath, tokenList, masterKey, allowQueryToken,
+    trialDays: Number.isFinite(trialDays) && trialDays >= 0 ? trialDays : DEFAULT_TRIAL_DAYS,
+  });
   server.listen(port, () => {
     console.log(`contact-manager-store v${VERSION} listening on :${port} — ${tokens.size} token(s), db ${dbPath}, values encrypted at rest`);
   });

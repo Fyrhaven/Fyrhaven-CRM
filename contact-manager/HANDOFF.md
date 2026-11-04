@@ -31,7 +31,8 @@
   page**: its API needs an admin token, so it is a compose project the CLI owns;
   the folder's README lists the two steps (bring it down, paste the image-only
   definition) that hand it over.
-- **Released**: `contact-manager-v1.52.0` is the newest GitHub release; v1.51.0,
+- **Cloud store 1.1.0 (2026-11-04)**: accounts, sessions and the signup site (#148) — `accounts.js` adds `POST /v1/accounts`, `POST /v1/sessions`, `GET /v1/account` (plan, expiry, usage), `POST /v1/account/order` (202, pending) and `DELETE /v1/account`; passwords are scrypt hashes, a session is a random token stored **hashed**, a lapsed plan can still read but every write is `402`, and 240 req/min plus 5 000 records / 64 MiB per workspace are enforced. The site (`site/`) is served by the same container, so there is no second service. A `STORE_TOKENS` entry stays an installer token — unlimited, never expiring, unchanged. Deployed and verified live on `https://crm.mailz.se` (signup → write → `/v1/account` → delete → `401`). Not wired: email verification (no SMTP); payment is an invoice or webhook that calls `setPlan`. Server tests 35 (was 21).
+- **Released**: `contact-manager-v1.53.0` is the newest GitHub release; v1.52.0, v1.51.0,
   v1.50.5,
   v1.50.4, v1.50.3, v1.50.2, v1.50.1 and v1.50.0 were cut from `main` before it,
   and every release from v1.5.0 up has a tag and a ZIP. `main` and `contact-manager` are
@@ -2175,7 +2176,7 @@ timer hook. v1.4.0 is complete except **#18**, which needs message bodies —
   plugin is at v1.43.0), so read them as phases and read each description for
   what has shipped and what remains.
 - **Releases**: tagged `contact-manager-vX.Y.Z`; installable ZIPs are the
-  release assets. The newest release is `contact-manager-v1.52.0`.
+  release assets. The newest release is `contact-manager-v1.53.0`.
 - **Cutting a release**: merge the feature PR(s) into `main`, keep
   `contact-manager` in step, bump `manifest.json`/`package.json` + `CHANGELOG.md`
   on `main`, then run `npm run release` — it tags, pushes the tag and uploads

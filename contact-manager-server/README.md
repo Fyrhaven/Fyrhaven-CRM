@@ -52,6 +52,7 @@ not come up.
 | `CRM_DOMAIN` | *(required)* | The public hostname Caddy gets a certificate for. |
 | `PORT` | `8080` | What the store listens on, inside the network. |
 | `STORE_DB` | `/data/store.sqlite` | The SQLite file. Put it on a volume. |
+| `STORE_TRIAL_DAYS` | `14` | Days a new account may write before a plan is paid for. `0` turns the trial off. |
 | `ALLOW_QUERY_TOKEN` | *(unset)* | `1` accepts `?token=` as well as the header. Off because a token in a URL leaks into logs. |
 
 ```bash
@@ -97,6 +98,46 @@ and timestamps. Not their contents.
 malicious plugin update. Encryption protects data at rest and in transit; it does
 not protect a machine that is already owned.
 
+## Accounts, subscriptions and the site (#148)
+
+A token in `STORE_TOKENS` is an **installer token**: it is a workspace, it never
+expires, and it is how the owner's own install talks to its own store. Everything
+below is the other kind of caller — a customer.
+
+**Accounts.** `POST /v1/accounts { email, password }` creates one and returns a
+**session token**. Passwords are hashed with scrypt (never stored in the clear),
+sessions are random 256-bit tokens stored **hashed**, and a wrong password and an
+unknown email answer identically and take the same time.
+
+**Plans.** A new account starts a `trial` (14 days by default, `STORE_TRIAL_DAYS`).
+An account whose plan has expired may still **read** — so it can export what is
+its — but every write is refused with `402`. `GET /v1/account` is what the plugin
+asks before it claims a subscription:
+
+```json
+{ "ok": true, "workspace": "acct:…", "plan": "trial", "expiresAt": "…",
+  "entitled": true, "account": { "email": "…" },
+  "usage": { "records": 1, "bytes": 12, "maxRecords": 5000, "maxBytes": 67108864 } }
+```
+
+**Orders.** `POST /v1/account/order { plan: "cloud" }` records a request and
+answers `202` as *pending*. Payment is deliberately not wired: an invoice (or a
+provider webhook calling `setPlan`) is what turns a pending order into a plan.
+
+**Leaving.** `DELETE /v1/account` removes the account, its sessions, its orders,
+its records **and** its wrapped workspace key — without the key the rows are
+unreadable, which is what makes it an erasure and not a flag.
+
+**The site** is served by this same container: `GET /` returns a small sign-up,
+sign-in and account page (`site/`), so there is no second service and no build
+step. It sits behind the same TLS proxy as the API.
+
+**Limits.** 240 requests a minute per token (in memory), 5 000 records and
+64 MiB per workspace (`409` when a write would cross them).
+
+**Not wired yet:** email verification — the flag is recorded and stays `0`,
+because there is no SMTP here. Nothing else depends on it.
+
 ## The protocol
 
 `/health` and `/version` are **open** — the plugin's *Check the server* has to
@@ -104,6 +145,13 @@ answer before a credential is configured, and neither reveals more than a versio
 string. Everything under `/v1/store` needs a token, as
 `Authorization: Bearer <token>` or `?token=<token>` (for a host that cannot set a
 header).
+
+    POST   /v1/accounts     <- { email, password } -> { token, account } | 400 | 409
+    POST   /v1/sessions     <- { email, password } -> { token, account } | 401
+    DELETE /v1/sessions     -> { ok: true }
+    GET    /v1/account      -> { plan, expiresAt, entitled, account, usage }
+    POST   /v1/account/order<- { plan } -> 202 { order } (pending)
+    DELETE /v1/account      -> { ok: true } (account, records and key removed)
 
     GET    /health          -> { ok: true, version }
     GET    /version         -> { ok: true, version }

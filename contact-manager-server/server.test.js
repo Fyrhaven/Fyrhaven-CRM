@@ -303,3 +303,192 @@ describe('the shape of a mistake', () => {
     assert.equal((await call('/v1/store/projects', { method: 'PATCH' })).status, 405);
   });
 });
+
+describe('accounts, sessions and the site (#148)', () => {
+  // A second server, on its own database, so an account test cannot leak into
+  // the store tests above.
+  let own;
+  let ownDb;
+  let url;
+  before(async () => {
+    ({ server: own, db: ownDb } = createStoreServer({
+      tokenList: 'tok-a=acme', masterKey: MASTER, trialDays: 14, now: () => Date.now(),
+    }));
+    await new Promise((resolve) => own.listen(0, '127.0.0.1', resolve));
+    url = `http://127.0.0.1:${own.address().port}`;
+  });
+  after(async () => {
+    own.closeAllConnections?.();
+    await new Promise((resolve) => own.close(resolve));
+  });
+
+  const ask = async (path, { method = 'GET', token, body } = {}) => {
+    const response = await fetch(`${url}${path}`, {
+      method,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    return { status: response.status, payload, headers: response.headers };
+  };
+
+  const signup = (email = 'owner@example.com', password = 'a-long-password') => ask('/v1/accounts', {
+    method: 'POST', body: { email, password },
+  });
+
+  it('serves the signup site itself, as html', async () => {
+    const response = await fetch(`${url}/`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /text\/html/);
+    assert.match(body, /Contact Manager Cloud/);
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  });
+
+  it('serves the site’s css and js, and nothing else from disk', async () => {
+    assert.equal((await fetch(`${url}/site.css`)).status, 200);
+    assert.equal((await fetch(`${url}/site.js`)).status, 200);
+    // the URL never names a file: a traversal cannot even be expressed, and a
+    // path that is not in SITE_FILES falls through to the API's own refusal
+    assert.notEqual((await fetch(`${url}/package.json`)).status, 200);
+    assert.notEqual((await fetch(`${url}/.env`)).status, 200);
+    assert.notEqual((await fetch(`${url}/site/../server.js`)).status, 200);
+  });
+
+  it('creates an account on a trial and hands out a session', async () => {
+    const answer = await signup();
+
+    assert.equal(answer.status, 201);
+    assert.equal(answer.payload.account.plan, 'trial');
+    assert.ok(answer.payload.account.expiresAt);
+    assert.ok(answer.payload.token.length > 20);
+    // the password is never echoed, in any shape
+    assert.doesNotMatch(JSON.stringify(answer.payload), /a-long-password/);
+  });
+
+  it('refuses a second account on the same email', async () => {
+    await signup('twice@example.com');
+    const again = await signup('twice@example.com');
+
+    assert.equal(again.status, 409);
+  });
+
+  it('refuses a short password and a broken address', async () => {
+    assert.equal((await signup('short@example.com', 'short')).status, 400);
+    assert.equal((await signup('not-an-email', 'a-long-password')).status, 400);
+  });
+
+  it('signs in with the right password and refuses the wrong one, identically', async () => {
+    await signup('login@example.com', 'a-long-password');
+
+    const good = await ask('/v1/sessions', { method: 'POST', body: { email: 'login@example.com', password: 'a-long-password' } });
+    assert.equal(good.status, 200);
+    assert.ok(good.payload.token);
+
+    const wrong = await ask('/v1/sessions', { method: 'POST', body: { email: 'login@example.com', password: 'nope-nope-nope' } });
+    const unknown = await ask('/v1/sessions', { method: 'POST', body: { email: 'nobody@example.com', password: 'nope-nope-nope' } });
+    assert.equal(wrong.status, 401);
+    assert.equal(unknown.status, 401);
+    // one message for both, so an account cannot be discovered by signing in
+    assert.deepEqual(wrong.payload, unknown.payload);
+  });
+
+  it('lets a session read and write its own workspace, and nobody else’s', async () => {
+    const { payload } = await signup('writer@example.com');
+    const token = payload.token;
+
+    const put = await ask('/v1/store/projects', { method: 'PUT', token, body: { value: [{ id: 'p1' }] } });
+    assert.equal(put.status, 200);
+    const get = await ask('/v1/store/projects', { token });
+    assert.deepEqual(get.payload.value, [{ id: 'p1' }]);
+
+    // the installer token is a different workspace entirely
+    const other = await ask('/v1/store/projects', { token: 'tok-a' });
+    assert.equal(other.status, 404);
+  });
+
+  it('reports the plan, the expiry and the usage on /v1/account', async () => {
+    const { payload } = await signup('usage@example.com');
+    await ask('/v1/store/projects', { method: 'PUT', token: payload.token, body: { value: { big: 'x'.repeat(100) } } });
+
+    const answer = await ask('/v1/account', { token: payload.token });
+
+    assert.equal(answer.status, 200);
+    assert.equal(answer.payload.plan, 'trial');
+    assert.equal(answer.payload.account.email, 'usage@example.com');
+    assert.equal(answer.payload.usage.records, 1);
+    assert.ok(answer.payload.usage.bytes > 100);
+  });
+
+  it('answers /v1/account for an installer token too, as unlimited', async () => {
+    const answer = await ask('/v1/account', { token: 'tok-a' });
+
+    assert.equal(answer.status, 200);
+    assert.equal(answer.payload.plan, 'installer');
+    assert.equal(answer.payload.entitled, true);
+    assert.equal(answer.payload.account, null);
+  });
+
+  it('reads but refuses to write once the plan has run out', async () => {
+    const { payload } = await signup('expired@example.com');
+    await ask('/v1/store/projects', { method: 'PUT', token: payload.token, body: { value: [{ id: 'p1' }] } });
+
+    // end the plan in the past, then read and write with the same session
+    ownDb.prepare('UPDATE accounts SET expires = ? WHERE email = ?')
+      .run(new Date(Date.now() - 86_400_000).toISOString(), 'expired@example.com');
+
+    const read = await ask('/v1/store/projects', { token: payload.token });
+    assert.equal(read.status, 200, 'a lapsed account can still export what is theirs');
+    assert.deepEqual(read.payload.value, [{ id: 'p1' }]);
+
+    const write = await ask('/v1/store/projects', { method: 'PUT', token: payload.token, body: { value: [] } });
+    assert.equal(write.status, 402);
+    assert.equal(write.payload.error, 'no active subscription');
+
+    const account = await ask('/v1/account', { token: payload.token });
+    assert.equal(account.payload.entitled, false);
+  });
+
+  it('logs out a session, and the token stops working at once', async () => {
+    const { payload } = await signup('bye@example.com');
+    assert.equal((await ask('/v1/account', { token: payload.token })).status, 200);
+
+    assert.equal((await ask('/v1/sessions', { method: 'DELETE', token: payload.token })).status, 200);
+    assert.equal((await ask('/v1/account', { token: payload.token })).status, 401);
+  });
+
+  it('records an order and reports it as pending', async () => {
+    const { payload } = await signup('order@example.com');
+
+    const answer = await ask('/v1/account/order', { method: 'POST', token: payload.token, body: { plan: 'cloud' } });
+
+    assert.equal(answer.status, 202);
+    assert.equal(answer.payload.order.plan, 'cloud');
+    assert.equal(answer.payload.order.status, 'pending');
+  });
+
+  it('deletes an account, its records and its sessions', async () => {
+    const { payload } = await signup('erase@example.com');
+    await ask('/v1/store/projects', { method: 'PUT', token: payload.token, body: { value: [{ id: 'p1' }] } });
+
+    assert.equal((await ask('/v1/account', { method: 'DELETE', token: payload.token })).status, 200);
+    // the session is gone and the rows with it
+    assert.equal((await ask('/v1/account', { token: payload.token })).status, 401);
+    assert.equal((await ask('/v1/sessions', { method: 'POST', body: { email: 'erase@example.com', password: 'a-long-password' } })).status, 401);
+  });
+
+  it('refuses everything without a token', async () => {
+    assert.equal((await ask('/v1/store')).status, 401);
+    assert.equal((await ask('/v1/account')).status, 401);
+    assert.equal((await ask('/v1/account', { method: 'DELETE' })).status, 401);
+  });
+});
