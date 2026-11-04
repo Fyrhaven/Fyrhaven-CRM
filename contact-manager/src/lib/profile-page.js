@@ -30,6 +30,7 @@ import { formatDate, toastMergeResult } from './labels.js';
 import { applyBulkEdit, deleteContacts } from './bulk.js';
 import { contactsToFile } from './export.js';
 import { buildIndex, countsForIndex, isBlankQuery, matchIndexed, parseQuery } from './search.js';
+import { readNotes } from './notes.js';
 import { deleteSaved, readSaved, saveSearch } from './saved-searches.js';
 import { applyNormalisation, readCleanup, readRegion, undoCleanup } from './normalise.js';
 import { applyRulesResult, openRules } from './open-rules.js';
@@ -55,6 +56,9 @@ export function makeProfilePage(React, api) {
     const [saved, setSaved] = useState([]);
     const [cleanup, setCleanup] = useState(null);
     const [roles, setRoles] = useState({}); // per-address-book roles (#23), advisory
+    // The private notes (#38) as one map, read once: the search box and the
+    // Notes section share it, so a note is searchable the moment it is saved.
+    const [noteMap, setNoteMap] = useState({});
     // A handle on the list pane, so the `/` shortcut can reach its search box
     // (#39) without adding a wrapper element to the pane skeleton.
     const listPane = useRef(null);
@@ -65,14 +69,18 @@ export function makeProfilePage(React, api) {
     const load = useCallback(async () => {
       setStatus('loading');
       try {
-        const [list, addressBooks, savedList, cleanupRecord, bookRoles] = await Promise.all([
+        const [list, addressBooks, savedList, cleanupRecord, bookRoles, notes] = await Promise.all([
           loadCards(api), loadBooks(api), readSaved(api), readCleanup(api), readRoles(api),
+          // Notes live on a server (#68); an unavailable store must not stop the
+          // page from drawing, so a failed read is simply "no notes".
+          readNotes(api).catch(() => ({})),
         ]);
         setCards(list);
         setBookList(addressBooks);
         setSaved(savedList);
         setCleanup(cleanupRecord);
         setRoles(bookRoles);
+        setNoteMap(notes ?? {});
         setSelectedId((current) => (list.some((card) => card.id === current) ? current : list[0]?.id ?? ''));
         // A deleted or no-longer-matching contact must not stay selected.
         setPicked((current) => {
@@ -101,8 +109,10 @@ export function makeProfilePage(React, api) {
     const avatarTitle = (card, size) => h('span', { style: ROW_WITH_AVATAR },
       h(Avatar, { avatar: avatarOf(card, size), size }), contactName(card) || card.id);
     const books = useMemo(() => bookNamesById(bookList), [bookList]);
-    // One read of the cards serves the list and every saved-search count.
-    const searchIndex = useMemo(() => buildIndex(cards, { books }), [cards, books]);
+    // One read of the cards serves the list and every saved-search count; the
+    // note map makes a private note searchable exactly where the card's own
+    // notes are (#38), so the box, the chips and the palette agree.
+    const searchIndex = useMemo(() => buildIndex(cards, { books, notes: noteMap }), [cards, books, noteMap]);
     const parsed = useMemo(() => parseQuery(query), [query]);
     const visible = useMemo(
       () => (isBlankQuery(parsed)
@@ -665,7 +675,7 @@ export function makeProfilePage(React, api) {
                       ? h(Text, { tone: 'muted' }, t('profile.noTasks'))
                       : null,
                     ...taskRows()),
-                  h(Notes, { contact: selected, revision }),
+                  h(Notes, { contact: selected, revision, notes: noteMap, onChange: setNoteMap }),
                   context.degraded.length
                     ? h(Text, { tone: 'muted' }, t('profile.degraded', {
                         parts: context.degraded.map((part) => t(`profile.degraded.${part}`)).join(', '),

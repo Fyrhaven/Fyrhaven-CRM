@@ -23,6 +23,13 @@
 // An unknown operator is reported *and* treated as free text, so a typo never
 // silently returns nothing.
 //
+// **A note is a note, wherever it is kept.** `note:` and `has:note` — and free
+// text — see a card's own notes *and* the private notes the plugin keeps about
+// that contact (#38), because a searcher looking for "what did I write about
+// Ada" does not care that one is a card field and the other is a record. The
+// private ones arrive as a `notes` option (`{ [contactId]: [{ text }] }`), so
+// this module stays free of the storage seam and of `api`.
+//
 // **When `OR` or a group is used, `parseQuery` also returns an `ast`** — the
 // expression tree — because a flat AND of every atom cannot express a
 // disjunction. Simple queries keep the old flat shape, so `parsed.terms` and
@@ -213,8 +220,25 @@ function bookTermsOf(card, books) {
     .filter(Boolean);
 }
 
+/**
+ * The private notes about one contact, as plain text (#38).
+ *
+ * They are records of their own — `{ [contactId]: [{ id, at, text }] }` — never
+ * a card field, so they arrive from the caller rather than from the card. This
+ * reader is deliberately tolerant: a missing map, a map without the contact, a
+ * list of strings or a list of records all read as "the note texts", so a
+ * caller that has not loaded them yet simply contributes nothing.
+ */
+function privateNoteTexts(notes, contactId) {
+  const id = text(contactId);
+  if (!id || !notes || typeof notes !== 'object') return [];
+  const list = notes[id];
+  if (!Array.isArray(list)) return [];
+  return list.map((entry) => text(typeof entry === 'string' ? entry : entry?.text)).filter(Boolean);
+}
+
 /** Every text a free-text term may match, lower-cased. */
-function freeTextTerms(card, bookTerms) {
+function freeTextTerms(card, bookTerms, noteTexts) {
   const names = [
     contactName(card),
     ...Object.values(card?.nicknames ?? {}).map((entry) => text(entry?.name)),
@@ -225,6 +249,7 @@ function freeTextTerms(card, bookTerms) {
     ...phoneEntries(card).map((entry) => text(entry.number)),
     ...companyTerms(card),
     ...Object.values(card?.notes ?? {}).map((entry) => text(entry?.note)),
+    ...noteTexts,
     ...Object.keys(card?.keywords ?? {}),
     ...bookTerms,
   ].filter(Boolean).map(lower);
@@ -241,19 +266,26 @@ const hasFuzzyName = (names, needle) => needle.length >= 3
   && names.some((name) => isSubsequence(needle, name));
 
 /** The strings one card is searched by, derived once and reused across queries. */
-function indexEntry(card, books) {
+function indexEntry(card, books, notes) {
   const bookTerms = bookTermsOf(card, books);
+  const noteTexts = privateNoteTexts(notes, card?.id);
   return {
     card,
     names: [
       contactName(card),
       ...Object.values(card?.nicknames ?? {}).map((entry) => text(entry?.name)),
     ].filter(Boolean).map(lower),
-    free: freeTextTerms(card, bookTerms),
+    free: freeTextTerms(card, bookTerms, noteTexts),
     emails: emailEntries(card).map((entry) => lower(entry.address)),
     phones: phoneEntries(card).map((entry) => digits(entry.number).replace(/^0+/, '')).filter(Boolean),
     companies: companyTerms(card).map(lower),
-    notes: Object.values(card?.notes ?? {}).map((entry) => lower(entry?.note)),
+    // The card's own notes and the private ones are one field to the matcher:
+    // `note:` and `has:note` describe "a note about this contact", and where it
+    // is kept is not the searcher's concern.
+    notes: [
+      ...Object.values(card?.notes ?? {}).map((entry) => lower(entry?.note)),
+      ...noteTexts.map(lower),
+    ],
     tags: Object.keys(card?.keywords ?? {}).map(lower),
     books: bookTerms.map(lower),
     company: isCompany(card),
@@ -264,9 +296,14 @@ function indexEntry(card, books) {
  * Derives the searchable strings for every card **once**, so a page can run
  * many queries — the list, plus one count per saved search — without reading
  * the cards again each time.
+ *
+ * `notes` is the private-note record (#38) as `{ [contactId]: [{ text }] }`.
+ * Passing it is what makes `note:` and free text see a note the user wrote, so
+ * every surface that counts matches has to pass the same map — the list, the
+ * saved-search chips and the palette dialog — or they would disagree.
  */
-export function buildIndex(cards, { books } = {}) {
-  return (Array.isArray(cards) ? cards : []).map((card) => indexEntry(card, books));
+export function buildIndex(cards, { books, notes } = {}) {
+  return (Array.isArray(cards) ? cards : []).map((card) => indexEntry(card, books, notes));
 }
 
 /** Does one indexed card carry this filter? */
@@ -342,8 +379,8 @@ export const isBlankQuery = (parsed) => !parsed.terms.length && !parsed.filters.
 const isBlank = isBlankQuery;
 
 /** Does one card satisfy a parsed query? Convenience for a single card. */
-export function matchCard(card, parsed, { books } = {}) {
-  return matchIndexed(indexEntry(card, books), parsed);
+export function matchCard(card, parsed, { books, notes } = {}) {
+  return matchIndexed(indexEntry(card, books, notes), parsed);
 }
 
 /**
@@ -352,12 +389,12 @@ export function matchCard(card, parsed, { books } = {}) {
  *
  * @returns {{results: any[], parsed: object}}
  */
-export function searchCards(cards, query, { books } = {}) {
+export function searchCards(cards, query, { books, notes } = {}) {
   const list = Array.isArray(cards) ? cards : [];
   const parsed = parseQuery(query);
   if (isBlank(parsed)) return { results: list, parsed };
   return {
-    results: buildIndex(list, { books })
+    results: buildIndex(list, { books, notes })
       .filter((entry) => matchIndexed(entry, parsed))
       .map((entry) => entry.card),
     parsed,
@@ -365,8 +402,8 @@ export function searchCards(cards, query, { books } = {}) {
 }
 
 /** How many cards a query matches, for a single query. */
-export function countMatches(cards, query, { books } = {}) {
-  return searchCards(cards, query, { books }).results.length;
+export function countMatches(cards, query, { books, notes } = {}) {
+  return searchCards(cards, query, { books, notes }).results.length;
 }
 
 /**

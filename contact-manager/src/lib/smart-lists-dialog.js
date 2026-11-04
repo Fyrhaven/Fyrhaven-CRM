@@ -9,6 +9,7 @@ import { Button, EmptyState, List, ListRow, Row, Section, Stack, Text } from '@p
 import { bookNamesById, contactName, loadBooks, loadCards } from './contacts.js';
 import { buildIndex, countsForIndex } from './search.js';
 import { readSaved } from './saved-searches.js';
+import { readNotes } from './notes.js';
 import { ALL_KEY, matchesFor, smartLists } from './smart-lists.js';
 import { PAGE_SIZE, isPaged, pageSlice } from './paging.js';
 import { reportError } from './report.js';
@@ -22,15 +23,22 @@ export function makeSmartListsDialog(React, api) {
     const [cards, setCards] = useState([]);
     const [books, setBooks] = useState(() => new Map());
     const [saved, setSaved] = useState([]);
+    // The private notes (#38), so a list's count here and in the Contacts page
+    // are the same number: both index the card's notes *and* these.
+    const [notes, setNotes] = useState({});
     const [selected, setSelected] = useState(ALL_KEY);
     const [page, setPage] = useState(0);
 
     useEffect(() => {
-      Promise.all([loadCards(api), loadBooks(api), readSaved(api)])
-        .then(([list, bookList, savedList]) => {
+      Promise.all([
+        loadCards(api), loadBooks(api), readSaved(api),
+        readNotes(api).catch(() => ({})),
+      ])
+        .then(([list, bookList, savedList, noteMap]) => {
           setCards(list);
           setBooks(bookNamesById(bookList));
           setSaved(savedList);
+          setNotes(noteMap ?? {});
           setStatus('ready');
         })
         .catch(async (err) => {
@@ -41,7 +49,7 @@ export function makeSmartListsDialog(React, api) {
 
     // One read of the cards serves every list's count and the selected list's
     // members, so the two can never disagree.
-    const index = useMemo(() => buildIndex(cards, { books }), [cards, books]);
+    const index = useMemo(() => buildIndex(cards, { books, notes }), [cards, books, notes]);
     const counts = useMemo(
       () => countsForIndex(index, saved.map((entry) => entry.query)),
       [index, saved],

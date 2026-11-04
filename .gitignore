@@ -23,3 +23,6 @@ Thumbs.db
 *.swp
 
 # Note: installable ZIPs are GitHub release assets, not committed.
+
+# Local SSH material (never committed)
+.ssh/
