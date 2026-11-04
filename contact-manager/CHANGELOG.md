@@ -7,6 +7,37 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.53.0] — 2026-11-04
+
+### Added
+
+- **A project says where it lives, and you choose (#68).** The record now carries
+  a target — **your own server** (your Files storage: *only you* can open it) or
+  **the Contact Manager server** (shared with the workspace) — and the project
+  dialog asks when both are configured. The list and the project card show which
+  one it is, so nobody has to guess who can see a project.
+
+- **A record never moves behind your back.** The storage seam grew an explicit
+  target (`readAs` / `writeAs` / `removeAs`): a write aimed at your own drive is
+  reported `unavailable` when Files is off instead of quietly landing in the
+  cloud, and the other way round. Projects are read from **both** servers and
+  merged, so a move rewrites both halves — one copy, never two.
+
+### Changed
+
+- The export file no longer claims projects are "local only" — they are records
+  on a server, and the note says which one.
+- The *Private notes* and *Projects* wording no longer says "local": a project on
+  your own server is **yours alone**, which is a statement about the server, not
+  about this browser.
+
+### Notes
+
+Access control *per project* — choosing which colleagues can read, write, add
+time or create tasks — is the next step and needs accounts and identities on the
+store; the badge added here is what it will hang off. Issues opened for that, for
+protecting the service, and for the signup/ordering site.
+
 ## [1.52.0] — 2026-11-04
 
 ### Added

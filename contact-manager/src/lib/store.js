@@ -119,14 +119,61 @@ export async function replace(api, key, value, isEmpty) {
 }
 
 /**
+ * Where a record can live right now.
+ *
+ * Two servers, and they are **not** the same audience: `files` is the user's own
+ * drive (only they can open it), `cloud` is the Contact Manager server, where a
+ * workspace is shared. A record that says which one it chose is a record whose
+ * visibility the user can understand, so the answer is returned to the caller
+ * instead of being decided invisibly here.
+ */
+export async function availableBackends(api) {
+  const files = filesAvailable(api);
+  let cloud = false;
+  try {
+    cloud = Boolean(await readRemoteUrl(api));
+  } catch {
+    cloud = false;
+  }
+  return { files, cloud };
+}
+
+/** The targets a record can be given, and the backend each one means. */
+export const RECORD_TARGETS = ['personal', 'cloud'];
+const BACKEND_FOR_TARGET = { personal: 'files', cloud: 'cloud' };
+
+/** `'personal'` -> `'files'`; anything else -> `null` (an unknown target). */
+export const backendForTarget = (target) => BACKEND_FOR_TARGET[target] ?? null;
+
+/** The target a backend means, for reading a record back with its origin. */
+export const targetForBackend = (backend) => (backend === 'cloud' ? 'cloud' : 'personal');
+
+/** Which targets can hold a record right now — what a "where?" control offers. */
+export async function availableTargets(api) {
+  const { files, cloud } = await availableBackends(api);
+  return { personal: files, cloud };
+}
+
+/**
  * Run a record operation against whichever server holds the records.
  *
  * `files` and `cloud` are the two ways to do the same thing; a throw from
  * either is reported as `unavailable` rather than propagated, because every
  * caller of this seam is a page that has to stay readable.
+ *
+ * `prefer` pins the backend — `'personal'` (the user's own Files), `'cloud'` (the
+ * Contact Manager server) — and reports `unavailable` when that one cannot be
+ * reached, instead of quietly using the other one. A record the user placed
+ * somewhere must never turn up somewhere else.
  */
-async function recordOp(api, key, files, cloud) {
-  const backend = await recordBackend(api);
+async function recordOp(api, key, files, cloud, prefer = 'auto') {
+  let backend = 'unavailable';
+  if (prefer === 'auto') backend = await recordBackend(api);
+  else {
+    const usable = await availableBackends(api);
+    const wanted = prefer === 'personal' ? 'files' : prefer === 'cloud' ? 'cloud' : '';
+    if (wanted && usable[wanted]) backend = wanted;
+  }
   try {
     if (backend === 'files') return await files(filesFor(api), key);
     if (backend === 'cloud') {
@@ -140,6 +187,54 @@ async function recordOp(api, key, files, cloud) {
   // The same word the cloud client uses for "there is nowhere to put this": the
   // seam cannot tell *why* the user has no storage, only that they have none.
   return { status: 'unavailable', reason: 'unconfigured' };
+}
+
+/**
+ * Read one key from one target. `'auto'` keeps the old behaviour (the first
+ * backend that exists); `'personal'` and `'cloud'` are the explicit ones.
+ */
+export async function readAs(api, key, target = 'auto') {
+  if (!isRecord(key)) return read(api, key);
+  const prefer = target === 'personal' ? 'personal' : target === 'cloud' ? 'cloud' : 'auto';
+  return recordOp(
+    api,
+    key,
+    async (store, k) => ({ status: 'ok', value: await store.read(k) }),
+    (k) => storeGet(api, k),
+    prefer,
+  );
+}
+
+/** Write one key to one target; an unreachable target reports `unavailable`. */
+export async function writeAs(api, key, value, target = 'auto') {
+  if (!isRecord(key)) return write(api, key, value);
+  const prefer = target === 'personal' ? 'personal' : target === 'cloud' ? 'cloud' : 'auto';
+  return recordOp(
+    api,
+    key,
+    async (store, k) => {
+      await store.write(k, value);
+      return { status: 'ok' };
+    },
+    (k) => storePut(api, k, value),
+    prefer,
+  );
+}
+
+/** Remove one key from one target. */
+export async function removeAs(api, key, target = 'auto') {
+  if (!isRecord(key)) return remove(api, key);
+  const prefer = target === 'personal' ? 'personal' : target === 'cloud' ? 'cloud' : 'auto';
+  return recordOp(
+    api,
+    key,
+    async (store, k) => {
+      await store.remove(k);
+      return { status: 'ok' };
+    },
+    (k) => storeDelete(api, k),
+    prefer,
+  );
 }
 
 export async function read(api, key) {
