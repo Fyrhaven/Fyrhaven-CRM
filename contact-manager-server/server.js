@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 import {
   accountOps, accountWorkspace, DEFAULT_TRIAL_DAYS, openAccountTables, SESSION_DAYS,
 } from './accounts.js';
+import { createCheckout, paymentConfig, paymentsAvailable, planFromEvent, verifyStripeSignature } from './payments.js';
 
 
 export const VERSION = '1.0.0';
@@ -244,11 +245,16 @@ export function storeOps(db, keys) {
 // ── HTTP ────────────────────────────────────────────────────────
 
 /** The pages the service itself serves (#148). No build step, no bundler. */
-const SITE_FILES = { '/': 'index.html', '/index.html': 'index.html', '/site.js': 'site.js', '/site.css': 'site.css' };
+const SITE_FILES = {
+  '/': 'index.html', '/index.html': 'index.html', '/site.js': 'site.js', '/site.css': 'site.css',
+  '/admin': 'admin.html', '/admin.js': 'admin.js',
+};
 const SITE_TYPES = {
   'index.html': 'text/html; charset=utf-8',
   'site.js': 'text/javascript; charset=utf-8',
   'site.css': 'text/css; charset=utf-8',
+  'admin.html': 'text/html; charset=utf-8',
+  'admin.js': 'text/javascript; charset=utf-8',
 };
 const SITE_DIR = fileURLToPath(new URL('./site/', import.meta.url));
 
@@ -305,6 +311,7 @@ function readBody(req, limit = MAX_VALUE_BYTES + 4096) {
 export function createRequestHandler(db, {
   tokens = new Map(), keys, allowQueryToken = false, accounts = null, trialDays = DEFAULT_TRIAL_DAYS,
   requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
+  adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch,
 } = {}) {
   const ops = storeOps(db, keys);
   const people = accounts ?? accountOps(db, { trialDays });
@@ -420,10 +427,88 @@ export function createRequestHandler(db, {
       return send(res, 200, { ok: true, token: answer.token, account: answer.account });
     }
 
+    // ── The payment provider's webhook (no bearer: the signature is the proof) ──
+    if (path === '/v1/payments/webhook' && method === 'POST') {
+      const raw = await readBody(req);
+      const signature = req.headers['stripe-signature'];
+      if (!verifyStripeSignature({ header: signature, payload: raw, secret: payments.webhookSecret, now: now() })) {
+        return send(res, 400, { error: 'bad signature' });
+      }
+      let event;
+      try {
+        event = JSON.parse(raw);
+      } catch {
+        return send(res, 400, { error: 'body is not JSON' });
+      }
+      const meaning = planFromEvent(event);
+      if (!meaning) return send(res, 200, { ok: true, ignored: true });
+      if (!people.byId(meaning.accountId)) return send(res, 200, { ok: true, ignored: 'no such account' });
+      people.setPlan(meaning.accountId, meaning.plan, { days: payments.planDays, now: now() });
+      if (meaning.orderId) people.setOrderStatus(meaning.orderId, 'paid');
+      return send(res, 200, { ok: true, plan: meaning.plan });
+    }
+
+    // ── The operator's panel (#148): everything under /v1/admin ────────
+    if (path === '/v1/admin' || path.startsWith('/v1/admin/')) {
+      if (!adminToken) return send(res, 503, { error: 'no admin token configured' });
+      const presented = tokenOf(req, url, { allowQueryToken });
+      if (!presented || !sameToken(adminToken, presented)) return send(res, 401, { error: 'unauthorized' });
+      if (tooMany('admin')) return send(res, 429, { error: 'too many requests' });
+
+      if (path === '/v1/admin/orders' && method === 'GET') {
+        return send(res, 200, { ok: true, orders: people.allOrders() });
+      }
+      if (path === '/v1/admin/accounts' && method === 'GET') {
+        return send(res, 200, { ok: true, accounts: people.allAccounts(), payments: { provider: payments.provider } });
+      }
+
+      const paid = /^\/v1\/admin\/orders\/([^/]+)\/paid$/.exec(path);
+      if (paid && method === 'POST') {
+        const order = people.order(decodeURIComponent(paid[1]));
+        if (!order) return send(res, 404, { error: 'no such order' });
+        const payload = (await body()) ?? {};
+        const days = Number(payload.days ?? payments.planDays);
+        people.setOrderStatus(order.id, 'paid');
+        const account = people.setPlan(order.accountId, order.plan, {
+          days: Number.isFinite(days) && days > 0 ? days : payments.planDays, now: now(),
+        });
+        if (!account) return send(res, 404, { error: 'the order has no live account' });
+        return send(res, 200, { ok: true, order: people.order(order.id), account });
+      }
+
+      const plan = /^\/v1\/admin\/accounts\/([^/]+)\/plan$/.exec(path);
+      if (plan && method === 'POST') {
+        const payload = (await body()) ?? {};
+        const account = people.setPlan(decodeURIComponent(plan[1]), payload.plan ?? 'cloud', {
+          days: Number(payload.days ?? payments.planDays), now: now(),
+        });
+        if (!account) return send(res, 400, { error: 'no such account, or an unknown plan' });
+        return send(res, 200, { ok: true, account });
+      }
+
+      const accountPath = /^\/v1\/admin\/accounts\/([^/]+)$/.exec(path);
+      if (accountPath && method === 'DELETE') {
+        const id = decodeURIComponent(accountPath[1]);
+        const workspace = accountWorkspace(id);
+        if (!people.deleteAccount(id)) return send(res, 404, { error: 'no such account' });
+        db.prepare('DELETE FROM records WHERE workspace = ?').run(workspace);
+        db.prepare('DELETE FROM workspaces WHERE workspace = ?').run(workspace);
+        return send(res, 200, { ok: true, deleted: true });
+      }
+
+      return send(res, 404, { error: 'not found' });
+    }
+
     // ── Everything below needs a token ─────────────────────────────────
     const who = authenticate(req, url);
     if (!who) return send(res, 401, { error: 'unauthorized' });
     if (tooMany(who.token)) return send(res, 429, { error: 'too many requests' });
+
+    if (path === '/v1/sessions' && method === 'DELETE') {
+      people.logout(who.token);
+      return send(res, 200, { ok: true });
+    }
+
 
     if (path === '/v1/account') {
       if (method === 'GET') {
@@ -456,12 +541,19 @@ export function createRequestHandler(db, {
       if (!who.account) return send(res, 409, { error: 'an installer token has no account' });
       const payload = (await body()) ?? {};
       const order = people.placeOrder(who.account.id, payload.plan ?? 'cloud', now());
-      return send(res, 202, { ok: true, order, note: 'pending — an invoice follows' });
-    }
 
-    if (path === '/v1/sessions' && method === 'DELETE') {
-      people.logout(who.token);
-      return send(res, 200, { ok: true });
+      // With a provider configured the customer is sent to pay; without one the
+      // order is a request an operator settles by hand. Neither is a lie, and
+      // the client is told which it got.
+      const checkout = await createCheckout(payments, { order, account: who.account, fetch: fetchJson });
+      return send(res, 202, {
+        ok: true,
+        order,
+        payment: checkout.status === 'ok'
+          ? { status: 'redirect', url: checkout.url, sessionId: checkout.id }
+          : { status: checkout.status === 'unconfigured' ? 'unavailable' : 'failed', reason: checkout.reason },
+        note: checkout.status === 'ok' ? 'pay on the provider page to switch the plan on' : 'pending — an invoice follows',
+      });
     }
 
     // A trial or subscription that has run out may read (so the user can export
@@ -543,12 +635,14 @@ export function createRequestHandler(db, {
 /** A listening server over its own database, for `main` and for the tests. */
 export function createStoreServer({
   dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false,
-  trialDays = DEFAULT_TRIAL_DAYS, now,
+  trialDays = DEFAULT_TRIAL_DAYS, now, adminToken = '', payments = paymentConfig(), fetchJson,
 } = {}) {
   const db = openStore(dbPath);
   const tokens = parseTokens(tokenList);
   const keys = workspaceKeys(db, masterKey);
-  const server = createHttpServer(createRequestHandler(db, { tokens, keys, allowQueryToken, trialDays, now }));
+  const server = createHttpServer(createRequestHandler(db, {
+    tokens, keys, allowQueryToken, trialDays, now, adminToken, payments, fetchJson,
+  }));
   server.on('close', () => {
     try {
       db.close();
@@ -584,8 +678,12 @@ if (isMain) {
   // A trial length of 0 turns the trial off: a new account then has to be put
   // on a plan before it can write anything.
   const trialDays = Number(process.env.STORE_TRIAL_DAYS ?? DEFAULT_TRIAL_DAYS);
+  // The operator's panel is off until a token is set: an admin surface that
+  // comes up open on a fresh install is worse than one that has to be enabled.
+  const adminToken = String(process.env.STORE_ADMIN_TOKEN ?? '').trim();
+  if (!adminToken) console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin and /admin answer 503.');
   const { server, tokens } = createStoreServer({
-    dbPath, tokenList, masterKey, allowQueryToken,
+    dbPath, tokenList, masterKey, allowQueryToken, adminToken, payments: paymentConfig(process.env),
     trialDays: Number.isFinite(trialDays) && trialDays >= 0 ? trialDays : DEFAULT_TRIAL_DAYS,
   });
   server.listen(port, () => {

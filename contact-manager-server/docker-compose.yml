@@ -7,6 +7,8 @@
 #
 # The store itself speaks HTTP on the private network. That is deliberate — one
 # place terminates TLS, and it is the place that has the certificate.
+name: contact-manager-store
+
 services:
   store:
     build: .
@@ -21,6 +23,18 @@ services:
       STORE_MASTER_KEY: ${STORE_MASTER_KEY:?set STORE_MASTER_KEY in .env — 32 bytes, base64}
       PORT: "8080"
       STORE_DB: /data/store.sqlite
+      # The operator panel (#148). Empty means the panel answers 503 — it is off
+      # until someone sets it.
+      STORE_ADMIN_TOKEN: ${STORE_ADMIN_TOKEN:-}
+      STORE_TRIAL_DAYS: ${STORE_TRIAL_DAYS:-14}
+      # Card payments. With no key the store takes no money and orders stay
+      # pending, to be settled from the panel.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_PRICE_CLOUD: ${STRIPE_PRICE_CLOUD:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PLAN_DAYS: ${STRIPE_PLAN_DAYS:-365}
+      STRIPE_MODE: ${STRIPE_MODE:-payment}
+      PUBLIC_URL: ${PUBLIC_URL:-}
     volumes:
       - store-data:/data
     # No `ports:` on purpose. Publishing this would publish the plaintext hop.

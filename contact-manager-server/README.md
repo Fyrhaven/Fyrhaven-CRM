@@ -138,6 +138,48 @@ step. It sits behind the same TLS proxy as the API.
 **Not wired yet:** email verification — the flag is recorded and stays `0`,
 because there is no SMTP here. Nothing else depends on it.
 
+## Paying for it, and the operator panel (#148)
+
+**Payment is a provider seam, not an SDK.** `payments.js` asks Stripe's REST API
+for a Checkout Session with `fetch` and verifies the webhook with `node:crypto` —
+no dependency, no lockfile, and the card never touches this service.
+
+| Variable | Meaning |
+|---|---|
+| `STRIPE_SECRET_KEY` | `sk_live_…`. With no key the store **takes no money**: an order stays `pending`. |
+| `STRIPE_PRICE_CLOUD` | The price a cloud order buys. Half a configuration counts as none. |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…`; the signature is `t=<unix>,v1=HMAC-SHA256("<t>.<body>")`. |
+| `STRIPE_PLAN_DAYS` | Days a paid order buys (default `365`). |
+| `STRIPE_MODE` | `payment` (default, one-off) or `subscription`. |
+| `PUBLIC_URL` | `https://crm.mailz.se` — where the provider sends the customer back. |
+
+`POST /v1/account/order` answers `202` with
+`payment: { status: "redirect", url }` when a provider is configured, and
+`payment: { status: "unavailable" }` when it is not — the site then says an
+invoice follows.
+
+**The webhook is the only thing that switches a plan on**, and it reads the
+account and the order from **metadata this service put there**, never from a body
+a customer could edit. A signature outside a five-minute window is refused, so a
+captured request cannot be replayed later.
+
+**The operator panel** lives at `/admin` and is guarded by `STORE_ADMIN_TOKEN`
+(`Authorization: Bearer …`, compared in constant time). With no token set every
+`/v1/admin` route answers **503** — an admin surface that comes up open on a fresh
+install is worse than one that has to be enabled.
+
+```
+GET    /v1/admin/orders              -> orders, with the account email
+GET    /v1/admin/accounts            -> accounts, plans and expiry
+POST   /v1/admin/orders/{id}/paid    <- { days } -> order paid + plan switched on
+POST   /v1/admin/accounts/{id}/plan  <- { plan, days }
+DELETE /v1/admin/accounts/{id}       -> account, records and wrapped key removed
+```
+
+It is the collection point when no provider is configured: money arrives by
+invoice, the operator clicks *Mark paid*, and the customer's plugin sees the plan
+on its next `GET /v1/account`.
+
 ## The protocol
 
 `/health` and `/version` are **open** — the plugin's *Check the server* has to
