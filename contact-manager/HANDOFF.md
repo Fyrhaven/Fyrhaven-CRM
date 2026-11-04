@@ -8,42 +8,31 @@
 ## Current State
 - **Version**: 1.51.0 (`manifest.json` is the single source of truth; `package.json` matches)
 - **Last changes**: the Contacts search finds the **private notes** (#38, the search half) — free text, `note:` and `has:note` see a note the plugin keeps about a contact exactly where they see the card's own; `buildIndex` takes the note record as an option (`{ notes }`), so `search.js` stays free of `api` and of the storage seam, and both surfaces that count matches (the Contacts page and the palette's Smart lists dialog) pass it, so a saved search's count and its members cannot disagree; the page holds **one copy** of the note record and hands it to the *Private notes* section as a controlled value, so a note is searchable the moment it is saved; the `notes.hint` string was corrected — it still claimed the notes were kept *in this browser*, which 1.49.0 made untrue. On top of the 1.50.x line — five live-install fixes of the storage seam: `files.create` wants `text/plain` (1.50.1), `replace` is a **file name** (1.50.2) and then a **file id** (1.50.3), a folder is read with `list` and not `find` (1.50.2), `getText` answers with an **object** (1.50.4) and the folder lookup takes only a folder this user **owns** (1.50.5) — and 1.50.0, consent records through the seam (#26, #68).
-- **Released**: `contact-manager-v1.50.5` is the newest GitHub release before this
-  one (v1.50.4, v1.50.3, v1.50.2, v1.50.1, v1.50.0, v1.49.0, v1.48.0, v1.47.0, v1.46.0,
-  v1.45.0,
-  v1.39.0,
-  v1.38.0,
-  v1.37.0,
-  v1.36.0,
-  v1.35.0,
-  v1.34.0,
-  v1.33.0,
-  v1.32.0,
-  v1.31.0,
-  v1.30.0,
-  v1.29.0, v1.28.0,
-  v1.27.2,
-  v1.27.1,
-  v1.27.0,
-  v1.26.0,
-  v1.25.0,
-  v1.24.2, v1.24.1, v1.24.0, v1.23.2,
-  v1.23.1,
-  v1.23.0,
-  v1.22.0,
-  v1.21.0,
-  v1.20.0,
-  v1.19.0,
-  v1.18.0,
-  v1.17.0,
-  v1.16.0,
-  v1.15.0,
-  v1.14.1, v1.14.0, v1.13.2, v1.13.1, v1.13.0, v1.12.0, v1.11.1, v1.11.0, v1.10.0, v1.9.0,
-  v1.8.0, v1.7.0, v1.6.0 and v1.5.0 before it). `main` and `contact-manager` are
+- **Cloud store deployed (2026-11-04)**: the service in
+  `contact-manager-server/` now runs on the maintainer's mail host as the compose
+  project **`contact-manager-store`** — image built from this repository, on the
+  host's existing `opt_default` network, **no published port**, a named volume
+  (`contact-manager-store_store-data`), `restart: unless-stopped` and the image's
+  own healthcheck (which reports *healthy*). It was added beside the running
+  stacks without stopping or restarting any of them. Verified from another
+  container on that network: `/version` answers, a `PUT`/`GET`/list/`DELETE`
+  round trip works, no token and a wrong token are both `401`, and a marker
+  written through the API does **not** appear in the SQLite file in cleartext.
+  **Two steps remain and both are outside the repository**: a DNS name pointed at
+  the host (the zone is on Cloudflare) and a proxy host in nginx-proxy-manager
+  forwarding it to `contact-manager-store:8080`; then *Check the server* in the
+  plugin takes `https://<name>`. The store is deliberately not published, so
+  nothing is exposed until those exist. `docker-compose.host.yml` is that
+  deployment shape — the store behind a proxy you already run, instead of its own
+  Caddy on 80/443.
+- **Released**: `contact-manager-v1.51.0` is the newest GitHub release; v1.50.5,
+  v1.50.4, v1.50.3, v1.50.2, v1.50.1 and v1.50.0 were cut from `main` before it,
+  and every release from v1.5.0 up has a tag and a ZIP. `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
   #71, #72, #73, #76, #78, #80, #81, #83, #85, #87, #89, #91, #93, #95, #97, #98, #99,
   #101, #102, #103, #104, #106, #107, #108, #110, #112, #114, #115, #116, #117,
-  #118, #119, #120, #121, #122, #123, #125, #127, #130, #132, #134 and #136
+  #118, #119, #120, #121, #122, #123, #125, #127, #130, #132, #134, #136, #137,
+  #138, #139, #140, #141, #142, #143 and #144
   merged, plus the handoff PRs #131, #133 and #135). Every
   stacked PR was retargeted to `main`, merged and released **one at a time** —
   v1.30.0 through v1.39.0 each have a tag and a ZIP. **v1.40.0 (#23, the advisory

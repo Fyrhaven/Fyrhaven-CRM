@@ -29,6 +29,18 @@ curl -s https://crm.example.com/version
 Caddy gets a certificate for `CRM_DOMAIN` automatically. The store is **not
 published** — only Caddy can reach it — so TLS is not something you can forget.
 
+**If you already run a reverse proxy** (nginx-proxy-manager, Traefik, a Caddy
+elsewhere), use the other compose file instead of the one above — it is the same
+service without its own edge:
+
+```bash
+docker compose -f docker-compose.host.yml up -d    # add PROXY_NETWORK=… if the proxy lives on another network
+```
+
+Nothing is published then; the store joins the proxy's network as
+`contact-manager-store` and answers on port `8080`, so the proxy host you add for
+it is the only way in and TLS stays where it already is.
+
 It **refuses to start** without `STORE_TOKENS` or `STORE_MASTER_KEY`: an open
 store, or one whose data cannot be encrypted, is worse than a container that will
 not come up.
