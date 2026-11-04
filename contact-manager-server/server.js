@@ -34,7 +34,10 @@ import { fileURLToPath } from 'node:url';
 import {
   accountOps, accountWorkspace, DEFAULT_TRIAL_DAYS, openAccountTables, SESSION_DAYS,
 } from './accounts.js';
-import { createCheckout, paymentConfig, paymentsAvailable, planFromEvent, verifyStripeSignature } from './payments.js';
+import {
+  createCheckout, createStripePrice, paymentConfig, planFromEvent, verifyStripeSignature,
+} from './payments.js';
+import { catalogOps, defaultCatalogue, openCatalogTables } from './catalog.js';
 
 
 export const VERSION = '1.0.0';
@@ -164,6 +167,13 @@ export function openStore(path = ':memory:') {
   // Accounts and sessions (#148). Safe on an existing database: every statement
   // is IF NOT EXISTS, so a store that predates accounts opens unchanged.
   openAccountTables(db);
+  // What is for sale (#148). Seeded once, then owned by the operator's panel.
+  openCatalogTables(db);
+  const seeded = db.prepare('SELECT COUNT(*) AS n FROM products').get().n;
+  if (!seeded) {
+    const catalogue = catalogOps(db);
+    for (const product of defaultCatalogue()) catalogue.save(product);
+  }
   return db;
 }
 
@@ -315,6 +325,7 @@ export function createRequestHandler(db, {
 } = {}) {
   const ops = storeOps(db, keys);
   const people = accounts ?? accountOps(db, { trialDays });
+  const catalogue = catalogOps(db, { now });
 
   /**
    * Who is asking, and what they may do (#148).
@@ -397,6 +408,11 @@ export function createRequestHandler(db, {
       return res.end(body);
     }
 
+    // What is for sale: open, because a price list is a shop window.
+    if (method === 'GET' && path === '/v1/products') {
+      return send(res, 200, { ok: true, products: catalogue.all({ onlyActive: true }), payments: payments.provider });
+    }
+
     const client = req.socket?.remoteAddress ?? 'unknown';
     const body = async () => {
       const raw = await readBody(req);
@@ -445,7 +461,16 @@ export function createRequestHandler(db, {
       if (!people.byId(meaning.accountId)) return send(res, 200, { ok: true, ignored: 'no such account' });
       people.setPlan(meaning.accountId, meaning.plan, { days: payments.planDays, now: now() });
       if (meaning.orderId) people.setOrderStatus(meaning.orderId, 'paid');
-      return send(res, 200, { ok: true, plan: meaning.plan });
+
+      // A licence product also hands out a key: the software is self-hosted, so
+      // the key is the whole entitlement and nothing calls home to check it.
+      let licence = null;
+      const order = meaning.orderId ? people.order(meaning.orderId) : null;
+      const product = order?.productId ? catalogue.get(order.productId) : null;
+      if (product && product.kind === 'license') {
+        licence = catalogue.issueLicence(meaning.accountId, product.id, product.days);
+      }
+      return send(res, 200, { ok: true, plan: meaning.plan, licence });
     }
 
     // ── The operator's panel (#148): everything under /v1/admin ────────
@@ -458,6 +483,38 @@ export function createRequestHandler(db, {
       if (path === '/v1/admin/orders' && method === 'GET') {
         return send(res, 200, { ok: true, orders: people.allOrders() });
       }
+      if (path === '/v1/admin/products' && method === 'GET') {
+        return send(res, 200, { ok: true, products: catalogue.all(), payments: payments.provider });
+      }
+      if (path === '/v1/admin/products' && method === 'POST') {
+        const answer = catalogue.save((await body()) ?? {});
+        if (answer.status !== 'ok') return send(res, 400, { error: 'a code and a label are needed' });
+        return send(res, 200, { ok: true, product: answer.product });
+      }
+
+      const stripeProduct = /^\/v1\/admin\/products\/([^/]+)\/stripe$/.exec(path);
+      if (stripeProduct && method === 'POST') {
+        const product = catalogue.get(decodeURIComponent(stripeProduct[1]));
+        if (!product) return send(res, 404, { error: 'no such product' });
+        const created = await createStripePrice(payments, product, { fetch: fetchJson });
+        if (created.status === 'unconfigured') return send(res, 503, { error: 'no payment provider configured' });
+        if (created.status !== 'ok') return send(res, 502, { error: created.reason ?? 'stripe refused' });
+        const saved = catalogue.setStripe(product.id, created);
+        return send(res, 200, { ok: true, product: saved });
+      }
+
+      const activeProduct = /^\/v1\/admin\/products\/([^/]+)\/active$/.exec(path);
+      if (activeProduct && method === 'POST') {
+        const payload = (await body()) ?? {};
+        const product = catalogue.setActive(decodeURIComponent(activeProduct[1]), payload.active !== false);
+        if (!product) return send(res, 404, { error: 'no such product' });
+        return send(res, 200, { ok: true, product });
+      }
+
+      if (path === '/v1/admin/licenses' && method === 'GET') {
+        return send(res, 200, { ok: true, licences: catalogue.allLicences() });
+      }
+
       if (path === '/v1/admin/accounts' && method === 'GET') {
         return send(res, 200, { ok: true, accounts: people.allAccounts(), payments: { provider: payments.provider } });
       }
@@ -519,6 +576,7 @@ export function createRequestHandler(db, {
           expiresAt: who.expiresAt,
           entitled: who.entitled,
           account: who.account,
+          licences: who.account ? catalogue.licences(who.account.id) : [],
           usage: usageOf(who.workspace),
         });
       }
@@ -540,12 +598,24 @@ export function createRequestHandler(db, {
       if (method !== 'POST') return send(res, 405, { error: 'method not allowed' });
       if (!who.account) return send(res, 409, { error: 'an installer token has no account' });
       const payload = (await body()) ?? {};
-      const order = people.placeOrder(who.account.id, payload.plan ?? 'cloud', now());
+      // A product says what is being sold; without one the old `plan` shape is
+      // still accepted, so the plugin's existing call keeps working.
+      const product = payload.productId || payload.product
+        ? catalogue.get(payload.productId ?? payload.product)
+        : null;
+      if ((payload.productId || payload.product) && !product) return send(res, 404, { error: 'no such product' });
+      const order = people.placeOrder(who.account.id, product ? 'cloud' : (payload.plan ?? 'cloud'), {
+        productId: product?.id ?? '', now: now(),
+      });
 
       // With a provider configured the customer is sent to pay; without one the
       // order is a request an operator settles by hand. Neither is a lie, and
       // the client is told which it got.
-      const checkout = await createCheckout(payments, { order, account: who.account, fetch: fetchJson });
+      const checkout = await createCheckout(payments, {
+        order, account: who.account, fetch: fetchJson,
+        priceId: product?.stripePriceId ?? '',
+        mode: product && product.interval === 'once' ? 'payment' : (product ? 'subscription' : ''),
+      });
       return send(res, 202, {
         ok: true,
         order,

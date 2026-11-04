@@ -695,3 +695,100 @@ describe('the admin panel and the live payment path (#148)', () => {
     assert.equal(list.payload.orders.find((entry) => entry.id === orderId).status, 'paid');
   });
 });
+
+describe('the catalogue and licences (#148)', () => {
+  let own;
+  let url;
+  const ADMIN = 'admin-catalogue';
+  const SECRET = 'whsec_catalogue';
+  before(async () => {
+    ({ server: own } = createStoreServer({
+      tokenList: 'tok-a=acme', masterKey: MASTER, adminToken: ADMIN,
+      payments: { provider: 'none', planDays: 365, webhookSecret: SECRET, publicUrl: '' },
+    }));
+    await new Promise((resolve) => own.listen(0, '127.0.0.1', resolve));
+    url = `http://127.0.0.1:${own.address().port}`;
+  });
+  after(async () => {
+    own.closeAllConnections?.();
+    await new Promise((resolve) => own.close(resolve));
+  });
+
+  const ask = async (path, { method = 'GET', token, body } = {}) => {
+    const response = await fetch(`${url}${path}`, {
+      method,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    return { status: response.status, payload };
+  };
+
+  it('publishes a price list without a token, and sells only what is active', async () => {
+    const list = await ask('/v1/products');
+
+    assert.equal(list.status, 200);
+    assert.deepEqual(list.payload.products.map((product) => product.code),
+      ['cloud-monthly', 'cloud-yearly', 'selfhosted']);
+    assert.equal(list.payload.products[0].price, '6.00 EUR per month');
+    assert.equal(list.payload.payments, 'none');
+  });
+
+  it('lets the operator add a product with its own price, and hide one', async () => {
+    const made = await ask('/v1/admin/products', {
+      method: 'POST', token: ADMIN,
+      body: { code: 'cloud-yearly', label: 'Cloud (year)', kind: 'subscription', interval: 'year', amount: 6000, currency: 'EUR' },
+    });
+    assert.equal(made.status, 200);
+    assert.equal(made.payload.product.price, '60.00 EUR per year');
+
+    const off = await ask(`/v1/admin/products/${made.payload.product.id}/active`, {
+      method: 'POST', token: ADMIN, body: { active: false },
+    });
+    assert.equal(off.payload.product.active, false);
+
+    const publicList = await ask('/v1/products');
+    assert.ok(!publicList.payload.products.some((product) => product.id === made.payload.product.id));
+  });
+
+  it('issues a licence key when a licence order is paid, and only then', async () => {
+    const signup = await ask('/v1/accounts', { method: 'POST', body: { email: 'lic@example.com', password: 'a-long-password' } });
+    const token = signup.payload.token;
+    const licenceProduct = (await ask('/v1/products')).payload.products.find((product) => product.code === 'selfhosted');
+
+    const order = await ask('/v1/account/order', { method: 'POST', token, body: { productId: licenceProduct.id } });
+    assert.equal(order.status, 202);
+    // nothing is handed out before the money arrives
+    assert.deepEqual((await ask('/v1/account', { token })).payload.licences, []);
+
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { metadata: { accountId: signup.payload.account.id, orderId: order.payload.order.id, plan: 'cloud' } } },
+    });
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = createHmac('sha256', SECRET).update(`${t}.${body}`).digest('hex');
+    const paid = await fetch(`${url}/v1/payments/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${v1}` },
+      body,
+    });
+    assert.equal(paid.status, 200);
+
+    const licences = (await ask('/v1/account', { token })).payload.licences;
+    assert.equal(licences.length, 1);
+    assert.match(licences[0].key, /^CM-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    assert.equal(licences[0].label, licenceProduct.label);
+
+    const all = await ask('/v1/admin/licenses', { token: ADMIN });
+    assert.equal(all.payload.licences[0].key, licences[0].key);
+    assert.equal(all.payload.licences[0].email, 'lic@example.com');
+  });
+});
