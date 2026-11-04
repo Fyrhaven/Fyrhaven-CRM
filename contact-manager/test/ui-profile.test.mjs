@@ -6,7 +6,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fakeApi } from '../test-utils/fake-api.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
 import { makeProfilePage } from '../src/lib/profile-page.js';
+import { NOTES_KEY } from '../src/lib/notes.js';
+import { write } from '../src/lib/store.js';
 import { makeCard } from './fixtures.mjs';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
@@ -926,5 +929,61 @@ describe('contacts page: follow-up tasks', () => {
     const late = screen.getByText('Past with Ada Lovelace');
     const later = screen.getByText('Later with Ada Lovelace');
     expect(late.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe('private notes in the search box (#38)', () => {
+  // Notes are records (#68), so a page that searches them needs the customer's
+  // own Files storage — the same seam every other record store uses.
+  const pageWithFiles = () => {
+    const files = filesHost();
+    return { files, api: profileApi({ ...files.handlers }, files.host) };
+  };
+
+  it('finds a contact by a word that only a private note mentions', async () => {
+    const { api } = pageWithFiles();
+    await write(api, NOTES_KEY, {
+      g: [{ id: 'n1', at: '2026-01-01T00:00:00Z', text: 'Met her at the conference' }],
+    });
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'conference' } });
+    });
+
+    // Grace has no such word on her card — the note is the only reason she matches
+    expect(screen.getByText('Grace Hopper')).toBeTruthy();
+    expect(screen.getAllByText('Ada Lovelace')).toHaveLength(1); // the open profile only
+    expect(screen.getByText('1 of 2 contacts')).toBeTruthy();
+  });
+
+  it('keeps the list unfiltered while the same word is in no note', async () => {
+    const { api } = pageWithFiles();
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'conference' } });
+    });
+
+    expect(screen.getByText('No contact matches that search.')).toBeTruthy();
+  });
+
+  it('makes a note searchable the moment it is saved, without a reload', async () => {
+    const { api } = pageWithFiles();
+    await renderPage(api);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('New note'), { target: { value: 'zqtest prefers email' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Add note' })); });
+    await waitFor(() => expect(screen.getByText('zqtest prefers email')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search contacts'), { target: { value: 'zqtest' } });
+    });
+
+    // the page owns the note map, so the index was rebuilt from the save
+    expect(screen.getByText('1 of 2 contacts')).toBeTruthy();
+    expect(screen.queryByText('Grace Hopper')).toBeNull();
   });
 });

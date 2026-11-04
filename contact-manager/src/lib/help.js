@@ -35,6 +35,7 @@ export const QUERY_EXAMPLES = [
   'tag:vip tag:customer',
   'tag:vip OR tag:customer',
   '(tag:vip OR tag:customer) has:email',
+  'note:budget',
   '-tag:vip',
   'not:tag:vip',
 ];
@@ -46,6 +47,7 @@ export const QUERY_EXAMPLES = [
  * something a user would want to read.
  */
 export const WHATS_NEW = [
+  { version: '1.51.0', note: 'help.whatsNew.1_51_0' },
   { version: '1.50.0', note: 'help.whatsNew.1_50_0' },
   { version: '1.49.0', note: 'help.whatsNew.1_49_0' },
   { version: '1.48.0', note: 'help.whatsNew.1_48_0' },

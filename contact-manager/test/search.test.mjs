@@ -1,7 +1,7 @@
 // The query language and the matcher behind the Contacts search box.
 import { describe, expect, it } from 'vitest';
 import {
-  countMatches, matchCard, parseQuery, searchCards,
+  buildIndex, countMatches, countsForIndex, matchCard, parseQuery, searchCards,
 } from '../src/lib/search.js';
 import { makeCard } from './fixtures.mjs';
 
@@ -238,6 +238,7 @@ describe('not:', () => {
   it('is not a field of its own', () => {
     expect(parseQuery('not:tag:vip').errors).toEqual([]);
   });
+});
 
 describe('OR and grouping', () => {
   it('matches either side of an OR', () => {
@@ -289,4 +290,43 @@ describe('OR and grouping', () => {
   });
 });
 
+describe('private notes (#38)', () => {
+  // Grace has no note on her card; the note about her is a private record.
+  const NOTES = { g: [{ id: 'n1', at: '2026-01-01T00:00:00Z', text: 'Introduced by Ada at the conference' }] };
+
+  it('finds a contact by a word that only appears in a private note', () => {
+    expect(ids(searchCards(CARDS, 'conference', { notes: NOTES }).results)).toEqual(['g']);
+    // the positive twin: without the map nothing matches, so the hit is the note
+    expect(ids(searchCards(CARDS, 'conference').results)).toEqual([]);
+  });
+
+  it('answers note: and has:note for a note wherever it is kept', () => {
+    expect(ids(searchCards(CARDS, 'note:conference', { notes: NOTES }).results)).toEqual(['g']);
+    // Ada's note is on her card, Grace's is private — one field to the searcher
+    expect(ids(searchCards(CARDS, 'has:note', { notes: NOTES }).results)).toEqual(['a', 'g']);
+    expect(ids(searchCards(CARDS, 'has:note').results)).toEqual(['a']);
+  });
+
+  it('never puts one contact\u2019s note on another', () => {
+    expect(ids(searchCards(CARDS, 'conference', { notes: { a: NOTES.g } }).results)).toEqual(['a']);
+    expect(ids(searchCards(CARDS, 'conference', { notes: { g: NOTES.g } }).results)).toEqual(['g']);
+  });
+
+  it('counts the same matches the list shows, so the chips cannot drift', () => {
+    const index = buildIndex(CARDS, { notes: NOTES });
+    expect(countsForIndex(index, ['conference', 'note:conference', 'has:note']))
+      .toEqual([1, 1, 2]);
+    expect(countMatches(CARDS, 'conference', { notes: NOTES })).toBe(1);
+    expect(matchCard(GRACE, parseQuery('conference'), { notes: NOTES })).toBe(true);
+  });
+
+  it('reads a plain list of strings as well as a list of records', () => {
+    expect(ids(searchCards(CARDS, 'conference', { notes: { g: ['Conference'] } }).results)).toEqual(['g']);
+  });
+
+  it('ignores a note record it cannot read, rather than throwing', () => {
+    expect(ids(searchCards(CARDS, 'conference', { notes: { g: 'not a list' } }).results)).toEqual([]);
+    expect(ids(searchCards(CARDS, 'conference', { notes: { g: [null, {}, { text: '  ' }] } }).results)).toEqual([]);
+    expect(ids(searchCards(CARDS, 'conference', { notes: null }).results)).toEqual([]);
+  });
 });
