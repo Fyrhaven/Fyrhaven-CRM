@@ -1,5 +1,5 @@
 // One command to land a release: merge the open pull requests into `main`, keep
-// the `contact-manager` mirror branch in step and cut the release. This is the
+// the `fyrhaven-crm` mirror branch in step and cut the release. This is the
 // documented "merge the branches, then `npm run release`" flow, automated.
 //
 //   npm run ship                  merge the open PRs, sync the mirror, release
@@ -152,8 +152,8 @@ if (DRY) {
 }
 
 // --- keep the mirror branch in step ---------------------------------------
-gitOrFail(['push', 'origin', 'main:contact-manager'], 'push the contact-manager mirror');
-console.log('contact-manager mirror is in step with main.');
+gitOrFail(['push', 'origin', 'main:fyrhaven-crm'], 'push the fyrhaven-crm mirror');
+console.log('fyrhaven-crm mirror is in step with main.');
 
 // --- cut the release -------------------------------------------------------
 if (NO_RELEASE) {
@@ -161,7 +161,7 @@ if (NO_RELEASE) {
   process.exit(0);
 }
 const manifest = JSON.parse(readFileSync(path.join(ROOT, 'manifest.json'), 'utf8'));
-const tag = `contact-manager-v${manifest.version}`;
+const tag = `fyrhaven-crm-v${manifest.version}`;
 if (git('rev-parse', '-q', '--verify', `refs/tags/${tag}`).status === 0) {
   console.log(`\nnothing to release: ${tag} already exists.`);
   process.exit(0);

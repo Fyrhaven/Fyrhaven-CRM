@@ -210,7 +210,7 @@ export function formatAmount(value, currency) {
   return currency ? `${amount} ${currency}` : amount;
 }
 
-export const EXPORT_FORMAT = 'bulwark-contact-manager-projects';
+export const EXPORT_FORMAT = 'bulwark-fyrhaven-crm-projects';
 
 /** The portable copy of every project: one JSON file per account. */
 export function exportPayload(projects, now = Date.now()) {

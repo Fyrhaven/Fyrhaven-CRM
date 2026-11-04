@@ -1,4 +1,4 @@
-// Builds contact-manager.zip from dist/index.js + manifest.json, the layout
+// Builds fyrhaven-crm.zip from dist/index.js + manifest.json, the layout
 // the webmail's plugin installer expects: both files at the root of the ZIP.
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -16,7 +16,7 @@ zip.file('manifest.json', await readFile(path.join(ROOT, 'manifest.json')), { da
 zip.file('index.js', await readFile(path.join(ROOT, 'dist', 'index.js')), { date: BUILD_DATE });
 
 const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
-const out = path.join(ROOT, 'contact-manager.zip');
+const out = path.join(ROOT, 'fyrhaven-crm.zip');
 await writeFile(out, buffer);
 
 const check = await JSZip.loadAsync(buffer);

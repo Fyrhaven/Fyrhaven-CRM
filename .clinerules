@@ -2,11 +2,11 @@
 
 The rules an automated contributor works to here, and the contract the test
 suite enforces. The plugin's own documentation — architecture, behaviour, data
-model, release process — is in [`contact-manager/README.md`](contact-manager/README.md),
+model, release process — is in [`fyrhaven-crm/README.md`](fyrhaven-crm/README.md),
 and the current state of the project (what shipped, what is blocked, what is
-next) is in [`contact-manager/HANDOFF.md`](contact-manager/HANDOFF.md).
+next) is in [`fyrhaven-crm/HANDOFF.md`](fyrhaven-crm/HANDOFF.md).
 
-All work happens in `contact-manager/`: the source is `src/`, the suite is
+All work happens in `fyrhaven-crm/`: the source is `src/`, the suite is
 `test/`, and every command below runs from that folder.
 
 ---
@@ -25,7 +25,7 @@ than this repository used to claim:
 - the permission table: <https://extensions.bulwarkmail.org/api/v2/permissions>
 
 **When a document in this repository disagrees with those, they win.** The
-summary in `contact-manager/README.md` §4.1 was once wrong in ways that mattered
+summary in `fyrhaven-crm/README.md` §4.1 was once wrong in ways that mattered
 (#75 — three shipped profile sections were inert because a method name was
 assumed), so check the generated docs before relying on a name.
 
@@ -116,7 +116,7 @@ A change is complete when:
 2. New behaviour has a test in the matching `test/*.test.mjs` file, and the
    test name says what the behaviour *is*, not how it is implemented.
 3. New strings exist in `en` **and** `de`.
-4. `npm run package` produces a valid `contact-manager.zip` whose root holds
+4. `npm run package` produces a valid `fyrhaven-crm.zip` whose root holds
    `manifest.json` and `index.js`.
 5. The `version` in `manifest.json` is bumped and `CHANGELOG.md` has an
    entry for it (see below).

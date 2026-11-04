@@ -93,7 +93,7 @@ kept and what is deleted.
 ## 3. Repository layout
 
 ```
-contact-manager/
+fyrhaven-crm/
 ├── manifest.json           # id, version, permissions, settings schema, en + de strings
 ├── package.json            # scripts and dev dependencies (no runtime deps)
 ├── vitest.config.mjs       # test config + the @plugin-host/ui alias
@@ -264,7 +264,7 @@ contact-manager/
 │   ├── fake-api.mjs        # a recording fake of the plugin host API
 │   └── ui-kit.mjs          # stand-in for @plugin-host/ui
 └── scripts/
-    └── package.mjs         # builds contact-manager.zip
+    └── package.mjs         # builds fyrhaven-crm.zip
 ```
 
 > `src/lib/*.js` must stay free of `api` and DOM access wherever possible —
@@ -1429,14 +1429,14 @@ cd contact-manager
 npm install        # once — dev dependencies only, no runtime dependencies
 npm test           # builds first (pretest), then runs the vitest suite
 npm run build      # esbuild -> dist/index.js
-npm run package    # build + scripts/package.mjs -> contact-manager.zip
+npm run package    # build + scripts/package.mjs -> fyrhaven-crm.zip
 ```
 
 | Script | What it does |
 |---|---|
 | `npm run build` | `esbuild src/index.js --bundle --format=cjs --platform=browser --target=es2020 --charset=utf8 --outfile=dist/index.js` with `react`, `react-dom`, `react-dom/client`, `react/jsx-runtime`, `@plugin-host` and `@plugin-host/ui` kept **external** |
 | `npm test` | Runs `pretest` (the build) and then `vitest run` — currently **906 tests in 60 files** |
-| `npm run package` | Builds and writes `contact-manager.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
+| `npm run package` | Builds and writes `fyrhaven-crm.zip` with `manifest.json` and `index.js` at the ZIP root, then re-opens the ZIP to verify its entries |
 
 The bundle is CommonJS because the host `require()`s it; React and the
 plugin host are **not** bundled, the host provides them.
@@ -1539,7 +1539,7 @@ text in the source; always use `t('key')`.
 
 ## 8. Installing in Bulwark
 
-Download `contact-manager.zip` from
+Download `fyrhaven-crm.zip` from
 [GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases), then
 upload it:
 
@@ -1560,7 +1560,7 @@ folder.
 
 | Path | Contents |
 |---|---|
-| `contact-manager/` | The full source tree — `src/`, `test/`, `test-utils/`, `scripts/`, `manifest.json`, `package.json`, `vitest.config.mjs`, `README.md`, `HANDOFF.md`, `CHANGELOG.md` |
+| `fyrhaven-crm/` | The full source tree — `src/`, `test/`, `test-utils/`, `scripts/`, `manifest.json`, `package.json`, `vitest.config.mjs`, `README.md`, `HANDOFF.md`, `CHANGELOG.md` |
 | `.clinerules` (repository root) | The rules for changing the code, and the contract the test suite enforces |
 
 The source lives in **`zyntrax/bulwark-plugins`** on GitHub. Installable ZIPs
@@ -1580,7 +1580,7 @@ build artifacts are committed.
 4. `npm test` — all tests green.
 5. Commit and push the source on `main`.
 6. Run `npm run release` from `main`. It tests, packages, tags
-   `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
+   `fyrhaven-crm-vX.Y.Z`, pushes the tag and creates the GitHub release with
    the ZIP attached. It stops before tagging if `manifest.json`, `package.json`
    and the top `CHANGELOG.md` entry disagree.
 

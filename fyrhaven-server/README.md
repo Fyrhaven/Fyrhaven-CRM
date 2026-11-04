@@ -245,5 +245,5 @@ copy.
 
 ## Licence
 
-Same position as the plugin — see `contact-manager/README.md` §12. No `LICENSE`
+Same position as the plugin — see `fyrhaven-crm/README.md` §12. No `LICENSE`
 file is committed yet, and the terms are the maintainer's to set.

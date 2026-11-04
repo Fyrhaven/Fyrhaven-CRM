@@ -1,7 +1,7 @@
 {
-  "id": "contact-manager",
+  "id": "fyrhaven-crm",
   "name": "Fyrhaven CRM",
-  "version": "1.55.0",
+  "version": "1.56.0",
   "author": "Alexander",
   "description": "Fyrhaven CRM — contacts, companies, projects and time for Bulwark Mail. Finds and merges duplicates, keeps private notes and consent records on your own server or ours, and follows you between devices.",
   "type": "ui-extension",
@@ -102,7 +102,7 @@
   },
   "locales": {
     "en": {
-      "page.title": "Contact Manager",
+      "page.title": "Fyrhaven CRM",
       "page.description": "Find and merge duplicate contacts across your address books.",
       "action.scan": "Scan for duplicates",
       "action.rescan": "Rescan",
@@ -1045,7 +1045,7 @@
       "policies.field.keywords": "Tags"
     },
     "de": {
-      "page.title": "Kontakt-Manager",
+      "page.title": "Fyrhaven CRM",
       "page.description": "Doppelte Kontakte in Ihren Adressbüchern finden und zusammenführen.",
       "action.scan": "Nach Duplikaten suchen",
       "action.rescan": "Erneut suchen",

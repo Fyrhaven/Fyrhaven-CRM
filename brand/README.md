@@ -10,7 +10,7 @@ The mark is a lighthouse on its rock, with the beam that makes it readable at
 | `fyrhaven-lockup.svg` | horizontal logo — this is where the **red/white stripes** live, because there is room for them |
 | `fyrhaven-banner.svg` | 1200×630 Open Graph / social card |
 
-Live copies sit in `contact-manager-server/site/` (`favicon.svg`, `banner.svg`) and
+Live copies sit in `fyrhaven-server/site/` (`favicon.svg`, `banner.svg`) and
 are served by the store itself.
 
 ## Palette

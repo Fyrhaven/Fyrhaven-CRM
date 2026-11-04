@@ -1,7 +1,7 @@
 # Handoff — Fyrhaven CRM
 
 > The authoritative record of where this plugin stands and why. It lives in the
-> repository at `contact-manager/HANDOFF.md` and is published on GitHub on the
+> repository at `fyrhaven-crm/HANDOFF.md` and is published on GitHub on the
 > branches `main` and `contact-manager` (identical content on both). The rules
 > for changing the code are in [`.clinerules`](../.clinerules).
 
@@ -9,7 +9,7 @@
 - **Version**: 1.55.0 (`manifest.json` is the single source of truth; `package.json` matches)
 - **Last changes**: **renamed to Fyrhaven CRM** (display name, docs, GitHub) — the plugin id, storage keys and ZIP names are unchanged, so an existing install updates in place; the id/tag/folder rename is a separate mechanical change. Before that: the server settings ask **which** server (#147) — *Dedicated server* opens with two ways in: **Cloud** (fixed address, a *Sign in* button, the token from the website) or **my own server** (type the address); the choice is remembered, a cloud sign-in can never be sent to a stale address, and `GET /v1/account` is asked afterwards so a lapsed plan says so instead of failing at the first save. On top of 1.53.0 — a project says where it lives.
 - **Cloud store deployed (2026-11-04)**: the service in
-  `contact-manager-server/` now runs on the maintainer's mail host as the compose
+  `fyrhaven-server/` now runs on the maintainer's mail host as the compose
   project **`contact-manager-store`** — image built from this repository, on the
   host's existing `opt_default` network, **no published port**, a named volume
   (`contact-manager-store_store-data`), `restart: unless-stopped` and the image's
@@ -33,7 +33,7 @@
   definition) that hand it over.
 - **Cloud store 1.1.0 (2026-11-04)**: accounts, sessions and the signup site (#148) — `accounts.js` adds `POST /v1/accounts`, `POST /v1/sessions`, `GET /v1/account` (plan, expiry, usage), `POST /v1/account/order` (202, pending) and `DELETE /v1/account`; passwords are scrypt hashes, a session is a random token stored **hashed**, a lapsed plan can still read but every write is `402`, and 240 req/min plus 5 000 records / 64 MiB per workspace are enforced. The site (`site/`) is served by the same container, so there is no second service. A `STORE_TOKENS` entry stays an installer token — unlimited, never expiring, unchanged. Deployed and verified live on `https://crm.mailz.se` (signup → write → `/v1/account` → delete → `401`). Not wired: email verification (no SMTP); payment is an invoice or webhook that calls `setPlan`. Server tests 35 (was 21).
 - **Cloud store 1.2.0 (2026-11-04)**: payments and the operator panel (#148). `payments.js` asks Stripe for a Checkout Session over plain `fetch` and verifies its webhook with `node:crypto` (constant time, five-minute window) — no SDK, no lockfile, card never touches the service; with no key the store takes no money and an order stays pending. `/admin` is guarded by `STORE_ADMIN_TOKEN` (503 until it is set) and settles orders, sets plans, deletes accounts. The webhook reads the account and order from metadata the service wrote, never from a body a customer can edit. Live on `https://crm.mailz.se` (`/admin` 200, admin API 401 without the token, 503 when no token is configured). Server tests 44 (was 35). `docker-compose*.yml` pass the new variables through and pin `name: contact-manager-store`, so the volume keeps its identity.
-- **Released**: `contact-manager-v1.53.0` is the newest GitHub release; v1.52.0, v1.51.0,
+- **Released**: `fyrhaven-crm-v1.53.0` is the newest GitHub release; v1.52.0, v1.51.0,
   v1.50.5,
   v1.50.4, v1.50.3, v1.50.2, v1.50.1 and v1.50.0 were cut from `main` before it,
   and every release from v1.5.0 up has a tag and a ZIP. `main` and `contact-manager` are
@@ -47,11 +47,11 @@
   v1.30.0 through v1.39.0 each have a tag and a ZIP. **v1.40.0 (#23, the advisory
   half), v1.41.0 (#39, the onboarding half), v1.42.0 (#39, the scale half),
   v1.43.0 (#13, the palette half), v1.44.0 (#39's help + shortcuts) and v1.45.0
-  (#36's task-creation half) landed together in `contact-manager-v1.45.0` (PR
+  (#36's task-creation half) landed together in `fyrhaven-crm-v1.45.0` (PR
   #132, cut with `npm run ship`), **v1.46.0 (#38, the private half) in
-  `contact-manager-v1.46.0`** (PR #134, cut the same way), and **v1.47.0 (#36's
+  `fyrhaven-crm-v1.46.0`** (PR #134, cut the same way), and **v1.47.0 (#36's
   cross-contact half, plus the #68 storage seam and the cloud store) in
-  `contact-manager-v1.47.0`** (PR #136). **Nothing is waiting to be released.**
+  `fyrhaven-crm-v1.47.0`** (PR #136). **Nothing is waiting to be released.**
 - **Test double**: `test-utils/fake-api.mjs` can now declare a host **shape** —
   `fakeApi({ host: { absent: [...], exposes: { email: ['query', 'send'] } } })` —
   so "the method was renamed" and "the namespace is gone" are expressible in a
@@ -1873,7 +1873,7 @@ and `--no-release` stops after the merge.
 
 ## Project Structure
 ```
-contact-manager/
+fyrhaven-crm/
 ├── manifest.json          # id, version, permissions, settingsSchema, locales (en+de)
 ├── package.json           # scripts and dev dependencies
 ├── CHANGELOG.md           # user-facing history
@@ -1944,20 +1944,20 @@ contact-manager/
 │   ├── fake-api.mjs       # recording fake of plugin host API
 │   └── ui-kit.mjs         # stand-in for @plugin-host/ui
 └── scripts/
-    ├── package.mjs        # builds contact-manager.zip
+    ├── package.mjs        # builds fyrhaven-crm.zip
     └── release.mjs        # tags, pushes the tag, uploads the ZIP to Releases
 ```
 
 ## How to Continue
 
 1. **Run tests**: `cd contact-manager && npm test` (builds first, then runs vitest suite)
-2. **Build package**: `npm run package` (creates contact-manager.zip)
+2. **Build package**: `npm run package` (creates fyrhaven-crm.zip)
 3. **Update version**: bump `manifest.json` version (and `package.json`) and add the CHANGELOG entry
 4. **Merge**: merge the feature branch into `main` through a PR and keep the
    `contact-manager` mirror branch in step with `main`
 5. **Commit**: source only (the ZIP is a GitHub release asset)
 6. **GitHub**: run `npm run release` on `main`. It tags
-   `contact-manager-vX.Y.Z`, pushes the tag and creates the GitHub release with
+   `fyrhaven-crm-vX.Y.Z`, pushes the tag and creates the GitHub release with
    the ZIP attached; the roadmap and todos live in GitHub issues/milestones.
 
 ### Where to pick up next
@@ -2068,7 +2068,7 @@ feature that needs it says so. Nothing silently falls back to the browser: a
 feature that quietly kept working on one device is the bug this decision exists
 to remove.
 
-**The server itself is in this repository**, in `contact-manager-server/`: one
+**The server itself is in this repository**, in `fyrhaven-server/`: one
 file with no dependencies (`node:http` + `node:sqlite`), a `Dockerfile`, a
 `docker-compose.yml` with TLS at the edge (Caddy, automatic certificates) and its
 own `node --test` suite. A **token is a workspace**, so one deployment serves
@@ -2147,7 +2147,7 @@ timer hook. v1.4.0 is complete except **#18**, which needs message bodies —
 
 > **v1.51.0 shipped** — #38's search half, so the last "clearly buildable"
 > item on this list is done. **The next work is the #68 line**: stand the store
-> up (the compose file and image are in `contact-manager-server/`; TLS needs a
+> up (the compose file and image are in `fyrhaven-server/`; TLS needs a
 > DNS name pointed at the host and a proxy host in front of it), then switch the
 > remaining record stores through the seam one at a time (policies, roles,
 > automation rules, saved searches, import templates, normalisation rules — each
@@ -2162,7 +2162,7 @@ timer hook. v1.4.0 is complete except **#18**, which needs message bodies —
 
 ## GitHub Integration
 - Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in
-  `contact-manager/`; there is no separate `bulwark-addons` repository.
+  `fyrhaven-crm/`; there is no separate `bulwark-addons` repository.
 - **Branches**: `main` is the release branch and carries the current version.
   `contact-manager` mirrors the plugin work and is kept in step with `main`.
   Feature branches are `feat/contact-manager-<feature>` and are merged into
@@ -2176,8 +2176,8 @@ timer hook. v1.4.0 is complete except **#18**, which needs message bodies —
   `v2.0.0` group them — the titles are the originally planned releases (the
   plugin is at v1.43.0), so read them as phases and read each description for
   what has shipped and what remains.
-- **Releases**: tagged `contact-manager-vX.Y.Z`; installable ZIPs are the
-  release assets. The newest release is `contact-manager-v1.53.0`.
+- **Releases**: tagged `fyrhaven-crm-vX.Y.Z`; installable ZIPs are the
+  release assets. The newest release is `fyrhaven-crm-v1.53.0`.
 - **Cutting a release**: merge the feature PR(s) into `main`, keep
   `contact-manager` in step, bump `manifest.json`/`package.json` + `CHANGELOG.md`
   on `main`, then run `npm run release` — it tags, pushes the tag and uploads
