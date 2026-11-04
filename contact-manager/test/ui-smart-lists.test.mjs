@@ -9,6 +9,8 @@ import path from 'node:path';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import { makeSmartListsDialog } from '../src/lib/smart-lists-dialog.js';
 import { makeCard } from './fixtures.mjs';
+import { filesHost } from '../test-utils/files-host.mjs';
+import { NOTES_KEY, writeNotes } from '../src/lib/notes.js';
 
 const manifest = JSON.parse(readFileSync(path.join(process.cwd(), 'manifest.json'), 'utf8'));
 afterEach(cleanup);
@@ -120,5 +122,32 @@ describe('smart lists dialog', () => {
 
     await waitFor(() => expect(api.calls('ui.alert')).toHaveLength(1));
     expect(screen.getByText(en()['smartLists.unavailable'])).toBeTruthy();
+  });
+});
+
+describe('private notes in the palette (#38)', () => {
+  it('counts a note: search the same way the Contacts page does', async () => {
+    // Notes are records (#68), so the dialog needs the customer's own storage.
+    const files = filesHost();
+    const api = fakeApi({
+      translations: manifest.locales,
+      host: files.host,
+      handlers: {
+        ...files.handlers,
+        'contacts.list': async () => CARDS,
+        'addressBooks.list': async () => [{ id: 'b1', name: 'Personal' }],
+      },
+    });
+    await writeNotes(api, { c: [{ id: 'n1', at: '2026-01-01T00:00:00Z', text: 'Kickoff call' }] });
+    void api.storage.set('savedSearches', [{ name: 'Kickoff', query: 'note:kickoff' }]);
+
+    await open(api);
+
+    // Alan has no such word on his card: the private note is the only reason he matches
+    expect(screen.getByRole('button', { name: 'Kickoff · 1' })).toBeTruthy();
+    await click('Kickoff · 1');
+
+    expect(screen.getByText('Alan Turing')).toBeTruthy();
+    expect(screen.queryByText('Ada Lovelace')).toBeNull();
   });
 });

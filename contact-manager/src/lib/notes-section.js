@@ -13,19 +13,29 @@ export function makeNotesSection(React, api) {
   const { createElement: h, useCallback, useEffect, useState } = React;
   const t = (key, vars) => api.i18n.t(key, vars);
 
-  return function NotesSection({ contact, revision } = {}) {
-    const [all, setAll] = useState({});
+  return function NotesSection({ contact, revision, notes: stored, onChange } = {}) {
+    // Controlled when the page hands the note map over: the page then owns the
+    // one copy, so a note saved here is searchable at once (#38) and the
+    // section never reads the store twice.
+    const controlled = stored !== undefined;
+    const [own, setOwn] = useState({});
     const [draft, setDraft] = useState('');
     const [busy, setBusy] = useState(false);
     const contactId = contact?.id ?? '';
+    const all = controlled ? stored : own;
+    const commit = (next) => {
+      if (controlled) onChange?.(next);
+      else setOwn(next);
+    };
 
     const load = useCallback(async () => {
+      if (controlled) return;
       try {
-        setAll(await readNotes(api));
+        setOwn(await readNotes(api));
       } catch {
-        setAll({});
+        setOwn({});
       }
-    }, []);
+    }, [controlled]);
     useEffect(() => { void load(); }, [load, revision]);
 
     const notes = notesFor(all, contactId);
@@ -34,7 +44,7 @@ export function makeNotesSection(React, api) {
       if (!draft.trim()) return;
       setBusy(true);
       try {
-        setAll(await saveNote(api, contactId, draft));
+        commit(await saveNote(api, contactId, draft));
         setDraft('');
       } catch (err) {
         await reportError(api, t('notes.saveFailed', { reason: String(err?.message ?? err) }));
@@ -45,7 +55,7 @@ export function makeNotesSection(React, api) {
 
     const remove = async (note) => {
       try {
-        setAll(await deleteNote(api, contactId, note.id));
+        commit(await deleteNote(api, contactId, note.id));
       } catch (err) {
         await reportError(api, t('notes.deleteFailed', { reason: String(err?.message ?? err) }));
       }

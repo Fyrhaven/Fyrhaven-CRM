@@ -69,7 +69,7 @@ signatures, the last scan summary).
 | Command palette action / *Import contacts* button | Ctrl+K → *Import contacts*, or the Overview page | Opens the **import wizard**: reads a CSV or vCard, guesses the columns (and remembers a mapping), previews, and gives every contact that matches one you already have its own *Skip* / *Merge into the existing contact* / *Import as a separate contact* choice (#4). A merge goes on to the review dialog |
 | *Edit contact* button | `contact-detail-section` | Opens the contact editor (edit / delete) |
 | *Follow up* button | Contact Manager → *Contacts*, on the open contact | Opens the **follow-up task** editor (#36): title (prefilled), due date, priority and notes, created as a real host task. The profile's task list shows the contact's tasks with anything past due badged *Overdue*, first |
-| *Private notes* section | Contact Manager → *Contacts*, on the open contact | Notes this browser holds about the contact (#38, the private half): write, read back with a timestamp, delete. Private by construction — they live in `api.storage`, never on the card. A small documented subset of marks (`**bold**`, `*italic*`, `` `code` ``, `@mention`) is rendered as elements, never as markup. The subject-access export carries them, and erasure removes them |
+| *Private notes* section | Contact Manager → *Contacts*, on the open contact | Notes kept on your server about the contact (#38, the private half): write, read back with a timestamp, delete. Private by construction — a note is a record of its own through the storage seam, never a card field, so nothing shared can show it. Free text, `note:` and `has:note` in the search box find them too. A small documented subset of marks (`**bold**`, `*italic*`, `` `code` ``, `@mention`) is rendered as elements, never as markup. The subject-access export carries them, and erasure removes them |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
@@ -1277,11 +1277,12 @@ a note, read it back with a timestamp, delete it.
 **Private by construction, not by a visibility flag.** The host has no note
 *record* per contact, and JSContact's `notes` field is a field **on the card** —
 so everyone who can see the card can see it, and a private note cannot be a card
-field. A note is therefore a record *about* the contact, kept in `api.storage`
-per account and per browser, exactly like the consent records and the change
-history. Nothing shared can show it because nothing shared can read it — the
-strongest form of "private notes never appear in shared views". The section says
-so out loud (`notes.hint`), rather than implying a flag enforces it.
+field. A note is therefore a record *about* the contact, kept through the storage
+seam (#68) on the customer's own server — a file in their own drive, or the cloud
+store — like the consent records and the change history. Nothing shared can show
+it because nothing shared can read it — the strongest form of "private notes
+never appear in shared views". The section says so out loud (`notes.hint`),
+rather than implying a flag enforces it.
 
 **The store is bounded and repairs itself.** `normalizeNotes` keeps only real
 contacts with real notes, de-duplicates by note id, drops a note with no id or no
@@ -1303,10 +1304,42 @@ export carries the notes (`buildSubjectExport({ …, notes })`), and both
 behind would be a half-measure. The vCard/CSV subject exports stay card-only,
 since a note is not a card field.
 
-Still to come from #38: team visibility, mentions that notify, and search across
-notes — the shared half needs the server tier (#68). There is deliberately **no
-author** on a note: the host exposes no user identity to the plugin, and
-inventing one would be a lie.
+Still to come from #38: team visibility, mentions that notify, and a *shared*
+note store — those need the server tier's team features (#68). There is
+deliberately **no author** on a note: the host exposes no user identity to the
+plugin, and inventing one would be a lie.
+
+### 6.22 Searching the private notes (`src/lib/search.js`, v1.51.0) — #38
+
+A note that could only be read from the contact it was written on is a note you
+have to remember to look for. Search is where a user asks *"where did I write
+that?"*, so the search index now carries the private notes: free text, `note:`
+and `has:note` treat a private note exactly like a note on the card.
+
+**Where it is kept is not the searcher's concern.** `indexEntry` merges the
+card's own `notes` with the private ones into one field, so `has:note` means "a
+note about this contact" whether the host holds it or the seam does. The private
+notes arrive as an option — `buildIndex(cards, { books, notes })`, the record as
+`{ [contactId]: [{ text }] }` — so `search.js` stays free of `api` and of the
+storage seam, exactly as it stayed free of the DOM.
+
+**Every place that counts matches must pass it, or the page and the palette
+disagree.** That is why this was its own piece of work rather than a one-line
+change: the Contacts page (`profile-page.js`) and the palette's Smart lists
+dialog both read the note record and both index it, so a saved search's count and
+its members are the same number.
+
+**One copy, so a new note is searchable at once.** The page reads the record
+once, feeds it to the index, and hands it to the *Private notes* section as a
+controlled value (`notes` + `onChange`). Saving a note updates the page's copy,
+the index is rebuilt, and the word is searchable without a reload — a second read
+inside the section would have left the index describing the notes as they were
+when the page opened.
+
+**An unavailable store is not an error.** `readNotes` never throws for a missing
+server, and the page catches a failed read as "no notes", so search keeps working
+over the cards alone — the #68 rule that a record feature degrades instead of
+breaking the page.
 
 ---
 
