@@ -258,6 +258,7 @@ export function storeOps(db, keys) {
 const SITE_FILES = {
   '/': 'index.html', '/index.html': 'index.html', '/site.js': 'site.js', '/site.css': 'site.css',
   '/admin': 'admin.html', '/admin.js': 'admin.js',
+  '/favicon.svg': 'favicon.svg', '/banner.svg': 'banner.svg',
 };
 const SITE_TYPES = {
   'index.html': 'text/html; charset=utf-8',
@@ -265,6 +266,8 @@ const SITE_TYPES = {
   'site.css': 'text/css; charset=utf-8',
   'admin.html': 'text/html; charset=utf-8',
   'admin.js': 'text/javascript; charset=utf-8',
+  'favicon.svg': 'image/svg+xml',
+  'banner.svg': 'image/svg+xml',
 };
 const SITE_DIR = fileURLToPath(new URL('./site/', import.meta.url));
 
