@@ -4,12 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import { filesHost } from '../test-utils/files-host.mjs';
 import { read, write } from '../src/lib/store.js';
+import { REMOTE_URL_KEY } from '../src/lib/remote.js';
 import {
   EXPORT_FORMAT, PROJECTS_KEY, billableExpenses, billableMinutes, deleteProject,
   emptyExpense, emptyMilestone, emptyProject, emptyTimeEntry, exportPayload,
   formatAmount, formatMinutes, importProjects, mergeProjects, milestoneTaskDraft,
   normalizeProject, normalizeProjects, openMilestoneIds, parseExport, projectTotal,
-  projectsForCompany, projectsForContact, readProjects, saveProject, timeAmount,
+  moveProject, projectsForCompany, projectsForContact, readProjects, saveProject, timeAmount,
   totalMinutes, validateProject,
 } from '../src/lib/projects.js';
 
@@ -164,11 +165,14 @@ describe('time, expenses and totals', () => {
 });
 
 describe('export and import', () => {
-  it('wraps the projects in a portable, local-only payload', () => {
+  it('wraps the projects in a portable payload, and no longer pretends they are browser-only', () => {
     const payload = exportPayload([emptyProject('p1', { name: 'Website' })], 0);
-    expect(payload).toMatchObject({ format: EXPORT_FORMAT, schemaVersion: 1, localOnly: true });
+    expect(payload).toMatchObject({ format: EXPORT_FORMAT, schemaVersion: 1, localOnly: false });
     expect(payload.exportedAt).toBe(new Date(0).toISOString());
-    expect(payload.note).toMatch(/browser only/);
+    // The note used to say "browser only" — it now has to say where records live,
+    // because that is what the file is a copy of.
+    expect(payload.note).toMatch(/your own|Contact Manager server/);
+    expect(payload.note).not.toMatch(/browser only/);
     expect(payload.projects.map((p) => p.name)).toEqual(['Website']);
   });
 
@@ -227,5 +231,129 @@ describe('project storage without a server', () => {
     await saveProject(api, emptyProject('p1', { name: 'Website' }));
     expect(api.calls('files.create')).toHaveLength(1);
     expect(await api.storage.get(PROJECTS_KEY)).toBeNull();
+  });
+});
+
+describe('which server a project lives on (#68)', () => {
+  /** The customer's own Files storage. */
+  const ownServer = () => {
+    const files = filesHost();
+    return fakeApi({ host: files.host, handlers: files.handlers });
+  };
+
+  /**
+   * The Contact Manager server: `proxy.fetch` answers the four calls with an
+   * in-memory record map, so a write can be read back in the same test.
+   */
+  const cloudServer = () => {
+    const records = new Map();
+    const api = fakeApi({
+      handlers: {
+        'proxy.fetch': async (credentialId, url, init = {}) => {
+          const key = url.split('/v1/store/')[1]?.split('?')[0] ?? '';
+          if ((init.method ?? 'GET') === 'PUT') {
+            records.set(key, JSON.parse(init.body).value);
+            return { status: 200, ok: true, headers: {}, body: '{"revision":1}' };
+          }
+          if ((init.method ?? 'GET') === 'DELETE') {
+            records.delete(key);
+            return { status: 200, ok: true, headers: {}, body: '{"ok":true}' };
+          }
+          return { status: 200, ok: true, headers: {}, body: JSON.stringify({ key, value: records.get(key) ?? null }) };
+        },
+      },
+    });
+    api.storage.set(REMOTE_URL_KEY, 'https://crm.example').catch(() => {});
+    return { api, records };
+  };
+
+  it('writes a cloud project to the server, not to your own drive', async () => {
+    const { api, records } = cloudServer();
+    await api.storage.set(REMOTE_URL_KEY, 'https://crm.example');
+
+    await saveProject(api, emptyProject('p1', { name: 'Shared work', storage: 'cloud' }));
+
+    expect(records.get(PROJECTS_KEY).map((project) => project.name)).toEqual(['Shared work']);
+    expect(api.calls('files.create')).toHaveLength(0);
+    expect(await api.storage.get(PROJECTS_KEY)).toBeNull();
+  });
+
+  it('reads both servers and says which is which', async () => {
+    const files = filesHost();
+    const records = new Map();
+    const api = fakeApi({
+      host: files.host,
+      handlers: {
+        ...files.handlers,
+        'proxy.fetch': async (credentialId, url, init = {}) => {
+          const key = url.split('/v1/store/')[1]?.split('?')[0] ?? '';
+          if ((init.method ?? 'GET') === 'PUT') {
+            records.set(key, JSON.parse(init.body).value);
+            return { status: 200, ok: true, headers: {}, body: '{"revision":1}' };
+          }
+          if ((init.method ?? 'GET') === 'DELETE') {
+            records.delete(key);
+            return { status: 200, ok: true, headers: {}, body: '{"ok":true}' };
+          }
+          return { status: 200, ok: true, headers: {}, body: JSON.stringify({ key, value: records.get(key) ?? null }) };
+        },
+      },
+    });
+    await api.storage.set(REMOTE_URL_KEY, 'https://crm.example');
+
+    await saveProject(api, emptyProject('p1', { name: 'Mine', storage: 'personal' }));
+    await saveProject(api, emptyProject('p2', { name: 'Theirs', storage: 'cloud' }));
+
+    const merged = await readProjects(api);
+    expect(merged.map((project) => [project.name, project.storage]).sort())
+      .toEqual([['Mine', 'personal'], ['Theirs', 'cloud']]);
+    // each half really is on its own server
+    expect(records.get(PROJECTS_KEY).map((project) => project.id)).toEqual(['p2']);
+  });
+
+  it('leaves the old server when a project moves', async () => {
+    const files = filesHost();
+    const records = new Map();
+    const api = fakeApi({
+      host: files.host,
+      handlers: {
+        ...files.handlers,
+        'proxy.fetch': async (credentialId, url, init = {}) => {
+          const key = url.split('/v1/store/')[1]?.split('?')[0] ?? '';
+          if ((init.method ?? 'GET') === 'PUT') {
+            records.set(key, JSON.parse(init.body).value);
+            return { status: 200, ok: true, headers: {}, body: '{"revision":1}' };
+          }
+          if ((init.method ?? 'GET') === 'DELETE') {
+            records.delete(key);
+            return { status: 200, ok: true, headers: {}, body: '{"ok":true}' };
+          }
+          return { status: 200, ok: true, headers: {}, body: JSON.stringify({ key, value: records.get(key) ?? null }) };
+        },
+      },
+    });
+    await api.storage.set(REMOTE_URL_KEY, 'https://crm.example');
+
+    await saveProject(api, emptyProject('p1', { name: 'Moving', storage: 'personal' }));
+    expect((await readProjects(api)).map((project) => project.storage)).toEqual(['personal']);
+
+    const moved = await moveProject(api, 'p1', 'cloud');
+    expect(moved.storage).toBe('cloud');
+
+    const after = await readProjects(api);
+    // one copy, on the server it was moved to — never both
+    expect(after.map((project) => [project.name, project.storage])).toEqual([['Moving', 'cloud']]);
+    expect(records.get(PROJECTS_KEY).map((project) => project.id)).toEqual(['p1']);
+  });
+
+  it('reads a record saved before targets existed as your own', async () => {
+    const files = filesHost();
+    const api = fakeApi({ host: files.host, handlers: files.handlers });
+    const legacy = { ...emptyProject('p1', { name: 'Old' }) };
+    delete legacy.storage;
+    await write(api, PROJECTS_KEY, [legacy]);
+
+    expect((await readProjects(api))[0]).toMatchObject({ name: 'Old', storage: 'personal' });
+    expect(normalizeProject(legacy).storage).toBe('personal');
   });
 });

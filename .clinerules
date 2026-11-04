@@ -205,7 +205,17 @@ The storage seam (#68)
     VIEW_KEYS   -> api.storage: view state, and the server's own address +
       credential id, which must be readable BEFORE a server is reached
     read/write/remove(api, key) -> { status: 'ok' | 'unavailable' }
-    recordsAvailable(api) — what a feature asks before it reads, so it can say
+    a RECORD may name its TARGET: 'personal' (api.files, the user's own drive —
+    only they can open it) or 'cloud' (the Contact Manager server, shared with
+    the workspace). readAs/writeAs/removeAs(api, key, value?, target) pin it, and
+    a pinned target that is unavailable reports 'unavailable' — NEVER a silent
+    fall back to the other server. A record the user placed somewhere must never
+    turn up somewhere else
+  availableTargets(api) -> { personal, cloud } — what a "where does this live?"
+    control may offer; a target that cannot be reached is not offered
+  projects carry `storage` and are read from BOTH servers, merged: a move
+    rewrites both halves, so one project is never in two places
+  recordsAvailable(api) — what a feature asks before it reads, so it can say
       "this needs a server" instead of showing an empty list
     NO silent local fallback. With no `api.files` (an older webmail, or an admin
       who turned Files off) and no cloud configured, a record feature is
