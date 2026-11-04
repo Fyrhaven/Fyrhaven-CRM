@@ -18,6 +18,19 @@ export const REMOTE_CREDENTIAL_KEY = 'remoteCredentialId';
  */
 export const CREDENTIAL_ID = 'store';
 
+/**
+ * The service the plugin's own cloud tier runs on (#147).
+ *
+ * Fixed in code, not shown as a field: a customer who bought a subscription is
+ * not expected to know a hostname, and an address they could edit is one they
+ * could get wrong. A self-hoster types their own instead.
+ */
+export const CLOUD_ORIGIN = 'https://crm.mailz.se';
+
+/** Which of the two ways this install talks to a server. */
+export const SERVER_MODES = ['cloud', 'self'];
+export const REMOTE_MODE_KEY = 'remoteMode';
+
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
 /**
@@ -53,8 +66,30 @@ export async function writeRemoteUrl(api, url) {
  * older webmail can proxy a request but cannot hold a credential for us.
  */
 export async function readServerState(api) {
-  const [url, credentialId] = await Promise.all([readRemoteUrl(api), readRemoteCredential(api)]);
-  return { url, credentialId, canConnect: typeof api?.proxy?.connect === 'function' };
+  const [url, credentialId, mode] = await Promise.all([
+    readRemoteUrl(api), readRemoteCredential(api), readServerMode(api),
+  ]);
+  return {
+    url,
+    credentialId,
+    mode,
+    // The cloud address is fixed; the dialog shows it as a fact, not a field.
+    cloudOrigin: CLOUD_ORIGIN,
+    canConnect: typeof api?.proxy?.connect === 'function',
+  };
+}
+
+/** `'cloud'` (the plugin's service) or `'self'` (a server you run). */
+export async function readServerMode(api) {
+  const stored = text(await api.storage.get(REMOTE_MODE_KEY));
+  return SERVER_MODES.includes(stored) ? stored : 'self';
+}
+
+/** Remembers the choice, so the dialog opens where the user left it. */
+export async function writeServerMode(api, mode) {
+  const clean = SERVER_MODES.includes(mode) ? mode : 'self';
+  await api.storage.set(REMOTE_MODE_KEY, clean);
+  return clean;
 }
 
 /**
@@ -71,8 +106,10 @@ export async function readServerState(api) {
  *
  * @returns {Promise<{status: 'ok'|'unavailable'|'failed', url?: string, reason?: string}>}
  */
-export async function connectServer(api, url) {
-  const target = normalizeServerUrl(url);
+export async function connectServer(api, url, { mode = 'self' } = {}) {
+  // Cloud ignores what the dialog held: the address is the service's, and a
+  // stale field must not point a subscriber at someone else's server.
+  const target = mode === 'cloud' ? CLOUD_ORIGIN : normalizeServerUrl(url);
   if (!target) return { status: 'failed', reason: 'no address' };
   const connect = api?.proxy?.connect;
   if (typeof connect !== 'function') return { status: 'unavailable' };
@@ -227,6 +264,37 @@ export async function serverVersion(api) {
     const parsed = JSON.parse(answer.body);
     const version = text(parsed?.version);
     return version ? { status: 'ok', version } : { status: 'failed', reason: 'no version in the answer' };
+  } catch {
+    return { status: 'failed', reason: 'the answer was not JSON' };
+  }
+}
+
+
+/**
+ * What the server says about this credential: the plan, its expiry, and whether
+ * writing is allowed (#147).
+ *
+ * This is the difference between "connected" and "entitled": a stranger can
+ * reach the service, and an expired subscription can still read. The plugin asks
+ * rather than assuming, because assuming either way is a lie to the user.
+ *
+ * @returns {Promise<{status: 'ok'|'unconfigured'|'unavailable'|'failed', plan?: string,
+ *   entitled?: boolean, expiresAt?: string, email?: string, licences?: any[], reason?: string}>}
+ */
+export async function accountInfo(api) {
+  const answer = await callServer(api, '/v1/account');
+  if (answer.status !== 'ok') return answer;
+  try {
+    const parsed = JSON.parse(answer.body);
+    if (!parsed || typeof parsed !== 'object') return { status: 'failed', reason: 'the answer was not an object' };
+    return {
+      status: 'ok',
+      plan: text(parsed.plan),
+      entitled: parsed.entitled === true,
+      expiresAt: text(parsed.expiresAt),
+      email: text(parsed.account?.email),
+      licences: Array.isArray(parsed.licences) ? parsed.licences : [],
+    };
   } catch {
     return { status: 'failed', reason: 'the answer was not JSON' };
   }

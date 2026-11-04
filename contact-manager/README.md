@@ -1373,6 +1373,25 @@ itself would be nesting host surfaces nobody has promised works.
 a refused token is reported at once instead of at the first record the user tries
 to save.
 
+### 6.25 Dedicated server: cloud or self-hosted (`src/lib/remote.js`, `server-dialog.js`, v1.54.0) — #147
+
+One dialog with one address field was honest for a self-hoster and wrong for a
+subscriber: it let a customer of the service point the plugin anywhere, and it
+never asked whether the subscription behind the token still existed.
+
+**Two ways in, and the dialog says which.** *Contact Manager Cloud* pins the
+address in code (`CLOUD_ORIGIN`) and shows it as a fact — an address a user can
+edit is one they can get wrong, and a stale field must never send a subscriber's
+token to someone else's server. *My own server* keeps the typed address. The mode
+is a view key (`remoteMode`), so the dialog reopens where it was left.
+
+**"Connected" is not "entitled".** `api.proxy.connect` only proves the host holds
+a credential the server accepted. `accountInfo` then asks `GET /v1/account` for
+the plan, its expiry and whether writing is allowed, and the funnel reports what
+came back: an installer token is *unlimited*, a live plan is *until a date*, and a
+lapsed one is *read-only, renew on the website*. Without that, a subscriber whose
+plan ended would discover it at the first failed save.
+
 ### 6.24 Where a project lives, and who can see it (`src/lib/store.js`, `projects.js`, `project-dialog.js`, v1.53.0) — #68
 
 The two servers a record can live on are **not the same audience**, and until now

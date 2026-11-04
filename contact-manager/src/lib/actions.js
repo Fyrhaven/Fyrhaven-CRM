@@ -22,7 +22,9 @@ import { policyAwareOptions } from './book-policies.js';
 import { contactsToFile } from './export.js';
 import { saveFile } from './download.js';
 import { fileNameFor } from './smart-lists.js';
-import { connectServer, disconnectServer, readServerState, serverVersion } from './remote.js';
+import {
+  accountInfo, connectServer, disconnectServer, readServerState, serverVersion, writeServerMode,
+} from './remote.js';
 
 /** Duplicate groups over all contacts, or over `scopeIds` when given. */
 export async function scanGroups(api, scopeIds = null) {
@@ -266,7 +268,8 @@ export async function openServer(api) {
     return null;
   }
 
-  const answer = await connectServer(api, result?.connect?.url);
+  const mode = result?.connect?.mode === 'cloud' ? 'cloud' : 'self';
+  const answer = await connectServer(api, result?.connect?.url, { mode });
   if (answer.status === 'unavailable') {
     api.toast.warning(t('server.noConnect'));
     return answer;
@@ -275,9 +278,22 @@ export async function openServer(api) {
     api.toast.error(t('server.connectFailed', { reason: answer.reason ?? '' }));
     return answer;
   }
+  await writeServerMode(api, mode);
   api.toast.success(t('server.connectedToast', { url: answer.url }));
-  // Say what the server answered now, so a wrong address or a refused token is
-  // visible at once instead of at the first record the user tries to save.
-  await checkServer(api);
+
+  // Connected is not the same as entitled: ask the server what the plan allows,
+  // so a lapsed subscription is reported here instead of at the first save.
+  const account = await accountInfo(api);
+  if (account.status === 'ok' && account.plan === 'installer') {
+    api.toast.success(t('server.installerOk'));
+  } else if (account.status === 'ok' && account.entitled === false) {
+    api.toast.warning(t('server.planExpired', {
+      plan: account.plan || '—', date: account.expiresAt ? account.expiresAt.slice(0, 10) : '—',
+    }));
+  } else if (account.status === 'ok') {
+    api.toast.info(t('server.planLine', {
+      plan: account.plan, date: account.expiresAt ? account.expiresAt.slice(0, 10) : '—',
+    }));
+  }
   return answer;
 }
