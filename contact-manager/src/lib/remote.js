@@ -11,8 +11,25 @@
 
 export const REMOTE_URL_KEY = 'remoteUrl';
 export const REMOTE_CREDENTIAL_KEY = 'remoteCredentialId';
+/**
+ * The credential id the manifest declares (`credentials.store`). The host holds
+ * the token; the plugin only ever names it — that is the whole reason a paid
+ * tier can ship without a secret in the ZIP.
+ */
+export const CREDENTIAL_ID = 'store';
 
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
+
+/**
+ * A server address with a scheme and no trailing slash. A value typed without
+ * one is https, because a token over plain http is a token given away.
+ */
+export function normalizeServerUrl(url) {
+  const clean = text(url);
+  if (!clean) return '';
+  const withScheme = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+  return withScheme.replace(/\/+$/, '');
+}
 
 /** The server the user configured, or '' when the plugin is local-only. */
 export async function readRemoteUrl(api) {
@@ -21,16 +38,72 @@ export async function readRemoteUrl(api) {
 
 /** Sets (or clears) the server; a URL without a scheme is treated as https. */
 export async function writeRemoteUrl(api, url) {
-  const clean = text(url);
+  const clean = normalizeServerUrl(url);
   if (!clean) {
     await api.storage.remove(REMOTE_URL_KEY);
     return '';
   }
-  const withScheme = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
-  const trimmed = withScheme.replace(/\/+$/, '');
-  await api.storage.set(REMOTE_URL_KEY, trimmed);
-  return trimmed;
+  await api.storage.set(REMOTE_URL_KEY, clean);
+  return clean;
 }
+
+/**
+ * What the plugin knows about the server right now — for the dialog that shows
+ * it. `canConnect` is the host's `api.proxy.connect` being there at all: an
+ * older webmail can proxy a request but cannot hold a credential for us.
+ */
+export async function readServerState(api) {
+  const [url, credentialId] = await Promise.all([readRemoteUrl(api), readRemoteCredential(api)]);
+  return { url, credentialId, canConnect: typeof api?.proxy?.connect === 'function' };
+}
+
+/**
+ * Connects the host-held credential and remembers where the server is.
+ *
+ * The host draws the dialog that takes the workspace token, so the plugin never
+ * sees it: `api.proxy.connect` resolves `{ connected, origin, credentialId,
+ * username }` once the user has approved. Every failure is an answer, not a
+ * throw — a missing `api.proxy.connect`, a cancelled dialog and a refusal are
+ * three different messages to the user.
+ *
+ * Nothing is written until the host says `connected`, so a cancelled dialog
+ * cannot leave the plugin pointed at a server it cannot authenticate to.
+ *
+ * @returns {Promise<{status: 'ok'|'unavailable'|'failed', url?: string, reason?: string}>}
+ */
+export async function connectServer(api, url) {
+  const target = normalizeServerUrl(url);
+  if (!target) return { status: 'failed', reason: 'no address' };
+  const connect = api?.proxy?.connect;
+  if (typeof connect !== 'function') return { status: 'unavailable' };
+  try {
+    const answer = await connect(CREDENTIAL_ID, { mode: 'password', server: target });
+    if (!answer || answer.connected !== true) return { status: 'failed', reason: 'not connected' };
+    const origin = normalizeServerUrl(answer.origin) || target;
+    await api.storage.set(REMOTE_URL_KEY, origin);
+    await api.storage.set(REMOTE_CREDENTIAL_KEY, text(answer.credentialId) || CREDENTIAL_ID);
+    return { status: 'ok', url: origin, username: text(answer.username) };
+  } catch (err) {
+    return { status: 'failed', reason: String(err?.message ?? err) };
+  }
+}
+
+/**
+ * Forgets the server and asks the host to drop the credential. A failing
+ * disconnect is not worth blocking on — the local state is what the plugin
+ * reads, and the user can remove the account in the webmail's own settings.
+ */
+export async function disconnectServer(api) {
+  try {
+    if (typeof api?.proxy?.disconnect === 'function') await api.proxy.disconnect(CREDENTIAL_ID);
+  } catch {
+    // The plugin no longer points at a server either way.
+  }
+  await api.storage.remove(REMOTE_URL_KEY);
+  await api.storage.remove(REMOTE_CREDENTIAL_KEY);
+  return { status: 'ok' };
+}
+
 
 /** The credential the host should attach, or '' for an unauthenticated call. */
 export const readRemoteCredential = async (api) => text(await api.storage.get(REMOTE_CREDENTIAL_KEY));

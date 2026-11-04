@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { fakeApi } from '../test-utils/fake-api.mjs';
 import {
-  REMOTE_CREDENTIAL_KEY, REMOTE_URL_KEY, callServer, readRemoteUrl, serverVersion, writeRemoteUrl,
+  CREDENTIAL_ID, REMOTE_CREDENTIAL_KEY, REMOTE_URL_KEY, callServer, connectServer, disconnectServer,
+  normalizeServerUrl, readRemoteUrl, readServerState, serverVersion, writeRemoteUrl,
 } from '../src/lib/remote.js';
 
 const api = (handlers = {}) => fakeApi({ handlers });
@@ -86,5 +87,76 @@ describe('calling it', () => {
     await callServer(subject, '/sync', { method: 'POST', body: '{"a":1}' });
 
     expect(subject.calls('proxy.fetch')[0].args[2]).toMatchObject({ method: 'POST', body: '{"a":1}' });
+  });
+});
+
+describe('connecting the host-held credential (#68)', () => {
+  it('asks the host to connect the declared credential, then remembers where the server is', async () => {
+    const subject = api({
+      'proxy.connect': async () => ({ connected: true, origin: 'https://crm.example.com/', credentialId: 'store-reader' }),
+    });
+
+    const result = await connectServer(subject, 'crm.example.com');
+
+    // the token is the host's business: the plugin only names the credential
+    expect(subject.calls('proxy.connect')[0].args)
+      .toEqual([CREDENTIAL_ID, { mode: 'password', server: 'https://crm.example.com' }]);
+    expect(result).toMatchObject({ status: 'ok', url: 'https://crm.example.com' });
+    expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBe('https://crm.example.com');
+    expect(subject.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBe('store-reader');
+  });
+
+  it('writes nothing when the user closes the host dialog', async () => {
+    const subject = api({ 'proxy.connect': async () => ({ connected: false }) });
+
+    expect(await connectServer(subject, 'https://crm.example.com')).toEqual({ status: 'failed', reason: 'not connected' });
+    expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBeUndefined();
+    expect(subject.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBeUndefined();
+  });
+
+  it('reports a host that cannot connect rather than throwing', async () => {
+    const subject = fakeApi({ host: { exposes: { proxy: ['fetch'] } } });
+
+    expect(await connectServer(subject, 'https://crm.example.com')).toEqual({ status: 'unavailable' });
+    expect(await connectServer(api(), '  ')).toEqual({ status: 'failed', reason: 'no address' });
+  });
+
+  it('reports a refused connection with the reason the host gave', async () => {
+    const subject = api({ 'proxy.connect': async () => { throw new Error('the token was refused'); } });
+
+    expect(await connectServer(subject, 'https://crm.example.com'))
+      .toEqual({ status: 'failed', reason: 'the token was refused' });
+    expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBeUndefined();
+  });
+
+  it('reports what the plugin is pointed at, and whether it could be', async () => {
+    const subject = api();
+    expect(await readServerState(subject)).toEqual({ url: '', credentialId: '', canConnect: true });
+
+    await subject.storage.set(REMOTE_URL_KEY, 'https://crm.example.com');
+    await subject.storage.set(REMOTE_CREDENTIAL_KEY, 'store');
+    expect(await readServerState(subject))
+      .toEqual({ url: 'https://crm.example.com', credentialId: 'store', canConnect: true });
+
+    const old = fakeApi({ host: { exposes: { proxy: ['fetch'] } } });
+    expect((await readServerState(old)).canConnect).toBe(false);
+  });
+
+  it('forgets the server on disconnect, even when the host refuses', async () => {
+    const subject = api({ 'proxy.disconnect': async () => { throw new Error('no such account'); } });
+    await subject.storage.set(REMOTE_URL_KEY, 'https://crm.example.com');
+    await subject.storage.set(REMOTE_CREDENTIAL_KEY, 'store');
+
+    expect(await disconnectServer(subject)).toEqual({ status: 'ok' });
+    expect(subject.calls('proxy.disconnect')[0].args).toEqual([CREDENTIAL_ID]);
+    expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBeUndefined();
+    expect(subject.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBeUndefined();
+    expect(await readServerState(subject)).toMatchObject({ url: '', credentialId: '' });
+  });
+
+  it('normalises an address the same way the setting does', () => {
+    expect(normalizeServerUrl('crm.example.com/')).toBe('https://crm.example.com');
+    expect(normalizeServerUrl('https://crm.example.com')).toBe('https://crm.example.com');
+    expect(normalizeServerUrl('  ')).toBe('');
   });
 });

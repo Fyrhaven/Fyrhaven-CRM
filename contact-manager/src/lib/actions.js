@@ -22,6 +22,7 @@ import { policyAwareOptions } from './book-policies.js';
 import { contactsToFile } from './export.js';
 import { saveFile } from './download.js';
 import { fileNameFor } from './smart-lists.js';
+import { connectServer, disconnectServer, readServerState, serverVersion } from './remote.js';
 
 /** Duplicate groups over all contacts, or over `scopeIds` when given. */
 export async function scanGroups(api, scopeIds = null) {
@@ -231,11 +232,52 @@ export async function importContacts(api) {
  * instead of one failure.
  */
 export async function checkServer(api) {
-  const { serverVersion } = await import('./remote.js');
   const result = await serverVersion(api);
   const t = (key, vars) => api.i18n.t(key, vars);
   if (result.status === 'ok') api.toast.success(t('remote.ok', { version: result.version }));
   else if (result.status === 'unconfigured') api.toast.info(t('remote.unconfigured'));
   else if (result.status === 'unavailable') api.toast.warning(t('remote.unavailable'));
   else api.toast.error(t('remote.failed', { reason: result.reason ?? result.code ?? '' }));
+}
+
+/**
+ * The Cloud server dialog (#68): where the plugin learns **which** server holds
+ * its records, and which credential the host attaches to a request.
+ *
+ * The dialog only returns a choice — it never connects anything itself, because
+ * `api.proxy.connect` opens a dialog of the host's own and a plugin dialog must
+ * not try to drive that. The write happens here, in the funnel: connect first,
+ * and only then remember the address, so a cancelled host dialog leaves the
+ * plugin exactly as it was.
+ */
+export async function openServer(api) {
+  const t = (key, vars) => api.i18n.t(key, vars);
+  const state = await readServerState(api);
+  const result = await api.ui.openDialog({
+    title: t('server.dialogTitle'),
+    slot: 'plugin-dialog',
+    extraProps: { serverEditor: { state } },
+  });
+  if (!result) return null;
+
+  if (result.disconnect) {
+    await disconnectServer(api);
+    api.toast.info(t('server.disconnected'));
+    return null;
+  }
+
+  const answer = await connectServer(api, result?.connect?.url);
+  if (answer.status === 'unavailable') {
+    api.toast.warning(t('server.noConnect'));
+    return answer;
+  }
+  if (answer.status !== 'ok') {
+    api.toast.error(t('server.connectFailed', { reason: answer.reason ?? '' }));
+    return answer;
+  }
+  api.toast.success(t('server.connectedToast', { url: answer.url }));
+  // Say what the server answered now, so a wrong address or a refused token is
+  // visible at once instead of at the first record the user tries to save.
+  await checkServer(api);
+  return answer;
 }
