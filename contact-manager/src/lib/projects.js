@@ -8,7 +8,7 @@
 //
 // Pure model plus the storage seam / api.tasks calls; no DOM.
 
-import { read, remove, write } from './store.js';
+import { readAs, removeAs, writeAs } from './store.js';
 
 export const PROJECTS_KEY = 'projects';
 export const PROJECT_SCHEMA_VERSION = 1;
@@ -42,6 +42,7 @@ export function emptyProject(id, overrides = {}) {
     currency: '',
     hourlyRate: null,
     createdAt: Date.now(),
+    storage: 'personal',
     milestones: [],
     timeEntries: [],
     expenses: [],
@@ -81,6 +82,10 @@ export function normalizeProject(raw) {
     currency: text(raw.currency).toUpperCase().slice(0, 3),
     hourlyRate: numberOrNull(raw.hourlyRate),
     createdAt: Number.isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : 0,
+    // Where the record lives — and therefore who can open it. `personal` is
+    // the user's own Files storage: only they can read it. `cloud` is the
+    // Contact Manager server, shared with the workspace.
+    storage: raw.storage === 'cloud' ? 'cloud' : 'personal',
     milestones: asArray(raw.milestones)
       .map((milestone) => ({
         id: text(milestone?.id),
@@ -213,8 +218,8 @@ export function exportPayload(projects, now = Date.now()) {
     format: EXPORT_FORMAT,
     schemaVersion: PROJECT_SCHEMA_VERSION,
     exportedAt: new Date(now).toISOString(),
-    localOnly: true,
-    note: 'Projects live in one browser only. This file is the portable copy — keep it to move or back up your data.',
+    localOnly: false,
+    note: 'Projects live on a server: your own (only you can see them) or the Contact Manager server. This file is the portable copy — keep it to move or back up your data.',
     projects: normalizeProjects(projects),
   };
 }
@@ -243,38 +248,70 @@ export function mergeProjects(existing, incoming) {
 /** Merges an imported list into storage; returns how many projects are stored. */
 export async function importProjects(api, incoming) {
   const merged = mergeProjects(await readProjects(api), incoming);
-  if (merged.length) await write(api, PROJECTS_KEY, merged);
+  if (merged.length) await writeProjects(api, merged);
   return merged.length;
 }
 
+/** The two targets a project can live on, in the order the page shows them. */
+export const PROJECT_TARGETS = ['personal', 'cloud'];
+
 /**
- * The projects in storage, repaired. Rewrites storage when it dropped junk.
+ * Every project, read from **both** servers, each carrying the target it lives
+ * on.
  *
- * Read through the seam (#68), so where a project lives is not this module's
- * business: the customer's own Files storage, the cloud, or nowhere. A store that
- * is *unavailable* reads as **no projects** rather than throwing, so the page can
- * say what is missing instead of failing to draw.
+ * `storage` is not decoration: it is what tells the user (and the page) whether
+ * a project is theirs alone or shared on the Contact Manager server, and it is
+ * what `saveProject` uses to write the record back where it came from. A
+ * server that is not reachable contributes nothing and is silently empty here —
+ * the page asks `availableTargets` to explain that, rather than every read
+ * having to carry a reason nobody shows.
+ *
+ * Junk is still repaired: each half is rewritten when its records were
+ * normalised away.
  */
 export async function readProjects(api) {
-  const answer = await read(api, PROJECTS_KEY);
-  const list = asArray(answer.status === 'ok' ? answer.value : null);
-  const projects = normalizeProjects(list);
-  const changed = projects.length !== list.length || list.some((item) => !normalizeProject(item));
-  if (changed && answer.status === 'ok') {
-    if (projects.length) await write(api, PROJECTS_KEY, projects);
-    else await remove(api, PROJECTS_KEY);
+  const merged = [];
+  for (const target of PROJECT_TARGETS) {
+    const answer = await readAs(api, PROJECTS_KEY, target);
+    if (answer.status !== 'ok') continue;
+    const raw = asArray(answer.value);
+    const list = normalizeProjects(raw).map((project) => ({ ...project, storage: target }));
+    if (list.length !== raw.length || raw.some((item) => !normalizeProject(item))) {
+      if (list.length) await writeAs(api, PROJECTS_KEY, list, target);
+      else await removeAs(api, PROJECTS_KEY, target);
+    }
+    merged.push(...list);
+  }
+  return merged;
+}
+
+/**
+ * Write the whole set back, one half per server.
+ *
+ * A record that moved target must leave the old half behind, so both halves are
+ * rewritten every time — a project in two places is the bug this prevents. An
+ * empty half on a server that is not there is nothing to do; a record with
+ * nowhere to go is a failure the caller has to hear about, never a silent save.
+ */
+async function writeProjects(api, projects) {
+  const halves = { personal: [], cloud: [] };
+  for (const project of projects) halves[project.storage === 'cloud' ? 'cloud' : 'personal'].push(project);
+  for (const target of PROJECT_TARGETS) {
+    const list = halves[target];
+    const answer = list.length
+      ? await writeAs(api, PROJECTS_KEY, list, target)
+      : await removeAs(api, PROJECTS_KEY, target);
+    if (answer.status !== 'ok' && list.length) throw new Error(answer.reason ?? 'no storage configured');
   }
   return projects;
 }
 
-/** Creates or replaces one project; returns the stored record. */
+/** Creates or replaces one project, on the server it says it lives on. */
 export async function saveProject(api, project) {
   const clean = normalizeProject(project);
   if (!clean) throw new Error('invalid project');
   const projects = await readProjects(api);
-  const answer = await write(api, PROJECTS_KEY, [...projects.filter((p) => p.id !== clean.id), clean]);
-  // A write with nowhere to go must not look like a save.
-  if (answer.status !== 'ok') throw new Error(answer.reason ?? 'no storage configured');
+  await writeProjects(api, [...projects.filter((p) => p.id !== clean.id), clean]);
   return clean;
 }
 
@@ -282,9 +319,15 @@ export async function saveProject(api, project) {
 export async function deleteProject(api, id) {
   const projects = await readProjects(api);
   const next = projects.filter((project) => project.id !== id);
-  const answer = next.length
-    ? await write(api, PROJECTS_KEY, next)
-    : await remove(api, PROJECTS_KEY);
-  if (answer.status !== 'ok') throw new Error(answer.reason ?? 'no storage configured');
+  if (next.length === projects.length) return 0;
+  await writeProjects(api, next);
   return projects.length - next.length;
+}
+
+/** Moves a project to the other server; returns the stored record. */
+export async function moveProject(api, id, storage) {
+  const projects = await readProjects(api);
+  const current = projects.find((project) => project.id === id);
+  if (!current || (storage !== 'personal' && storage !== 'cloud')) return null;
+  return saveProject(api, { ...current, storage });
 }

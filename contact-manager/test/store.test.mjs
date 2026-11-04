@@ -3,9 +3,10 @@
 import { describe, expect, it } from 'vitest';
 import { fakeApi, proxyResponse } from '../test-utils/fake-api.mjs';
 import {
-  RECORD_KEYS, VIEW_KEYS, backendFor, isRecord, isViewKey, read, recordBackend,
-  recordsAvailable, remove, write,
+  RECORD_KEYS, VIEW_KEYS, availableTargets, backendFor, backendForTarget, isRecord, isViewKey,
+  read, readAs, recordBackend, recordsAvailable, remove, removeAs, targetForBackend, write, writeAs,
 } from '../src/lib/store.js';
+import { filesHost } from '../test-utils/files-host.mjs';
 
 // Every key constant this plugin stores, imported for real so a new store cannot
 // be added without deciding whether it is a record or view state.
@@ -259,5 +260,55 @@ describe('where a record goes', () => {
 
     expect(await read(api, PROJECTS_KEY))
       .toEqual({ status: 'unavailable', reason: 'Files is not available' });
+  });
+});
+
+describe('the target a record is given (#68)', () => {
+  const filesBacked = () => {
+    const files = filesHost();
+    return fakeApi({ host: files.host, handlers: files.handlers });
+  };
+
+  it('names the backend behind each target, and back again', () => {
+    expect(backendForTarget('personal')).toBe('files');
+    expect(backendForTarget('cloud')).toBe('cloud');
+    expect(backendForTarget('nonsense')).toBeNull();
+    expect(targetForBackend('files')).toBe('personal');
+    expect(targetForBackend('cloud')).toBe('cloud');
+  });
+
+  it('says which targets can hold a record right now', async () => {
+    expect(await availableTargets(filesBacked())).toEqual({ personal: true, cloud: false });
+    expect(await availableTargets(await withServer())).toEqual({ personal: false, cloud: true });
+  });
+
+  it('writes and reads a record on the target it was given', async () => {
+    const api = filesBacked();
+
+    expect((await writeAs(api, PROJECTS_KEY, [{ id: 'p1' }], 'personal')).status).toBe('ok');
+    expect((await readAs(api, PROJECTS_KEY, 'personal'))).toMatchObject({ status: 'ok', value: [{ id: 'p1' }] });
+    // the cloud target is not configured here, so there is nothing there
+    expect((await readAs(api, PROJECTS_KEY, 'cloud')).status).toBe('unavailable');
+  });
+
+  it('never falls back to the other server when the chosen one is absent', async () => {
+    // A record the user placed in the cloud must not appear on their own drive,
+    // and one they placed on their drive must not be published to the cloud.
+    const cloudOnly = await withServer();
+    expect((await writeAs(cloudOnly, PROJECTS_KEY, [{ id: 'p1' }], 'personal')).status).toBe('unavailable');
+    expect(cloudOnly.calls('proxy.fetch')).toHaveLength(0);
+
+    const filesOnly = filesBacked();
+    expect((await writeAs(filesOnly, PROJECTS_KEY, [{ id: 'p1' }], 'cloud')).status).toBe('unavailable');
+    expect((await readAs(filesOnly, PROJECTS_KEY, 'cloud')).status).toBe('unavailable');
+  });
+
+  it('removes a record from one target only', async () => {
+    const files = filesHost();
+    const api = fakeApi({ host: files.host, handlers: files.handlers });
+    await writeAs(api, PROJECTS_KEY, [{ id: 'p1' }], 'personal');
+
+    expect((await removeAs(api, PROJECTS_KEY, 'personal')).status).toBe('ok');
+    expect((await readAs(api, PROJECTS_KEY, 'personal'))).toMatchObject({ status: 'ok', value: null });
   });
 });

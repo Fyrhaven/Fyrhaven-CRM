@@ -202,7 +202,12 @@ export function makeProjectsPage(React, api) {
         h(Row, { gap: 2, wrap: true },
           h(Heading, { level: 2 }, selected.name),
           h(Badge, { tone: 'neutral' }, t(`projects.status.${selected.status}`)),
+          // Who can open it, said plainly: the point of choosing a server.
+          h(Badge, { tone: selected.storage === 'cloud' ? 'primary' : 'neutral' },
+            selected.storage === 'cloud' ? t('projects.badgeCloud') : t('projects.badgePersonal')),
           selected.companyId ? h(Badge, { tone: 'primary' }, nameOf(selected.companyId)) : null),
+        h(Text, { tone: 'muted' },
+          selected.storage === 'cloud' ? t('projects.storageCloud') : t('projects.storagePersonal')),
         selected.description ? h(Text, { tone: 'muted' }, selected.description) : null,
         selected.contactIds.length
           ? h(Text, { tone: 'muted' }, t('projects.peopleLine', { names: selected.contactIds.map(nameOf).join(', ') }))
@@ -358,7 +363,7 @@ export function makeProjectsPage(React, api) {
                 h(List, { label: t('page.projectsTitle') }, ...projects.map((project) => h(ListRow, {
                   key: project.id,
                   title: project.name,
-                  subtitle: t(`projects.status.${project.status}`),
+                  subtitle: `${t(`projects.status.${project.status}`)} · ${project.storage === 'cloud' ? t('projects.badgeCloud') : t('projects.badgePersonal')}`,
                   selected: project.id === selectedId,
                   onClick: () => setSelectedId(project.id),
                 }))))),

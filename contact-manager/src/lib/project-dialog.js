@@ -46,14 +46,32 @@ export function makeProjectDialog(React, api) {
       if (problems.length) return;
       const project = {
         ...draft,
+        storage,
         name: draft.name.trim(),
         hourlyRate: draft.hourlyRate === '' ? null : draft.hourlyRate,
       };
       close({ saved: mode === 'create' ? 'created' : 'updated', project });
     };
 
+    const targets = editor.targets ?? { personal: true, cloud: false };
+    const bothTargets = targets.personal && targets.cloud;
+    // Derive the value ONCE: the select shows it and the save records it, so a
+    // target that is not available can never be written by accident.
+    const storage = draft.storage === 'cloud' && targets.cloud ? 'cloud' : 'personal';
     return h(Stack, { gap: 3 },
       h(InfoBar, { tone: 'neutral' }, t('projects.localNotice')),
+      bothTargets
+        ? h(Field, { label: t('projects.storage'), hint: t('projects.storageHint') },
+            h(Select, {
+              value: storage,
+              onChange: (value) => set('storage', value),
+              options: [
+                { value: 'personal', label: t('projects.storagePersonal') },
+                { value: 'cloud', label: t('projects.storageCloud') },
+              ],
+            }))
+        : h(Text, { tone: 'muted' },
+            storage === 'cloud' ? t('projects.storageCloud') : t('projects.storagePersonal')),
       has('name') ? h(Text, { tone: 'danger' }, t('projects.error.name')) : null,
       h(Field, { label: t('projects.name') },
         h(Input, { value: draft.name, onChange: (event) => set('name', event.target.value) })),

@@ -312,3 +312,53 @@ describe('project dialog', () => {
     expect(results[0].project.milestones).toHaveLength(1);
   });
 });
+
+describe('where a project lives (#68)', () => {
+  const open = async (api, props) => {
+    const results = [];
+    const Dialog = makeProjectDialog(React, api);
+    await act(async () => {
+      render(React.createElement(Dialog, { cards: [], onResult: (v) => results.push(v), ...props }));
+    });
+    return results;
+  };
+
+  it('offers both servers, and records the one chosen', async () => {
+    const results = await open(fakeApi({ translations: manifest.locales }), {
+      projectEditor: { mode: 'create', project: null, targets: { personal: true, cloud: true } },
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Shared work' } });
+      fireEvent.change(screen.getByLabelText('Where this project lives'), { target: { value: 'cloud' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Create project' })); });
+
+    expect(results[0].project).toMatchObject({ name: 'Shared work', storage: 'cloud' });
+  });
+
+  it('states the one home there is when only one server is configured', async () => {
+    await open(fakeApi({ translations: manifest.locales }), {
+      projectEditor: { mode: 'create', project: null, targets: { personal: true, cloud: false } },
+    });
+
+    expect(screen.queryByLabelText('Where this project lives')).toBeNull();
+    // said plainly, in the same words the page uses
+    expect(screen.getByText('Your own server — only you can see it')).toBeTruthy();
+  });
+
+  it('falls back to your own server when the cloud one is not available', async () => {
+    const results = await open(fakeApi({ translations: manifest.locales }), {
+      projectEditor: {
+        mode: 'edit',
+        project: { ...PROJECT, storage: 'cloud' },
+        targets: { personal: true, cloud: false },
+      },
+    });
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save' })); });
+
+    // a target that cannot be reached is never written by accident
+    expect(results[0].project.storage).toBe('personal');
+  });
+});

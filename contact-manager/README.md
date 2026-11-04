@@ -72,7 +72,7 @@ signatures, the last scan summary).
 | *Private notes* section | Contact Manager → *Contacts*, on the open contact | Notes kept on your server about the contact (#38, the private half): write, read back with a timestamp, delete. Private by construction — a note is a record of its own through the storage seam, never a card field, so nothing shared can show it. Free text, `note:` and `has:note` in the search box find them too. A small documented subset of marks (`**bold**`, `*italic*`, `` `code` ``, `@mention`) is rendered as elements, never as markup. The subject-access export carries them, and erasure removes them |
 | *Contacts* sub-tab | Contact Manager → *Contacts* | Searchable contact list with a query language — fields (`name:`, `email:`, `phone:`, `company:`, `tag:`, `book:`, `has:`, `is:`), a leading `-`/`not:` to exclude, and `OR` with parentheses to group — saved searches with live counts, avatars, and the 360° profile: details, company, duplicates, messages, meetings, files and tasks. The list is paged (100 at a time, *Previous* / *Next*), so a large address book does not turn the whole match set into DOM. `/` jumps to the search box and `Esc` clears it. Checkboxes select several contacts, and *Select all N* takes everything the list shows (a saved search used as a bulk scope), for *Merge selected* / *Edit selected* / *Clean up* / *Rules…* / *Export* / *Delete selected* / *Clear selection* |
 | *Cloud server* (Overview menu, palette) | Contact Manager → *Overview* menu | Points the plugin at a Contact Manager server (#68): the address, then the **host** asks for the workspace token and keeps it. The plugin remembers only where the server is; *Disconnect* forgets it. On success it reports the version the server answered |
-| *Projects* sub-tab | Contact Manager → *Projects* | Local client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks) |
+| *Projects* sub-tab | Contact Manager → *Projects* | Client-work projects: status, linked company and people, description, currency and rate, and milestones (real tasks). Each project **says where it lives** — *Your own server* (only you can open it) or the *Contact Manager server* (shared with the workspace) — and the editor asks which, when both are configured |
 | *Groups* sub-tab | Contact Manager → *Groups* | Distribution lists as real contact cards: create, rename, search and delete them, add or remove members with a contact search, and a warning when a list holds two contacts that are one person (#12) |
 | Command palette action / *New group* button | Ctrl+K → *New group*, or the Groups page header | Opens the group editor (create) |
 | Command palette action | Ctrl+K → *New project* | Opens the project editor (create) |
@@ -1372,6 +1372,34 @@ itself would be nesting host surfaces nobody has promised works.
 **A successful connect immediately asks for the version**, so a wrong address or
 a refused token is reported at once instead of at the first record the user tries
 to save.
+
+### 6.24 Where a project lives, and who can see it (`src/lib/store.js`, `projects.js`, `project-dialog.js`, v1.53.0) — #68
+
+The two servers a record can live on are **not the same audience**, and until now
+nothing in the plugin said so: every record went to whichever backend answered
+first. A project therefore looked identical whether it sat in the user's own
+Files drive (only they can open it) or on the Contact Manager server (everyone in
+that workspace can).
+
+**A record now carries its target.** `storage: 'personal'` means the user's own
+`api.files` drive — private to their account — and `storage: 'cloud'` means the
+Contact Manager server. The project dialog asks when both are configured, and
+when only one is, it *states* the one home instead of hiding the choice; the list
+row and the card carry *Only you* / *Shared* plus the sentence behind it.
+
+**The seam will not move a record behind the user's back.** `readAs` / `writeAs` /
+`removeAs` pin a target, and a pinned target that cannot be reached reports
+`unavailable` — it never falls back to the other server. That is the safety
+property the whole feature rests on: a project the user placed privately must not
+become shared because Files happened to be switched off.
+
+**Both halves are read, and a move rewrites both.** `readProjects` merges the two
+servers and tags each record with where it came from; `writeProjects` splits the
+set back and writes each half (removing an empty one). A project that changes
+target therefore leaves the old half behind — one copy, never two.
+
+**A record saved before this reads as `personal`**, which is where it actually
+is: the migration is the default, not a rewrite.
 
 ---
 
