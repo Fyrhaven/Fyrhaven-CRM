@@ -3,13 +3,19 @@
 // draft; storing it happens here, so every entry point saves the same way.
 import { loadCards } from './contacts.js';
 import { saveProject } from './projects.js';
+import { availableTargets } from './store.js';
 
 export async function openProject(api, { mode = 'create', project = null } = {}) {
-  const cards = await loadCards(api).catch(() => []);
+  const [cards, targets] = await Promise.all([
+    loadCards(api).catch(() => []),
+    // Which servers can hold the record — the dialog shows the choice only when
+    // there is one to make (#68).
+    availableTargets(api).catch(() => ({ personal: false, cloud: false })),
+  ]);
   const result = await api.ui.openDialog({
     title: api.i18n.t(mode === 'edit' ? 'projects.editTitle' : 'projects.newTitle'),
     slot: 'plugin-dialog',
-    extraProps: { projectEditor: { mode, project }, cards },
+    extraProps: { projectEditor: { mode, project, targets }, cards },
   });
   if (!result || result.deleted) return result;
   try {

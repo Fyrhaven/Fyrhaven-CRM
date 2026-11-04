@@ -6,8 +6,8 @@
 > for changing the code are in [`.clinerules`](../.clinerules).
 
 ## Current State
-- **Version**: 1.52.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: the plugin can finally be **pointed at the cloud store** (#68) — a `Cloud server` dialog (Overview menu and palette) takes the address, the **host** asks for the workspace token through `api.proxy.connect` and keeps it, and the plugin remembers only where the server is; nothing is written until the host answers `connected`, a refused token and a webmail without the call have their own messages, and a successful connect asks `/version` at once so a wrong address is visible immediately. `manifest.json` now declares `credentials.store` (`scope: user`, `inject: bearer`), which is what gives `api.proxy.fetch` a token to attach — before this, nothing ever wrote the address and no credential existed, so the cloud tier was silently unreachable. On top of 1.51.0 — the Contacts search finds the private notes (#38).
+- **Version**: 1.53.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: a project now says **where it lives**, and you choose (#68) — `storage: personal` is the user's own Files drive (*only you* can open it) and `storage: cloud` is the Contact Manager server (shared with the workspace); the project dialog asks when both are configured, the list row and the project card carry a badge (*Only you* / *Shared*) and the sentence behind it, and the record is read from **both** servers and merged, so moving one rewrites both halves. The storage seam grew an explicit target (`readAs`/`writeAs`/`removeAs`) that reports unavailable rather than quietly using the other server — a record the user placed somewhere must never turn up somewhere else. On top of 1.52.0 — pointing the plugin at a dedicated server (#68, connect half) — and 1.51.0, the Contacts search finding the private notes (#38).
 - **Cloud store deployed (2026-11-04)**: the service in
   `contact-manager-server/` now runs on the maintainer's mail host as the compose
   project **`contact-manager-store`** — image built from this repository, on the
@@ -65,6 +65,40 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Where a project lives, and who can see it (v1.53.0) — #68
+
+The plugin had two servers a record could live on and did not say which one it
+used: `recordBackend` picked whichever answered first, so a project looked
+identical whether it was private to the user (their own Files drive) or shared
+with everyone in the workspace (the Contact Manager server). The user asked for
+the difference to be explicit and chosen, and that is what this release does.
+
+**The target is on the record.** `storage: 'personal' | 'cloud'`, defaulting to
+`personal` — which is where every existing record actually is, so the migration
+is a default rather than a rewrite. The dialog offers the choice only when both
+servers are configured, and states the one home when there is only one.
+
+**The seam pins a target and refuses to substitute.** `readAs`/`writeAs`/
+`removeAs` take the target and report `unavailable` when that backend is not
+there — no silent fall back. This is the property the feature rests on: a project
+the user made private must not become shared because Files was switched off, and
+a shared one must not leak onto a drive.
+
+**Reads merge, writes split.** `readProjects` reads both servers and tags each
+record; `writeProjects` rewrites both halves, so a move leaves the old half
+behind. Two writes per save is the price of never having a project in two places.
+
+The badge (*Only you* / *Shared*) is what per-project access control will hang
+off: the next step is identities on the store, then a per-project ACL (read /
+write / add time / create tasks), then the signup and ordering site in front of
+the service.
+
+Tests: 1209 passing (was 1197) — 5 for the seam (the target per backend, what is
+available, a pinned write, no fall back either way, and a single-target remove), 4
+for projects (cloud only, both merged, a move, and a legacy record reading as
+personal) and 3 for the dialog (the choice, the single home, and a cloud project
+falling back to personal when the cloud is not configured).
 
 ### Pointing the plugin at a server: the connect half of #68 (v1.52.0) — #68
 
