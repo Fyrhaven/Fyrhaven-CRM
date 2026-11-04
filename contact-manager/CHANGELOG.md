@@ -7,6 +7,39 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.52.0] — 2026-11-04
+
+### Added
+
+- **The plugin can be pointed at a Contact Manager server (#68).** Until now the
+  cloud tier was unreachable from the plugin: the address was read from storage
+  and nothing ever wrote it, and the manifest declared no credential, so a
+  request had no token to carry. A new *Cloud server* dialog (Overview menu and
+  the command palette) takes the address, the **host** asks for the workspace
+  token through `api.proxy.connect` and keeps it, and the plugin remembers only
+  where the server is. On success it says what the server answered, so a wrong
+  address or a refused token is visible immediately rather than at the first
+  record the user tries to save. *Disconnect* forgets the address and asks the
+  host to drop the credential.
+- **`manifest.json` declares that credential** — `credentials.store`, `scope:
+  "user"`, `inject: bearer` — so the token never ships in the ZIP and
+  `api.proxy.fetch` has something to attach.
+
+### Notes
+
+The dialog only returns a *choice* (`{ connect: { url } }` / `{ disconnect:
+true }`), and `actions.js` performs it — the same rule every other dialog here
+follows, and the reason `api.proxy.connect` (which opens a dialog of the host's
+own) is never driven from inside one. Nothing is written until the host answers
+`connected`, so closing that dialog leaves the plugin exactly as it was.
+
+Verified against a live instance: `https://crm.mailz.se/version` answers
+`{"ok":true,"version":"1.0.0"}`, `/v1/store` is `401` without a token, and a
+container on the same Docker network as the webmail reaches that HTTPS address —
+so the path the proxy takes works. **Not yet confirmed against a live webmail**:
+`api.proxy.connect`'s exact dialog is the host's, and the shape used here is the
+one in the host's own documentation.
+
 ## [1.51.0] — 2026-11-04
 
 ### Added
