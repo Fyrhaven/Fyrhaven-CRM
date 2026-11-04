@@ -2,7 +2,7 @@
 //
 // The plugin's real source entry is `src/index.js`; `npm run build` bundles it
 // with esbuild to `dist/index.js`, and `npm run package` puts that bundle into
-// `contact-manager.zip`.
+// `fyrhaven-crm.zip`.
 //
 // This root file exists so that the folder can be used directly as a
 // `PLUGIN_DEV_DIR` plugin folder: the host loads `manifest.json` and then

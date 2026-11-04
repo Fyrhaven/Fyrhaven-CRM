@@ -16,7 +16,7 @@ const server = createServer((request, response) => {
     response.end(JSON.stringify(body));
   };
   if (request.method === 'GET' && request.url === '/version') {
-    send(200, { version, name: 'contact-manager-server' });
+    send(200, { version, name: 'fyrhaven-server' });
     return;
   }
   send(404, { error: 'not found' });

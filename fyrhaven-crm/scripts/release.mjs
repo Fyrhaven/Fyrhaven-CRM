@@ -1,6 +1,6 @@
 // One-command release: tests, packages and creates the GitHub release for the
 // version in manifest.json. The ZIP is a release asset, not a committed file.
-// Run from contact-manager/ with `npm run release` on clean, pushed `main`.
+// Run from fyrhaven-crm/ with `npm run release` on clean, pushed `main`.
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -12,7 +12,7 @@ const REPO_ROOT = path.resolve(ROOT, '..');
 const manifest = JSON.parse(await readFile(path.join(ROOT, 'manifest.json'), 'utf8'));
 const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
 const changelog = await readFile(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
-const tag = `contact-manager-v${manifest.version}`;
+const tag = `fyrhaven-crm-v${manifest.version}`;
 
 // Fail fast on the classic mistake: a commit that ships the feature but forgets
 // the version. The manifest version is the single source of truth, so the top
@@ -62,7 +62,7 @@ run('git', ['push', 'origin', tag], REPO_ROOT);
 const notes = releaseNotes(changelog, manifest.version);
 const releaseArgs = [
   'release', 'create', tag,
-  path.join(ROOT, 'contact-manager.zip'),
+  path.join(ROOT, 'fyrhaven-crm.zip'),
   '--title', `Contact Manager ${manifest.version}`,
   '--verify-tag',
 ];
@@ -70,4 +70,4 @@ if (notes) releaseArgs.push('--notes', notes);
 else releaseArgs.push('--generate-notes');
 run('gh', releaseArgs, REPO_ROOT);
 
-console.log(`\nReleased ${tag} with contact-manager.zip.`);
+console.log(`\nReleased ${tag} with fyrhaven-crm.zip.`);

@@ -1,6 +1,6 @@
 {
-  "name": "bulwark-plugin-contact-manager",
-  "version": "1.55.0",
+  "name": "bulwark-plugin-fyrhaven-crm",
+  "version": "1.56.0",
   "private": true,
   "type": "module",
   "scripts": {

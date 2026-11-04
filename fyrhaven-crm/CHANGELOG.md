@@ -7,6 +7,30 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.56.0] — 2026-11-04
+
+### Changed
+
+- **The rename is complete: the plugin is `fyrhaven-crm`.** The id, the page
+  title (en and de), the ZIP (`fyrhaven-crm.zip`), the release tags
+  (`fyrhaven-crm-v*`) and the `fyrhaven-crm` mirror branch all follow the name
+  now — there is nothing left a user can see that says "contact-manager".
+- The project export is tagged `bulwark-fyrhaven-crm-projects` and named
+  `fyrhaven-crm-projects.json`. **Old export files still import**: `parseExport`
+  accepts a bare array as well as the wrapper.
+- The record server moved to `fyrhaven-server/` (package `fyrhaven-store`, 1.4.0).
+
+### Notes
+
+**What a new id costs, and what it does not.** A plugin id is its identity with
+ the host, so this install starts with empty *local* state: settings (language,
+ enabling switches, the gravatar toggle), the undo batch, the onboarding flag, the
+ saved searches and the server address. **Records are not affected** — projects,
+ private notes, consent records and the change history live on the server under
+ their own store keys (`projects`, `contactNotes`, …), not under the plugin id, so
+ they are all still there. Re-enter the two settings and the *Dedicated server*
+ address and nothing else changes.
+
 ## [1.55.0] — 2026-11-04
 
 ### Changed

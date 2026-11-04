@@ -172,7 +172,7 @@ export function makeProjectsPage(React, api) {
       void saveFile(
         api,
         JSON.stringify(exportPayload(projects), null, 2),
-        'contact-manager-projects.json',
+        'fyrhaven-crm-projects.json',
         'application/json',
       );
     };

@@ -64,7 +64,7 @@ describe('built plugin', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.calls('ui.setPages')[0].args[0])
       // not 'users': that is the webmail's own contacts icon
-      .toEqual([{ id: 'contact-manager', title: 'Contact Manager', icon: 'book-user' }]);
+      .toEqual([{ id: 'fyrhaven-crm', title: 'Fyrhaven CRM', icon: 'book-user' }]);
     expect(api.calls('ui.setActions').map((c) => c.args[0]))
       .toEqual(['command-palette', 'contact-list-actions']);
     expect(api.calls('ui.setActions')[0].args[1])
@@ -277,7 +277,7 @@ describe('built plugin', () => {
     await plugin.activate(api);
     api.setLocale('de');
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(api.calls('ui.setPages').at(-1).args[0][0].title).toBe('Kontakt-Manager');
+    expect(api.calls('ui.setPages').at(-1).args[0][0].title).toBe('Fyrhaven CRM');
     api.changeSettings({ enabled: false });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.calls('ui.setPages').at(-1).args[0]).toEqual([]);

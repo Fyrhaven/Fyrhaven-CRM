@@ -258,8 +258,8 @@ describe('projects page', () => {
 
     // the plugin frame has no `allow-downloads`, so the host saves the file
     const call = api.calls('ui.downloadFile')[0];
-    expect(call.args[0]).toBe('contact-manager-projects.json');
-    expect(JSON.parse(call.args[1]).format).toBe('bulwark-contact-manager-projects');
+    expect(call.args[0]).toBe('fyrhaven-crm-projects.json');
+    expect(JSON.parse(call.args[1]).format).toBe('bulwark-fyrhaven-crm-projects');
   });
 });
 

@@ -1,6 +1,6 @@
 {
-  "name": "bulwark-plugin-contact-manager-store",
-  "version": "1.3.0",
+  "name": "fyrhaven-store",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "description": "The Contact Manager cloud store (#68): the key/value service the plugin's record stores live on.",
