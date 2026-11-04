@@ -6,9 +6,13 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHmac } from 'node:crypto';
 import {
   MAX_VALUE_BYTES, createStoreServer, open, parseMasterKey, parseTokens, seal,
 } from './server.js';
+import {
+  createCheckout, paymentConfig, paymentsAvailable, planFromEvent, verifyStripeSignature,
+} from './payments.js';
 
 /** A fixed master key, so a test can also try the wrong one. */
 const MASTER = Buffer.alloc(32, 7);
@@ -490,5 +494,204 @@ describe('accounts, sessions and the site (#148)', () => {
     assert.equal((await ask('/v1/store')).status, 401);
     assert.equal((await ask('/v1/account')).status, 401);
     assert.equal((await ask('/v1/account', { method: 'DELETE' })).status, 401);
+  });
+});
+
+describe('payments (#148)', () => {
+  const STRIPE = {
+    STRIPE_SECRET_KEY: 'sk_test_123', STRIPE_PRICE_CLOUD: 'price_123',
+    STRIPE_WEBHOOK_SECRET: 'whsec_123', PUBLIC_URL: 'https://crm.example',
+  };
+
+  it('is unconfigured with half a configuration, and configured with a full one', () => {
+    assert.equal(paymentConfig({}).provider, 'none');
+    assert.equal(paymentConfig({ STRIPE_SECRET_KEY: 'sk' }).provider, 'none');
+    assert.equal(paymentConfig({ STRIPE_PRICE_CLOUD: 'price' }).provider, 'none');
+    assert.equal(paymentConfig(STRIPE).provider, 'stripe');
+    assert.equal(paymentsAvailable(paymentConfig(STRIPE)), true);
+    assert.equal(paymentsAvailable(paymentConfig({ ...STRIPE, PUBLIC_URL: '' })), false);
+  });
+
+  it('asks the provider for a checkout and returns where to send the customer', async () => {
+    const seen = [];
+    const fake = async (url, init) => {
+      seen.push({ url, init });
+      return { ok: true, status: 200, json: async () => ({ id: 'cs_1', url: 'https://pay.example/cs_1' }) };
+    };
+
+    const answer = await createCheckout(paymentConfig(STRIPE), {
+      order: { id: 'o1', plan: 'cloud' },
+      account: { id: 'a1', email: 'owner@example.com' },
+      fetch: fake,
+    });
+
+    assert.deepEqual(answer, { status: 'ok', url: 'https://pay.example/cs_1', id: 'cs_1' });
+    assert.equal(seen[0].url, 'https://api.stripe.com/v1/checkout/sessions');
+    assert.match(seen[0].init.headers.authorization, /Bearer sk_test_123/);
+    const form = new URLSearchParams(seen[0].init.body);
+    assert.equal(form.get('line_items[0][price]'), 'price_123');
+    // what the webhook switches on is decided HERE, not by the customer
+    assert.equal(form.get('metadata[accountId]'), 'a1');
+    assert.equal(form.get('metadata[orderId]'), 'o1');
+    assert.equal(form.get('success_url'), 'https://crm.example/?paid=1');
+  });
+
+  it('takes no money when it has no provider, and reports a provider failure', async () => {
+    assert.deepEqual(await createCheckout(paymentConfig({}), { order: { id: 'o1' }, account: { id: 'a1' } }), { status: 'unconfigured' });
+
+    const failing = async () => ({ ok: false, status: 402, json: async () => ({ error: { message: 'card declined' } }) });
+    const answer = await createCheckout(paymentConfig(STRIPE), {
+      order: { id: 'o1', plan: 'cloud' }, account: { id: 'a1', email: 'e@x.se' }, fetch: failing,
+    });
+    assert.deepEqual(answer, { status: 'failed', reason: 'card declined' });
+  });
+
+  it('accepts only a signature it can compute, from a body it was given', () => {
+    const secret = 'whsec_123';
+    const payload = '{"type":"checkout.session.completed"}';
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = createHmac('sha256', secret).update(`${t}.${payload}`).digest('hex');
+
+    assert.equal(verifyStripeSignature({ header: `t=${t},v1=${v1}`, payload, secret }), true);
+    // a different body, the same signature
+    assert.equal(verifyStripeSignature({ header: `t=${t},v1=${v1}`, payload: `${payload} `, secret }), false);
+    // the wrong secret
+    assert.equal(verifyStripeSignature({ header: `t=${t},v1=${v1}`, payload, secret: 'other' }), false);
+    // a replay from an hour ago
+    const old = t - 3600;
+    const oldSig = createHmac('sha256', secret).update(`${old}.${payload}`).digest('hex');
+    assert.equal(verifyStripeSignature({ header: `t=${old},v1=${oldSig}`, payload, secret }), false);
+    // and nothing at all
+    assert.equal(verifyStripeSignature({ payload, secret }), false);
+  });
+
+  it('reads what a paid event means, and ignores the rest', () => {
+    assert.deepEqual(
+      planFromEvent({
+        type: 'checkout.session.completed',
+        data: { object: { metadata: { accountId: 'a1', orderId: 'o1', plan: 'cloud' } } },
+      }),
+      { accountId: 'a1', orderId: 'o1', plan: 'cloud' },
+    );
+    assert.equal(planFromEvent({ type: 'customer.created' }), null);
+    assert.equal(planFromEvent({ type: 'checkout.session.completed', data: { object: {} } }), null);
+  });
+});
+
+describe('the admin panel and the live payment path (#148)', () => {
+  const SECRET = 'whsec_admin_tests';
+  const ADMIN = 'admin-token-for-tests';
+  let own;
+  let url;
+  before(async () => {
+    ({ server: own } = createStoreServer({
+      tokenList: 'tok-a=acme', masterKey: MASTER,
+      adminToken: ADMIN,
+      payments: { provider: 'none', planDays: 365, webhookSecret: SECRET, publicUrl: '' },
+    }));
+    await new Promise((resolve) => own.listen(0, '127.0.0.1', resolve));
+    url = `http://127.0.0.1:${own.address().port}`;
+  });
+  after(async () => {
+    own.closeAllConnections?.();
+    await new Promise((resolve) => own.close(resolve));
+  });
+
+  const askRaw = (path, { method = 'GET', token, body, headers = {} } = {}) => fetch(`${url}${path}`, {
+    method,
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...headers,
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const ask = async (path, options) => {
+    const response = await askRaw(path, options);
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    return { status: response.status, payload };
+  };
+
+  const signup = async (email) => {
+    const answer = await ask('/v1/accounts', { method: 'POST', body: { email, password: 'a-long-password' } });
+    return answer.payload;
+  };
+
+  it('keeps the panel shut without the operator token', async () => {
+    assert.equal((await ask('/v1/admin/orders')).status, 401);
+    assert.equal((await ask('/v1/admin/orders', { token: 'not-the-admin' })).status, 401);
+    assert.equal((await ask('/v1/admin/accounts', { token: 'tok-a' })).status, 401, 'a store token is not an admin token');
+  });
+
+  it('lists the orders and settles one, switching the plan on', async () => {
+    const account = await signup('buyer@example.com');
+    const order = await ask('/v1/account/order', { method: 'POST', token: account.token, body: { plan: 'cloud' } });
+    assert.equal(order.status, 202);
+    // no provider configured, so the customer is told the payment is unavailable
+    assert.equal(order.payload.payment.status, 'unavailable');
+
+    const list = await ask('/v1/admin/orders', { token: ADMIN });
+    assert.equal(list.status, 200);
+    const created = list.payload.orders.find((entry) => entry.accountId === account.account.id);
+    assert.ok(created, 'the order is visible to the operator');
+    assert.equal(created.status, 'pending');
+    assert.equal(created.email, 'buyer@example.com');
+
+    const settled = await ask(`/v1/admin/orders/${created.id}/paid`, { method: 'POST', token: ADMIN, body: { days: 30 } });
+    assert.equal(settled.status, 200);
+    assert.equal(settled.payload.order.status, 'paid');
+    assert.equal(settled.payload.account.plan, 'cloud');
+
+    const accountNow = await ask('/v1/account', { token: account.token });
+    assert.equal(accountNow.payload.plan, 'cloud');
+    assert.equal(accountNow.payload.entitled, true);
+  });
+
+  it('lets the operator set a plan directly, and delete an account', async () => {
+    const account = await signup('direct@example.com');
+
+    const planned = await ask(`/v1/admin/accounts/${account.account.id}/plan`, {
+      method: 'POST', token: ADMIN, body: { plan: 'cloud', days: 5 },
+    });
+    assert.equal(planned.status, 200);
+    assert.equal(planned.payload.account.plan, 'cloud');
+
+    assert.equal((await ask(`/v1/admin/accounts/${account.account.id}`, { method: 'DELETE', token: ADMIN })).status, 200);
+    assert.equal((await ask('/v1/account', { token: account.token })).status, 401);
+  });
+
+  it('applies a signed webhook and refuses an unsigned one', async () => {
+    const account = await signup('webhook@example.com');
+    const order = await ask('/v1/account/order', { method: 'POST', token: account.token, body: { plan: 'cloud' } });
+    const orderId = order.payload.order.id;
+
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { metadata: { accountId: account.account.id, orderId, plan: 'cloud' } } },
+    });
+
+    const unsigned = await fetch(`${url}/v1/payments/webhook`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body,
+    });
+    assert.equal(unsigned.status, 400);
+
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = createHmac('sha256', SECRET).update(`${t}.${body}`).digest('hex');
+    const signed = await fetch(`${url}/v1/payments/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${v1}` },
+      body,
+    });
+    assert.equal(signed.status, 200);
+
+    const accountNow = await ask('/v1/account', { token: account.token });
+    assert.equal(accountNow.payload.plan, 'cloud');
+    const list = await ask('/v1/admin/orders', { token: ADMIN });
+    assert.equal(list.payload.orders.find((entry) => entry.id === orderId).status, 'paid');
   });
 });

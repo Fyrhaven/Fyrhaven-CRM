@@ -194,6 +194,45 @@ export function accountOps(db, { trialDays = DEFAULT_TRIAL_DAYS } = {}) {
       return { id, plan: PLANS.includes(plan) ? plan : 'cloud', status: 'pending', createdAt: iso(now) };
     },
 
+    /** Every order, newest first, with the email it belongs to — the admin list. */
+    allOrders({ limit = 200 } = {}) {
+      return db.prepare(`
+        SELECT o.id, o.account_id, o.plan, o.status, o.created, a.email
+        FROM orders o LEFT JOIN accounts a ON a.id = o.account_id
+        ORDER BY o.created DESC LIMIT ?
+      `).all(Number(limit)).map((order) => ({
+        id: order.id,
+        accountId: order.account_id,
+        email: order.email ?? '',
+        plan: order.plan,
+        status: order.status,
+        createdAt: order.created,
+      }));
+    },
+
+    /** One order, or undefined. */
+    order(id) {
+      const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(String(id ?? ''));
+      return order
+        ? { id: order.id, accountId: order.account_id, plan: order.plan, status: order.status, createdAt: order.created }
+        : undefined;
+    },
+
+    /** Moves an order to `paid` (or `cancelled`); returns it, or null. */
+    setOrderStatus(id, status) {
+      const allowed = ['pending', 'paid', 'cancelled'];
+      if (!allowed.includes(status)) return null;
+      db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, String(id ?? ''));
+      return this.order(id) ?? null;
+    },
+
+    /** Every account, newest first — the admin list. */
+    allAccounts({ limit = 500, now = Date.now() } = {}) {
+      return db.prepare('SELECT * FROM accounts ORDER BY created DESC LIMIT ?')
+        .all(Number(limit))
+        .map((account) => view(account, now));
+    },
+
     /** Orders for an account, newest first. */
     orders(accountId) {
       return db.prepare('SELECT id, plan, status, created FROM orders WHERE account_id = ? ORDER BY created DESC')

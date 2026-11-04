@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Contact Manager Cloud — operator</title>
+  <link rel="stylesheet" href="/site.css">
+</head>
+<body>
+  <header>
+    <strong>Operator panel</strong>
+    <nav>
+      <button data-tab="orders" type="button">Orders</button>
+      <button data-tab="accounts" type="button">Accounts</button>
+      <button data-action="signout" type="button" hidden>Lock</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="unlock">
+      <h2>Operator token</h2>
+      <p class="muted">
+        The token is <code>STORE_ADMIN_TOKEN</code> on the server. It is kept in
+        this browser tab only, and every request carries it — there is no cookie
+        and no session to steal.
+      </p>
+      <form data-form="unlock">
+        <label>Token <input name="token" type="password" autocomplete="off" required></label>
+        <button type="submit">Unlock</button>
+      </form>
+    </section>
+
+    <section id="panel" hidden>
+      <p id="payments" class="muted"></p>
+      <div data-panel="orders">
+        <h2>Orders</h2>
+        <p class="muted">Pending orders are requests: settle one when the money has arrived.</p>
+        <div id="orders"></div>
+      </div>
+      <div data-panel="accounts" hidden>
+        <h2>Accounts</h2>
+        <div id="accounts"></div>
+      </div>
+    </section>
+
+    <p id="status" role="status" class="status"></p>
+  </main>
+
+  <script type="module" src="/admin.js"></script>
+</body>
+</html>

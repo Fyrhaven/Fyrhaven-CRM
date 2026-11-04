@@ -34,3 +34,8 @@ footer { max-width: 720px; margin: 0 auto; padding: 0 20px 40px; font-size: .88r
   pre { background: #1b1e24; }
   :root { --line: #2c323c; --muted: #a2a9b4; }
 }
+.row { display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 12px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.row:last-child { border-bottom: 0; }
+code { background: #f4f5f7; padding: 1px 5px; border-radius: 4px; }
+@media (prefers-color-scheme: dark) { code { background: #1b1e24; } }
