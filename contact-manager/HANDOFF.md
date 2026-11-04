@@ -6,26 +6,33 @@
 > for changing the code are in [`.clinerules`](../.clinerules).
 
 ## Current State
-- **Version**: 1.51.0 (`manifest.json` is the single source of truth; `package.json` matches)
-- **Last changes**: the Contacts search finds the **private notes** (#38, the search half) — free text, `note:` and `has:note` see a note the plugin keeps about a contact exactly where they see the card's own; `buildIndex` takes the note record as an option (`{ notes }`), so `search.js` stays free of `api` and of the storage seam, and both surfaces that count matches (the Contacts page and the palette's Smart lists dialog) pass it, so a saved search's count and its members cannot disagree; the page holds **one copy** of the note record and hands it to the *Private notes* section as a controlled value, so a note is searchable the moment it is saved; the `notes.hint` string was corrected — it still claimed the notes were kept *in this browser*, which 1.49.0 made untrue. On top of the 1.50.x line — five live-install fixes of the storage seam: `files.create` wants `text/plain` (1.50.1), `replace` is a **file name** (1.50.2) and then a **file id** (1.50.3), a folder is read with `list` and not `find` (1.50.2), `getText` answers with an **object** (1.50.4) and the folder lookup takes only a folder this user **owns** (1.50.5) — and 1.50.0, consent records through the seam (#26, #68).
+- **Version**: 1.52.0 (`manifest.json` is the single source of truth; `package.json` matches)
+- **Last changes**: the plugin can finally be **pointed at the cloud store** (#68) — a `Cloud server` dialog (Overview menu and palette) takes the address, the **host** asks for the workspace token through `api.proxy.connect` and keeps it, and the plugin remembers only where the server is; nothing is written until the host answers `connected`, a refused token and a webmail without the call have their own messages, and a successful connect asks `/version` at once so a wrong address is visible immediately. `manifest.json` now declares `credentials.store` (`scope: user`, `inject: bearer`), which is what gives `api.proxy.fetch` a token to attach — before this, nothing ever wrote the address and no credential existed, so the cloud tier was silently unreachable. On top of 1.51.0 — the Contacts search finds the private notes (#38).
 - **Cloud store deployed (2026-11-04)**: the service in
   `contact-manager-server/` now runs on the maintainer's mail host as the compose
   project **`contact-manager-store`** — image built from this repository, on the
   host's existing `opt_default` network, **no published port**, a named volume
   (`contact-manager-store_store-data`), `restart: unless-stopped` and the image's
-  own healthcheck (which reports *healthy*). It was added beside the running
-  stacks without stopping or restarting any of them. Verified from another
-  container on that network: `/version` answers, a `PUT`/`GET`/list/`DELETE`
-  round trip works, no token and a wrong token are both `401`, and a marker
-  written through the API does **not** appear in the SQLite file in cleartext.
-  **Two steps remain and both are outside the repository**: a DNS name pointed at
-  the host (the zone is on Cloudflare) and a proxy host in nginx-proxy-manager
-  forwarding it to `contact-manager-store:8080`; then *Check the server* in the
-  plugin takes `https://<name>`. The store is deliberately not published, so
-  nothing is exposed until those exist. `docker-compose.host.yml` is that
-  deployment shape — the store behind a proxy you already run, instead of its own
-  Caddy on 80/443.
-- **Released**: `contact-manager-v1.51.0` is the newest GitHub release; v1.50.5,
+  own healthcheck (which reports *healthy*). It lives at
+  **`/opt/stacks/09-contact-manager-store`** (its own `.env`, mode 600) and is
+  deployed from there, so the folder and the running container are the same
+  thing — `docker compose up -d --build` in it is the rebuild path, and its
+  README carries the backup command and the Portainer adoption steps. It was
+  added beside the running stacks without stopping or restarting any of them.
+  Verified from another container on that network: `/version` answers, a
+  `PUT`/`GET`/list/`DELETE` round trip works, no token and a wrong token are both
+  `401`, and a marker written through the API does **not** appear in the SQLite
+  file in cleartext.
+  **It is live on `https://crm.mailz.se`** (CNAME → host, nginx-proxy-manager
+  proxy host → `contact-manager-store:8080`, forced SSL): the certificate
+  verifies, `http://` answers `301` to `https://`, `/v1/store` without a token is
+  `401`, and a container on the webmail's own network reaches that HTTPS address
+  — which is the path `api.proxy.fetch` takes. **Not on the Portainer Stacks
+  page**: its API needs an admin token, so it is a compose project the CLI owns;
+  the folder's README lists the two steps (bring it down, paste the image-only
+  definition) that hand it over.
+- **Released**: `contact-manager-v1.52.0` is the newest GitHub release; v1.51.0,
+  v1.50.5,
   v1.50.4, v1.50.3, v1.50.2, v1.50.1 and v1.50.0 were cut from `main` before it,
   and every release from v1.5.0 up has a tag and a ZIP. `main` and `contact-manager` are
   in step (PRs #52, #53, #55, #56, #59, #62, #63, #64, #65, #66, #67, #69, #70,
@@ -58,6 +65,50 @@
   - `test/undo.test.mjs` - the undo tests
 
 ## Implementation Summary
+
+### Pointing the plugin at a server: the connect half of #68 (v1.52.0) — #68
+
+`remote.js` had a client for the store and no way to configure it: the address was
+**read** from storage and nothing ever **wrote** it, and the manifest declared no
+credential, so `api.proxy.fetch` had no token to attach. Both gaps were silent —
+the plugin reported `unconfigured` for ever while a working server sat on the
+other end of it.
+
+**The token never enters the bundle.** `manifest.json` declares
+`credentials.store` (`scope: "user"`, `inject: bearer`), and *Connect* calls
+`api.proxy.connect('store', { mode: 'password', server })` — the host's own
+dialog, the host's own storage. The plugin learns `{ connected, origin,
+credentialId }` and nothing else; `api.proxy.fetch` adds the header server-side.
+That is the whole reason a paid tier can ship in a ZIP.
+
+**Nothing is written until the host says `connected`.** The three failures a user
+can meet — a closed dialog, a refused token, and a webmail with no
+`api.proxy.connect` at all — get three different answers, and only a success
+touches storage. A cancelled connect therefore cannot leave the plugin pointed at
+a server it cannot authenticate to, which would have turned *every* record
+feature into a failure at once.
+
+**The dialog returns a choice; the funnel writes.** `server-dialog.js` returns
+`{ connect: { url } }` or `{ disconnect: true }`; `openServer` in `actions.js`
+performs it — the same split the review dialog, the editor and the import wizard
+use. It matters more here than anywhere: `api.proxy.connect` *opens a dialog of
+the host's own*, so a plugin dialog that drove it from inside itself would be
+nesting host surfaces nobody promised work.
+
+**A success asks `/version` immediately.** A wrong address or a refused token is
+then reported in the same breath as the connection, instead of at the first
+record the user tries to save.
+
+The address is normalised once (`normalizeServerUrl`), so `crm.example.com`,
+`https://crm.example.com/` and the value the dialog shows are the same string in
+storage — a second normaliser is the thing that would drift.
+
+Tests: 1197 passing (was 1181) — 7 for the client (the call the host receives,
+a closed dialog writing nothing, a host without `connect`, a refused token with
+its reason, the state the dialog is handed, disconnect surviving a host that
+refuses, and the normaliser) and 9 for the dialog and funnel (the local-only
+line, the choice it returns, connected state and disconnect, the no-connect case,
+and the four funnel outcomes including the version check).
 
 ### Searching the private notes: the search half of #38 (v1.51.0) — #38
 
@@ -2090,7 +2141,7 @@ timer hook. v1.4.0 is complete except **#18**, which needs message bodies —
   plugin is at v1.43.0), so read them as phases and read each description for
   what has shipped and what remains.
 - **Releases**: tagged `contact-manager-vX.Y.Z`; installable ZIPs are the
-  release assets. The newest release is `contact-manager-v1.47.0`.
+  release assets. The newest release is `contact-manager-v1.52.0`.
 - **Cutting a release**: merge the feature PR(s) into `main`, keep
   `contact-manager` in step, bump `manifest.json`/`package.json` + `CHANGELOG.md`
   on `main`, then run `npm run release` — it tags, pushes the tag and uploads

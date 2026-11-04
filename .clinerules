@@ -455,6 +455,19 @@ Import (#19, import half; a decision per duplicate since #4)
   remembered mappings in 'importMappings', keyed by the header row
   NOT imported: photos, URLs, custom fields (see the CHANGELOG)
 
+Server client and the connect funnel (#68)
+  credentials.store in manifest.json, scope 'user', inject bearer: the token is
+    the HOST's, so the bundle never carries a secret
+  connectServer(api, url) -> api.proxy.connect('store', { mode: 'password',
+    server }); writes the address ONLY once the host answers connected, so a
+    cancelled dialog cannot point the plugin at a server it cannot authenticate
+  disconnectServer(api) forgets the address and asks the host to drop it
+  readServerState(api) -> { url, credentialId, canConnect } for the dialog
+  the dialog returns a choice ({ connect: { url } } / { disconnect: true });
+    actions.js#openServer performs it — api.proxy.connect opens a dialog of the
+    host's own, so it is never driven from inside a plugin dialog
+  a successful connect asks for /version at once, so a wrong address is visible
+
 Server client (#68, first step)
   readRemoteUrl / writeRemoteUrl  the configured server, '' when local-only
   callServer(api, path, { method, body }) ->
