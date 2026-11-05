@@ -9,7 +9,7 @@
 // `onDataChanged()` (bump it after a task that wrote something).
 import { Tabs } from '@plugin-host/ui';
 
-export function makeAppShell(React, api, { home, duplicates, contacts, groups, projects, health, history, privacy }) {
+export function makeAppShell(React, api, { home, duplicates, contacts, groups, projects, health, history, privacy, settings }) {
   const { createElement: h, useEffect, useState } = React;
   const t = (key) => api.i18n.t(key);
   const tabs = [
@@ -18,6 +18,7 @@ export function makeAppShell(React, api, { home, duplicates, contacts, groups, p
     { id: 'contacts', label: t('page.contactsTitle'), component: contacts },
     { id: 'groups', label: t('groups.tab'), component: groups },
     { id: 'projects', label: t('page.projectsTitle'), component: projects },
+    { id: 'settings', label: t('page.settingsTitle'), component: settings },
     { id: 'health', label: t('health.title'), component: health },
     { id: 'history', label: t('history.tab'), component: history },
     { id: 'privacy', label: t('privacy.tab'), component: privacy },
