@@ -84,7 +84,7 @@ describe('opening it from the palette', () => {
 
     await openServer(api);
 
-    expect(api.calls('proxy.connect')[0].args).toEqual(['store', { mode: 'password', server: 'https://crm.mailz.se' }]);
+    expect(api.calls('proxy.connect')[0].args).toEqual(['store-basic', { mode: 'password', server: 'https://crm.mailz.se' }]);
     expect(api.storageSnapshot()[REMOTE_URL_KEY]).toBe('https://crm.mailz.se');
     expect(api.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBe('store');
     // the mode is remembered, so the dialog opens where the user left it
@@ -123,7 +123,7 @@ describe('opening it from the palette', () => {
 
     await openServer(api);
 
-    expect(api.calls('proxy.disconnect')[0].args).toEqual(['store']);
+    expect(api.calls('proxy.disconnect').map((call) => call.args[0])).toEqual(['store-basic', 'store']);
     expect(api.storageSnapshot()[REMOTE_URL_KEY]).toBeUndefined();
     expect(api.calls('toast.info')[0].args[0]).toBe('Disconnected. The plugin is local-only again.');
   });

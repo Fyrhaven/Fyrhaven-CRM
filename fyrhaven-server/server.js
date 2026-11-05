@@ -726,6 +726,29 @@ export function createRequestHandler(db, {
       return send(res, 200, { ok: true, deactivated: true, note: 'restart to run unlicensed, or paste a new key' });
     }
 
+    if (path === '/v1/licence' && method === 'POST') {
+      const payload = (await body()) ?? {};
+      const key = String(payload.licence ?? '').trim();
+      const check = verifyLicence(key, {
+        publicKey: publicKeyOf({ FYRHAVEN_LICENCE_PUBLIC: licencePublic }),
+        fingerprint: installKey, now: now(),
+      });
+      if (!check.ok) return send(res, 400, { error: `that licence was not accepted (${check.reason})` });
+      process.env.FYRHAVEN_LICENCE = key;
+      let stored = false;
+      try {
+        const { writeFileSync } = await import('node:fs');
+        writeFileSync(process.env.FYRHAVEN_LICENCE_FILE ?? '/data/licence.key', `${key}\n`, { mode: 0o600 });
+        stored = true;
+      } catch {
+        // an unwritable volume still runs with the key in memory
+      }
+      return send(res, 200, {
+        ok: true, stored, fingerprint: installKey,
+        licence: check.payload, summary: describeLicence(check.payload), daysLeft: check.daysLeft,
+      });
+    }
+
     if (path === '/v1/licence/challenge' && method === 'POST') {
       const challenge = deactivationChallenge(installKey, { now: now() });
       const read = readChallenge(challenge);
