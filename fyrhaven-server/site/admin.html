@@ -16,6 +16,7 @@
       <button data-tab="accounts" type="button">Accounts</button>
       <button data-tab="catalog" type="button">Catalog</button>
       <button data-tab="licences" type="button">Licences</button>
+      <button data-tab="usage" type="button">Usage</button>
       <button data-action="signout" type="button" hidden>Lock</button>
     </nav>
   </header>
@@ -65,6 +66,16 @@
           <label>Description <input name="description"></label>
           <button type="submit">Save product</button>
         </form>
+      </div>
+
+      <div data-panel="usage" hidden>
+        <h2>Usage</h2>
+        <p class="muted">
+          Storage is what the workspace holds right now. Traffic is what has moved through this API
+          since the container started — approximate by design: it counts record bytes, not headers.
+        </p>
+        <div id="usage-total" class="muted"></div>
+        <div id="usage"></div>
       </div>
 
       <div data-panel="licences" hidden>

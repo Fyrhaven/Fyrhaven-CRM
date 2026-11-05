@@ -160,6 +160,41 @@ async function loadCatalog() {
   }
 }
 
+const bytes = (value) => {
+  const n = Number(value) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} kB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1048576).toFixed(1)} MB`;
+  return `${(n / 1073741824).toFixed(2)} GB`;
+};
+
+async function loadUsage() {
+  const answer = await call('/v1/admin/usage');
+  $('#usage-total').textContent = `${answer.customers.length} workspaces · `
+    + `${bytes(answer.total.bytes)} stored · ${answer.total.records} records · `
+    + `${answer.total.projects} projects · ${bytes(answer.total.inBytes)} in / ${bytes(answer.total.outBytes)} out`;
+
+  const box = $('#usage');
+  box.replaceChildren();
+  if (!answer.customers.length) {
+    box.append(el('p', { class: 'muted', text: 'Nothing stored yet.' }));
+    return;
+  }
+  for (const row of answer.customers) {
+    box.append(el('div', { class: 'row' },
+      el('div', {},
+        el('strong', { text: row.email || row.workspace }),
+        el('div', {
+          class: 'muted',
+          text: `${bytes(row.bytes)} stored · ${row.records} records · ${row.projects} projects`,
+        }),
+        el('div', {
+          class: 'muted',
+          text: `${bytes(row.inBytes)} in / ${bytes(row.outBytes)} out · ${row.requests} requests`,
+        }))));
+  }
+}
+
 async function loadLicences() {
   const answer = await call('/v1/admin/licenses');
   const box = $('#licences');
@@ -294,7 +329,8 @@ document.querySelectorAll('[data-tab]').forEach((button) => {
     try {
       await (tab === 'orders' ? loadOrders()
         : tab === 'accounts' ? loadAccounts()
-          : tab === 'licences' ? loadLicences() : loadCatalog());
+          : tab === 'licences' ? loadLicences()
+            : tab === 'usage' ? loadUsage() : loadCatalog());
       show(tab);
     } catch (err) {
       status(String(err.message ?? err), true);
