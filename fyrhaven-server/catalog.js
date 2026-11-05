@@ -58,6 +58,13 @@ export function openCatalogTables(db) {
       active         INTEGER NOT NULL DEFAULT 1,
       created        TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS product_prices (
+      product_id   TEXT NOT NULL,
+      currency     TEXT NOT NULL,
+      amount       INTEGER NOT NULL,
+      stripe_price TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (product_id, currency)
+    );
     CREATE TABLE IF NOT EXISTS licences (
       id         TEXT PRIMARY KEY,
       account_id TEXT NOT NULL,
@@ -168,6 +175,43 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
         .run(text(priceId), text(stripeProduct), String(productId));
       const product = row(productId);
       return product ? view(product) : null;
+    },
+
+    /**
+     * Every price a product has, the product's own currency first. The base row is
+     * the product's amount; the extra rows are the currencies the operator added.
+     */
+    pricesFor(product) {
+      const base = {
+        currency: product.currency,
+        amount: product.amount,
+        stripePriceId: product.stripe_price,
+        base: true,
+      };
+      const extra = db.prepare('SELECT * FROM product_prices WHERE product_id = ? ORDER BY currency')
+        .all(product.id)
+        .filter((row) => row.currency !== product.currency)
+        .map((row) => ({ currency: row.currency, amount: row.amount, stripePriceId: row.stripe_price, base: false }));
+      return [base, ...extra].map((price) => ({
+        ...price,
+        label: `${(price.amount / 100).toFixed(2)} ${price.currency}`,
+      }));
+    },
+
+    /** Adds or replaces one currency's price for a product. */
+    setPrice(productId, { currency, amount, stripePriceId = '' }) {
+      const product = row(productId);
+      if (!product) return null;
+      const code = text(currency).toUpperCase().slice(0, 3);
+      if (!code) return null;
+      if (code === product.currency) {
+        db.prepare('UPDATE products SET amount = ? WHERE id = ?').run(amountOf(amount), product.id);
+      } else {
+        db.prepare('INSERT INTO product_prices (product_id, currency, amount, stripe_price) VALUES (?, ?, ?, ?) ON CONFLICT(product_id, currency) DO UPDATE SET amount = excluded.amount, stripe_price = excluded.stripe_price')
+          .run(product.id, code, amountOf(amount), text(stripePriceId));
+      }
+      const fresh = row(product.id);
+      return fresh ? { ...view(fresh), prices: this.pricesFor(fresh) } : null;
     },
 
     /** Turns a product off (the site stops offering it). */

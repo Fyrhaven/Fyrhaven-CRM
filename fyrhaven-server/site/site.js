@@ -142,6 +142,16 @@ document.querySelectorAll('form[data-form]').forEach((form) => {
 });
 
 const products = { list: [] };
+const currencySelect = document.getElementById('currency');
+if (currencySelect) {
+  currencySelect.value = chosenCurrency();
+  currencySelect.addEventListener('change', () => {
+    localStorage.setItem(currencyKey, currencySelect.value);
+    void loadProducts();
+  });
+}
+const currencyKey = 'cm-currency';
+const chosenCurrency = () => (localStorage.getItem(currencyKey) ?? 'EUR').toUpperCase();
 
 /** The shop window: every active product with its price and a buy button. */
 async function loadProducts() {
@@ -155,14 +165,18 @@ async function loadProducts() {
       return;
     }
     for (const product of answer.products) {
+      const currency = chosenCurrency();
+      const price = (product.prices || []).find((entry) => entry.currency === currency)
+        ?? (product.prices || [])[0];
+      const shown = price ? `${price.label} ${product.interval === 'once' ? 'one-off' : `per ${product.interval}`}` : product.price;
       box.append(el('div', { class: 'plan' },
         el('strong', { text: product.label }),
-        el('div', { class: 'price', text: product.price }),
+        el('div', { class: 'price', text: shown }),
         el('div', { class: 'muted', text: product.description }),
         el('button', {
           type: 'button',
           text: product.kind === 'license' ? 'Buy the licence' : 'Subscribe',
-          onclick: () => order(productId(product)),
+          onclick: () => order(productId(product), currency),
         })));
     }
   } catch (err) {
@@ -173,14 +187,14 @@ async function loadProducts() {
 const productId = (product) => product.id;
 
 /** Orders one product; the payment status decides what the customer is told. */
-async function order(id) {
+async function order(id, currency) {
   if (!token()) {
     show('signup');
     status('Create an account first — the order belongs to it.');
     return;
   }
   try {
-    const answer = await call('/v1/account/order', { method: 'POST', body: { productId: id } });
+    const answer = await call('/v1/account/order', { method: 'POST', body: { productId: id, currency: currency ?? chosenCurrency() } });
     if (answer.payment.status === 'redirect' && answer.payment.url) {
       window.location.href = answer.payment.url;
       return;
@@ -209,7 +223,7 @@ document.querySelectorAll('[data-action]').forEach((button) => {
     if (action === 'order') {
       const first = products.list.find((entry) => entry.kind === 'subscription') ?? products.list[0];
       if (!first) return status('Nothing is for sale right now.', true);
-      return order(first.id);
+      return order(first.id, chosenCurrency());
     }
     if (action === 'delete') {
       const sure = window.confirm('Delete your account, its sessions and every record in it? This cannot be undone.');
