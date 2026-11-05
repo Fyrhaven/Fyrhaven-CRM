@@ -1,7 +1,7 @@
 {
   "id": "fyrhaven-crm",
   "name": "Fyrhaven CRM",
-  "version": "1.56.0",
+  "version": "1.57.0",
   "author": "Alexander",
   "description": "Fyrhaven CRM — contacts, companies, projects and time for Bulwark Mail. Finds and merges duplicates, keeps private notes and consent records on your own server or ours, and follows you between devices.",
   "type": "ui-extension",
@@ -25,10 +25,17 @@
   "minAppVersion": "1.15.0",
   "credentials": {
     "store": {
-      "label": "Contact Manager server",
+      "label": "Fyrhaven Cloud (workspace token)",
       "scope": "user",
       "inject": {
         "type": "bearer"
+      }
+    },
+    "store-basic": {
+      "label": "Fyrhaven server (user name and password)",
+      "scope": "user",
+      "inject": {
+        "type": "basic"
       }
     }
   },
@@ -565,6 +572,22 @@
       "server.intro": "Projects, private notes, consent records and the change history are records: they belong on a Contact Manager server, not in one browser. Point the plugin at yours here.",
       "server.tokenHint": "The workspace token is kept by the webmail, never by the plugin — the connect dialog asks for it, and the server is the only place it is sent.",
       "server.address": "Server address",
+      "server.licenceInstalled": "Licence installed: {summary}",
+      "server.licenceRefused": "That licence was not accepted: {reason}",
+      "server.challengeFailed": "The server did not give a challenge: {reason}",
+      "server.released": "Installation released — the licence can be activated on another server.",
+      "server.releaseFailed": "The release code was not accepted: {reason}",
+      "server.licenceTitle": "Licence",
+      "server.licenceHint": "This server checks its own licence: nothing here can make an invalid key valid.",
+      "server.fingerprint": "Installation key: {key}",
+      "server.licensed": "Licensed: {summary}",
+      "server.unlicensed": "No licence on this server yet.",
+      "server.licenceField": "Licence key",
+      "server.installLicence": "Install licence",
+      "server.release": "Release this installation…",
+      "server.challengeHint": "Take this challenge to the website, sign in, and paste the release code below.",
+      "server.deactivateCode": "Release code",
+      "server.deactivateApply": "Release",
       "server.mode": "Where the records live",
       "server.modeCloud": "Contact Manager Cloud (subscription)",
       "server.modeSelf": "My own server (self-hosted)",
@@ -1508,6 +1531,22 @@
       "server.intro": "Projekte, private Notizen, Einwilligungen und der Änderungsverlauf sind Datensätze: sie gehören auf einen Contact-Manager-Server, nicht in einen Browser. Richten Sie das Plugin hier auf Ihren Server aus.",
       "server.tokenHint": "Das Arbeitsbereich-Token liegt bei der Webmail, nie beim Plugin — der Verbindungsdialog fragt danach, und nur der Server bekommt es zu sehen.",
       "server.address": "Serveradresse",
+      "server.licenceInstalled": "Lizenz installiert: {summary}",
+      "server.licenceRefused": "Diese Lizenz wurde nicht akzeptiert: {reason}",
+      "server.challengeFailed": "Der Server gab keine Challenge: {reason}",
+      "server.released": "Installation freigegeben — die Lizenz kann auf einem anderen Server aktiviert werden.",
+      "server.releaseFailed": "Der Freigabecode wurde nicht akzeptiert: {reason}",
+      "server.licenceTitle": "Lizenz",
+      "server.licenceHint": "Dieser Server prüft seine Lizenz selbst: hier kann kein ungültiger Schlüssel gültig werden.",
+      "server.fingerprint": "Installationsschlüssel: {key}",
+      "server.licensed": "Lizenziert: {summary}",
+      "server.unlicensed": "Auf diesem Server ist noch keine Lizenz.",
+      "server.licenceField": "Lizenzschlüssel",
+      "server.installLicence": "Lizenz installieren",
+      "server.release": "Diese Installation freigeben…",
+      "server.challengeHint": "Nehmen Sie diese Challenge auf die Website, melden Sie sich an und fügen Sie den Freigabecode unten ein.",
+      "server.deactivateCode": "Freigabecode",
+      "server.deactivateApply": "Freigeben",
       "server.mode": "Wo die Daten liegen",
       "server.modeCloud": "Contact Manager Cloud (Abo)",
       "server.modeSelf": "Mein eigener Server (selbst gehostet)",

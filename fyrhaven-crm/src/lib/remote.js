@@ -19,6 +19,13 @@ export const REMOTE_CREDENTIAL_KEY = 'remoteCredentialId';
 export const CREDENTIAL_ID = 'store';
 
 /**
+ * A self-hosted server is protected by a user name and password, so it has its
+ * own credential: the cloud keeps a bearer token, a server you run keeps a pair.
+ */
+export const BASIC_CREDENTIAL_ID = 'store-basic';
+export const credentialFor = (mode) => (mode === 'cloud' ? CREDENTIAL_ID : BASIC_CREDENTIAL_ID);
+
+/**
  * The service the plugin's own cloud tier runs on (#147).
  *
  * Fixed in code, not shown as a field: a customer who bought a subscription is
@@ -114,11 +121,11 @@ export async function connectServer(api, url, { mode = 'self' } = {}) {
   const connect = api?.proxy?.connect;
   if (typeof connect !== 'function') return { status: 'unavailable' };
   try {
-    const answer = await connect(CREDENTIAL_ID, { mode: 'password', server: target });
+    const answer = await connect(credentialFor(mode), { mode: 'password', server: target });
     if (!answer || answer.connected !== true) return { status: 'failed', reason: 'not connected' };
     const origin = normalizeServerUrl(answer.origin) || target;
     await api.storage.set(REMOTE_URL_KEY, origin);
-    await api.storage.set(REMOTE_CREDENTIAL_KEY, text(answer.credentialId) || CREDENTIAL_ID);
+    await api.storage.set(REMOTE_CREDENTIAL_KEY, text(answer.credentialId) || credentialFor(mode));
     return { status: 'ok', url: origin, username: text(answer.username) };
   } catch (err) {
     return { status: 'failed', reason: String(err?.message ?? err) };
@@ -132,7 +139,12 @@ export async function connectServer(api, url, { mode = 'self' } = {}) {
  */
 export async function disconnectServer(api) {
   try {
-    if (typeof api?.proxy?.disconnect === 'function') await api.proxy.disconnect(CREDENTIAL_ID);
+    if (typeof api?.proxy?.disconnect === 'function') {
+      // Both, because the mode may have been the other one when it was connected.
+      // A host that refuses one of them must not stop the other.
+      try { await api.proxy.disconnect(BASIC_CREDENTIAL_ID); } catch { /* not connected */ }
+      try { await api.proxy.disconnect(CREDENTIAL_ID); } catch { /* not connected */ }
+    }
   } catch {
     // The plugin no longer points at a server either way.
   }
@@ -295,6 +307,83 @@ export async function accountInfo(api) {
       email: text(parsed.account?.email),
       licences: Array.isArray(parsed.licences) ? parsed.licences : [],
     };
+  } catch {
+    return { status: 'failed', reason: 'the answer was not JSON' };
+  }
+}
+
+
+/**
+ * The licence this server is running under (#148).
+ *
+ * `fingerprint` is the installation key the operator takes to the website; the
+ * rest says what the server thinks it is allowed to do. 
+ *
+ * @returns {Promise<{status: 'ok'|'unconfigured'|'unavailable'|'failed', mode?: string,
+ *   fingerprint?: string, licensed?: boolean, summary?: string, licence?: object, reason?: string}>}
+ */
+export async function licenceInfo(api) {
+  const answer = await callServer(api, '/v1/licence');
+  if (answer.status !== 'ok') return answer;
+  try {
+    const parsed = JSON.parse(answer.body);
+    if (!parsed || typeof parsed !== 'object') return { status: 'failed', reason: 'the answer was not an object' };
+    return {
+      status: 'ok',
+      mode: text(parsed.mode),
+      fingerprint: text(parsed.fingerprint),
+      licensed: parsed.licensed === true,
+      summary: text(parsed.summary),
+      licence: parsed.licence ?? null,
+    };
+  } catch {
+    return { status: 'failed', reason: 'the answer was not JSON' };
+  }
+}
+
+/** Installs a licence key the user pasted — the server checks it, not this code. */
+export async function installLicence(api, licence) {
+  const key = text(licence);
+  if (!key) return { status: 'failed', reason: 'no licence' };
+  const answer = await callServer(api, '/v1/licence', {
+    method: 'POST',
+    body: JSON.stringify({ licence: key }),
+    headers: { 'content-type': 'application/json' },
+  });
+  if (answer.status !== 'ok') return answer;
+  try {
+    const parsed = JSON.parse(answer.body);
+    return { status: 'ok', summary: text(parsed.summary), daysLeft: parsed.daysLeft, stored: parsed.stored === true };
+  } catch {
+    return { status: 'failed', reason: 'the answer was not JSON' };
+  }
+}
+
+/** A challenge the user takes to the website to release this installation. */
+export async function deactivationChallenge(api) {
+  const answer = await callServer(api, '/v1/licence/challenge', {
+    method: 'POST', body: '{}', headers: { 'content-type': 'application/json' },
+  });
+  if (answer.status !== 'ok') return answer;
+  try {
+    const parsed = JSON.parse(answer.body);
+    return { status: 'ok', challenge: text(parsed.challenge), fingerprint: text(parsed.fingerprint) };
+  } catch {
+    return { status: 'failed', reason: 'the answer was not JSON' };
+  }
+}
+
+/** Spends the signed release code on this server, so the licence can move. */
+export async function applyDeactivation(api, code) {
+  const answer = await callServer(api, '/v1/licence/deactivate', {
+    method: 'POST',
+    body: JSON.stringify({ code: text(code) }),
+    headers: { 'content-type': 'application/json' },
+  });
+  if (answer.status !== 'ok') return answer;
+  try {
+    const parsed = JSON.parse(answer.body);
+    return { status: 'ok', deactivated: parsed.deactivated === true };
   } catch {
     return { status: 'failed', reason: 'the answer was not JSON' };
   }

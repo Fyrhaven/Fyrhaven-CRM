@@ -7,6 +7,27 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.57.0] — 2026-11-04
+
+### Added
+
+- **Licences, from the plugin.** The *Dedicated server* dialog now shows the
+  self-hosted server's **installation key** (the thing you take to the website),
+  whether it is licensed and until when, a field to **install a licence key** the
+  site gave you, and a **Release this installation** flow that asks the server for
+  a challenge and takes back the signed release code — so a licence can move to
+  a new server without emailing anyone.
+- **A second credential for a server you run.** `store-basic` (HTTP Basic, user
+  name and password) is used for self-hosted connections; the cloud keeps the
+  bearer token. A password-protected server therefore needs no token, and the
+  password never reaches the plugin page.
+
+### Notes
+
+Nothing in the dialog decides whether a licence is valid: the server verifies the
+key and answers, and the dialog repeats that answer. Writing a check twice is how
+two checks end up disagreeing.
+
 ## [1.56.0] — 2026-11-04
 
 ### Changed
