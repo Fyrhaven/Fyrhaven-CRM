@@ -7,6 +7,16 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.60.0] — 2026-11-05
+
+### Added
+
+- **The phone region has a home.** Settings → *Default country for phone numbers*
+  sets the dialling code used to compare numbers, and says why it matters: with
+  it, `+46 70 123 45 67` and `070-123 45 67` are recognised as one number; without
+  it, matching falls back to digits alone. It was write-only before — settable
+  from the cleanup flow and nowhere else, which is a papercut with no excuse.
+
 ## [1.59.0] — 2026-11-05
 
 ### Changed
