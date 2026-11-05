@@ -914,3 +914,85 @@ describe('self-hosted licences (#148, the lock)', () => {
     void key;
   });
 });
+
+describe('activation: the installation key (#148)', () => {
+  it('ties a licence to one installation, and refuses it on another', async () => {
+    const { keyPair, signLicence, verifyLicence, licencePayload } = await import('./licence.js');
+    const pair = keyPair();
+    const key = signLicence(licencePayload({
+      subject: 'a@b.se',
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      fingerprint: 'FHI-AAAA-BBBB-CCCC-DDDD',
+    }), pair.privateKey);
+
+    assert.equal(verifyLicence(key, { publicKey: pair.publicKey, fingerprint: 'FHI-AAAA-BBBB-CCCC-DDDD' }).ok, true);
+    const elsewhere = verifyLicence(key, { publicKey: pair.publicKey, fingerprint: 'FHI-9999-8888-7777-6666' });
+    assert.equal(elsewhere.ok, false);
+    assert.equal(elsewhere.reason, 'wrong-installation');
+    // a key with no fingerprint stays valid anywhere (issued before activation)
+    const open = signLicence(licencePayload({ subject: 'c@d.se', expiresAt: new Date(Date.now() + 86_400_000).toISOString() }), pair.privateKey);
+    assert.equal(verifyLicence(open, { publicKey: pair.publicKey, fingerprint: 'FHI-9999-8888-7777-6666' }).ok, true);
+  });
+
+  it('creates an installation key once and keeps it', async () => {
+    const { ensureInstallKey, isInstallKey } = await import('./licence.js');
+    const dir = mkdtempSync(join(tmpdir(), 'fyrhaven-install-'));
+    const file = join(dir, 'install.key');
+    const first = ensureInstallKey(file);
+    assert.equal(isInstallKey(first), true);
+    assert.equal(ensureInstallKey(file), first, 'a restart must not mint a new installation');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('activates a fingerprint against a bought licence, and refuses the rest', async () => {
+    const { keyPair, verifyLicence } = await import('./licence.js');
+    const pair = keyPair();
+    const own = createStoreServer({
+      tokenList: 'tok-a=acme', masterKey: MASTER, adminToken: 'adm',
+      licence: { ok: true, mode: 'cloud' }, licencePrivate: pair.privateKey, installKey: 'FHI-AAAA-BBBB-CCCC-DDDD',
+      payments: { provider: 'none', planDays: 365, webhookSecret: 'whsec_x', publicUrl: '' },
+    });
+    await new Promise((resolve) => own.server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${own.server.address().port}`;
+    const post = (path, token, body) => fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    });
+
+    const signup = await (await post('/v1/accounts', null, { email: 'self@example.com', password: 'a-long-password' })).json();
+    const fingerprint = 'FHI-QQQQ-WWWW-EEEE-RRRR';
+
+    // nothing bought yet
+    assert.equal((await post('/v1/licence/activate', signup.token, { fingerprint })).status, 402);
+    // and anonymously
+    assert.equal((await post('/v1/licence/activate', null, { fingerprint })).status, 401);
+
+    // buy the self-hosted licence, then activate
+    const products = await (await fetch(`${base}/v1/products`)).json();
+    const licenceProduct = products.products.find((product) => product.code === 'selfhosted');
+    const order = await (await post('/v1/account/order', signup.token, { productId: licenceProduct.id })).json();
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { metadata: { accountId: signup.account.id, orderId: order.order.id, plan: 'cloud' } } },
+    });
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = createHmac('sha256', 'whsec_x').update(`${t}.${body}`).digest('hex');
+    await fetch(`${base}/v1/payments/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${v1}` },
+      body,
+    });
+
+    const activated = await (await post('/v1/licence/activate', signup.token, { fingerprint })).json();
+    const check = verifyLicence(activated.licence, { publicKey: pair.publicKey, fingerprint });
+    assert.equal(check.ok, true, 'the activated key opens the installation that asked for it');
+    assert.equal(activated.fingerprint, fingerprint);
+    assert.equal(activated.record.fingerprint, fingerprint);
+    // and not a different one
+    assert.equal(verifyLicence(activated.licence, { publicKey: pair.publicKey, fingerprint: 'FHI-1111-2222-3333-4444' }).ok, false);
+
+    own.server.closeAllConnections?.();
+    await new Promise((resolve) => own.server.close(resolve));
+  });
+});

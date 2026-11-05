@@ -68,7 +68,7 @@ export function openCatalogTables(db) {
     );
   `);
   // Added after licences shipped: a signed key, and whether it was revoked.
-  for (const column of ["signed INTEGER NOT NULL DEFAULT 0", "revoked INTEGER NOT NULL DEFAULT 0"]) {
+  for (const column of ["signed INTEGER NOT NULL DEFAULT 0", "revoked INTEGER NOT NULL DEFAULT 0", "fingerprint TEXT NOT NULL DEFAULT ''"]) {
     try {
       db.exec(`ALTER TABLE licences ADD COLUMN ${column}`);
     } catch {
@@ -187,6 +187,20 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
       return { id, key: value, signed: Boolean(signed), issuedAt: iso(now()), expiresAt: expires };
     },
 
+    /** Binds a licence to one installation and remembers the key it issued. */
+    bindLicence(id, fingerprint, key) {
+      db.prepare('UPDATE licences SET fingerprint = ?, key = ? WHERE id = ?')
+        .run(text(fingerprint), text(key), String(id ?? ''));
+      const row2 = db.prepare('SELECT * FROM licences WHERE id = ?').get(String(id ?? ''));
+      return row2
+        ? {
+          id: row2.id, key: row2.key, fingerprint: row2.fingerprint ?? '',
+          signed: row2.signed === 1, revoked: row2.revoked === 1,
+          issuedAt: row2.issued, expiresAt: row2.expires,
+        }
+        : null;
+    },
+
     /** Marks a licence revoked. An offline licence cannot be un-run, but the list
      * stops claiming it is good, and a renewal is issued instead. */
     revokeLicence(id) {
@@ -199,7 +213,7 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
 
     /** An account's licences, with the product they belong to. */
     licences(accountId) {
-      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, l.signed, l.revoked, p.label, p.code
+      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, l.signed, l.revoked, l.fingerprint, p.label, p.code
         FROM licences l LEFT JOIN products p ON p.id = l.product_id
         WHERE l.account_id = ? ORDER BY l.issued DESC`).all(String(accountId)).map((licence) => ({
         id: licence.id,
@@ -207,6 +221,7 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
         label: licence.label ?? licence.code ?? '',
         signed: licence.signed === 1,
         revoked: licence.revoked === 1,
+        fingerprint: licence.fingerprint ?? '',
         issuedAt: licence.issued,
         expiresAt: licence.expires,
       }));
@@ -214,7 +229,7 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
 
     /** Every licence — the operator's list. */
     allLicences({ limit = 500 } = {}) {
-      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, l.signed, l.revoked, a.email, p.code
+      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, l.signed, l.revoked, l.fingerprint, a.email, p.code
         FROM licences l LEFT JOIN accounts a ON a.id = l.account_id
         LEFT JOIN products p ON p.id = l.product_id
         ORDER BY l.issued DESC LIMIT ?`).all(Number(limit)).map((licence) => ({
@@ -224,6 +239,7 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
         code: licence.code ?? '',
         signed: licence.signed === 1,
         revoked: licence.revoked === 1,
+        fingerprint: licence.fingerprint ?? '',
         issuedAt: licence.issued,
         expiresAt: licence.expires,
       }));
