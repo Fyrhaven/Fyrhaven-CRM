@@ -515,13 +515,32 @@ describe('payments (#148)', () => {
     STRIPE_WEBHOOK_SECRET: 'whsec_123', PUBLIC_URL: 'https://crm.example',
   };
 
-  it('is unconfigured with half a configuration, and configured with a full one', () => {
+  it('needs a key, and only a key, to be able to charge', () => {
     assert.equal(paymentConfig({}).provider, 'none');
-    assert.equal(paymentConfig({ STRIPE_SECRET_KEY: 'sk' }).provider, 'none');
+    // a price with no key is still nothing; a key with no fallback price is fine
     assert.equal(paymentConfig({ STRIPE_PRICE_CLOUD: 'price' }).provider, 'none');
+    assert.equal(paymentConfig({ STRIPE_SECRET_KEY: 'sk' }).provider, 'stripe');
     assert.equal(paymentConfig(STRIPE).provider, 'stripe');
     assert.equal(paymentsAvailable(paymentConfig(STRIPE)), true);
     assert.equal(paymentsAvailable(paymentConfig({ ...STRIPE, PUBLIC_URL: '' })), false);
+  });
+
+  it('is configured by a secret key alone, because a product carries its own price', async () => {
+    // A shop with a key and catalogue prices is ready; the old check demanded the
+    // fallback STRIPE_PRICE_CLOUD too, and reported "no payments configured".
+    const config = paymentConfig({ STRIPE_SECRET_KEY: 'sk_test_123', PUBLIC_URL: 'https://crm.example' });
+    assert.equal(config.provider, 'stripe');
+    assert.equal(paymentsAvailable(config), true);
+
+    const fake = async () => ({ ok: true, status: 200, json: async () => ({ id: 'cs_9', url: 'https://pay.example/cs_9' }) });
+    const answer = await createCheckout(config, {
+      order: { id: 'o9', plan: 'cloud' },
+      account: { id: 'a9', email: 'x@y.se' },
+      priceId: 'price_from_product',
+      fetch: fake,
+    });
+    assert.equal(answer.status, 'ok');
+    assert.equal(answer.url, 'https://pay.example/cs_9');
   });
 
   it('asks the provider for a checkout and returns where to send the customer', async () => {
