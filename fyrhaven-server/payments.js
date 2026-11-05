@@ -35,13 +35,17 @@ const text = (value) => (typeof value === 'string' ? value.trim() : '');
  */
 export function paymentConfig(env = process.env) {
   const secretKey = text(env.STRIPE_SECRET_KEY);
+  // The fallback price is optional now that a catalogue product carries its own
+  // `stripe_price`. Gating the provider on it meant a shop with real prices and a
+  // secret key still said "no payments configured" — which is exactly what
+  // happened: orders came back `unavailable` and the site never redirected.
   const priceId = text(env.STRIPE_PRICE_CLOUD);
   const webhookSecret = text(env.STRIPE_WEBHOOK_SECRET);
   const publicUrl = text(env.PUBLIC_URL).replace(/\/+$/, '');
   const planDays = Number(env.STRIPE_PLAN_DAYS ?? DEFAULT_PLAN_DAYS);
   const mode = text(env.STRIPE_MODE) === 'subscription' ? 'subscription' : 'payment';
   return {
-    provider: secretKey && priceId ? 'stripe' : 'none',
+    provider: secretKey ? 'stripe' : 'none',
     secretKey,
     priceId,
     webhookSecret,
