@@ -29,6 +29,7 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -45,7 +46,10 @@ import {
 } from './licence.js';
 
 
-export const VERSION = '1.0.0';
+const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
+/** The version the service reports — `package.json` is the single source of truth. */
+export const VERSION = String(packageJson.version ?? '0.0.0');
 
 /** The largest single record, in bytes. A project with time entries fits easily. */
 export const MAX_VALUE_BYTES = 1024 * 1024;
