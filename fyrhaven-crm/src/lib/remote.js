@@ -32,7 +32,7 @@ export const credentialFor = (mode) => (mode === 'cloud' ? CREDENTIAL_ID : BASIC
  * not expected to know a hostname, and an address they could edit is one they
  * could get wrong. A self-hoster types their own instead.
  */
-export const CLOUD_ORIGIN = 'https://crm.mailz.se';
+export const CLOUD_ORIGIN = 'https://crm.fyrhaven.com';
 
 /** Which of the two ways this install talks to a server. */
 export const SERVER_MODES = ['cloud', 'self'];

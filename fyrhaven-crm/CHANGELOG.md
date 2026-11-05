@@ -7,6 +7,15 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.59.0] — 2026-11-05
+
+### Changed
+
+- **The cloud address is `crm.fyrhaven.com`.** The domain is bought and serving,
+  so the one address a subscriber never types now points at it. `crm.mailz.se`
+  keeps answering as an alias, so an install that connected before this release
+  keeps working exactly as it did — the address is only read when connecting.
+
 ## [1.58.0] — 2026-11-04
 
 ### Added
