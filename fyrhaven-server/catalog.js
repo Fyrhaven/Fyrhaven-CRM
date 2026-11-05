@@ -68,7 +68,7 @@ export function openCatalogTables(db) {
     );
   `);
   // Added after licences shipped: a signed key, and whether it was revoked.
-  for (const column of ["signed INTEGER NOT NULL DEFAULT 0", "revoked INTEGER NOT NULL DEFAULT 0", "fingerprint TEXT NOT NULL DEFAULT ''"]) {
+  for (const column of ["signed INTEGER NOT NULL DEFAULT 0", "revoked INTEGER NOT NULL DEFAULT 0", "fingerprint TEXT NOT NULL DEFAULT ''", "deactivated INTEGER NOT NULL DEFAULT 0"]) {
     try {
       db.exec(`ALTER TABLE licences ADD COLUMN ${column}`);
     } catch {
@@ -187,9 +187,34 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
       return { id, key: value, signed: Boolean(signed), issuedAt: iso(now()), expiresAt: expires };
     },
 
+    /**
+     * Releases a licence from the installation it was bound to, so it can be
+     * activated on a new server. The old server forgets its key locally, which is
+     * what the signed deactivation code proves.
+     */
+    deactivateLicence(id) {
+      db.prepare("UPDATE licences SET fingerprint = '', deactivated = 1 WHERE id = ?").run(String(id ?? ''));
+      const row2 = db.prepare('SELECT * FROM licences WHERE id = ?').get(String(id ?? ''));
+      return row2
+        ? {
+          id: row2.id, fingerprint: '', signed: row2.signed === 1,
+          revoked: row2.revoked === 1, deactivated: row2.deactivated === 1,
+          issuedAt: row2.issued, expiresAt: row2.expires,
+        }
+        : null;
+    },
+
+    /** A licence bound to an installation, if there is one. */
+    licenceForFingerprint(fingerprint) {
+      const row2 = db.prepare('SELECT * FROM licences WHERE fingerprint = ? AND revoked = 0').get(String(fingerprint ?? ''));
+      return row2
+        ? { id: row2.id, accountId: row2.account_id, fingerprint: row2.fingerprint, expiresAt: row2.expires }
+        : null;
+    },
+
     /** Binds a licence to one installation and remembers the key it issued. */
     bindLicence(id, fingerprint, key) {
-      db.prepare('UPDATE licences SET fingerprint = ?, key = ? WHERE id = ?')
+      db.prepare("UPDATE licences SET fingerprint = ?, key = ?, deactivated = 0 WHERE id = ?")
         .run(text(fingerprint), text(key), String(id ?? ''));
       const row2 = db.prepare('SELECT * FROM licences WHERE id = ?').get(String(id ?? ''));
       return row2

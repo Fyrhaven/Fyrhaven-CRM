@@ -996,3 +996,117 @@ describe('activation: the installation key (#148)', () => {
     await new Promise((resolve) => own.server.close(resolve));
   });
 });
+
+describe('protecting a self-hosted server (#148)', () => {
+  it('answers HTTP Basic when it is configured, and nothing else without it', async () => {
+    const own = createStoreServer({
+      tokenList: 'tok-a=acme', masterKey: MASTER,
+      basicUser: 'admin', basicPassword: 'a-long-password',
+    });
+    await new Promise((resolve) => own.server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${own.server.address().port}`;
+    const call = (headers) => fetch(`${base}/v1/store`, { headers });
+    const basic = (user, password) => ({ authorization: `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}` });
+
+    assert.equal((await call(basic('admin', 'a-long-password'))).status, 200, 'the operator gets in');
+    assert.equal((await call(basic('admin', 'wrong'))).status, 401, 'a wrong password does not');
+    assert.equal((await call(basic('someone', 'a-long-password'))).status, 401, 'nor a wrong user');
+    assert.equal((await call({})).status, 401, 'nor an anonymous request');
+    // the installer token still works, so a password never locks the operator out
+    assert.equal((await call({ authorization: 'Bearer tok-a' })).status, 200);
+
+    own.server.closeAllConnections?.();
+    await new Promise((resolve) => own.server.close(resolve));
+  });
+
+  it('leaves a store without a password exactly as it was', async () => {
+    const own = createStoreServer({ tokenList: 'tok-a=acme', masterKey: MASTER });
+    await new Promise((resolve) => own.server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${own.server.address().port}`;
+
+    assert.equal((await fetch(`${base}/v1/store`, { headers: { authorization: 'Bearer tok-a' } })).status, 200);
+    assert.equal((await fetch(`${base}/v1/store`)).status, 401);
+
+    own.server.closeAllConnections?.();
+    await new Promise((resolve) => own.server.close(resolve));
+  });
+});
+
+describe('deactivation: one licence, one installation (#148)', () => {
+  it('releases an installation with a code the seller signs, and refuses anything else', async () => {
+    const { keyPair, verifyLicence } = await import('./licence.js');
+    const pair = keyPair();
+    const fingerprint = 'FHI-MEME-5555-AAAA-BBBB';
+
+    // The seller's service (cloud mode) and the customer's server (self-hosted),
+    // each on its own database, sharing only the keypair.
+    const cloud = createStoreServer({
+      tokenList: 'tok-a=acme', masterKey: MASTER, adminToken: 'adm',
+      licence: { ok: true, mode: 'cloud' }, licencePrivate: pair.privateKey,
+      payments: { provider: 'none', planDays: 365, webhookSecret: 'whsec_x', publicUrl: '' },
+    });
+    const self = createStoreServer({
+      tokenList: 'tok-s=self', masterKey: MASTER, licence: { ok: true, mode: 'selfhosted' },
+      installKey: fingerprint, licencePublic: pair.publicKey,
+    });
+    await new Promise((r) => cloud.server.listen(0, '127.0.0.1', r));
+    await new Promise((r) => self.server.listen(0, '127.0.0.1', r));
+    const cloudBase = `http://127.0.0.1:${cloud.server.address().port}`;
+    const selfBase = `http://127.0.0.1:${self.server.address().port}`;
+    const post = (base, path, token, body) => fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    });
+
+    // the customer buys and activates a licence for their installation
+    const signup = await (await post(cloudBase, '/v1/accounts', null, { email: 'mover@example.com', password: 'a-long-password' })).json();
+    const products = await (await fetch(`${cloudBase}/v1/products`)).json();
+    const licenceProduct = products.products.find((product) => product.code === 'selfhosted');
+    const order = await (await post(cloudBase, '/v1/account/order', signup.token, { productId: licenceProduct.id })).json();
+    const hookBody = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { metadata: { accountId: signup.account.id, orderId: order.order.id, plan: 'cloud' } } },
+    });
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = createHmac('sha256', 'whsec_x').update(`${t}.${hookBody}`).digest('hex');
+    await fetch(`${cloudBase}/v1/payments/webhook`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${v1}` }, body: hookBody,
+    });
+    const activated = await (await post(cloudBase, '/v1/licence/activate', signup.token, { fingerprint })).json();
+    assert.equal(verifyLicence(activated.licence, { publicKey: pair.publicKey, fingerprint }).ok, true);
+
+    // now they move server: ask the install for a challenge…
+    const challengeAnswer = await (await post(selfBase, '/v1/licence/challenge', 'tok-s', {})).json();
+    assert.equal(challengeAnswer.fingerprint, fingerprint);
+
+    // …a challenge the service never signed is refused by the install
+    const fake = await (await post(selfBase, '/v1/licence/deactivate', 'tok-s', { code: 'DH1.nope.nope' })).json();
+    assert.match(fake.error, /not accepted/);
+
+    // …take it to the service, which releases the installation and signs the code
+    const released = await (await post(cloudBase, '/v1/licence/deactivate', signup.token, { challenge: challengeAnswer.challenge })).json();
+    assert.equal(released.ok, true);
+    assert.equal(released.licence.deactivated, true);
+    assert.equal(released.licence.fingerprint, '', 'the old binding is gone');
+
+    // …and the install accepts that code, and forgets its licence
+    const applied = await (await post(selfBase, '/v1/licence/deactivate', 'tok-s', { code: released.code })).json();
+    assert.equal(applied.ok, true, JSON.stringify(applied));
+    assert.equal(applied.deactivated, true);
+
+    // the same code cannot be spent twice (the challenge is consumed)
+    const again = await (await post(selfBase, '/v1/licence/deactivate', 'tok-s', { code: released.code })).json();
+    assert.match(again.error, /ask for a challenge first/);
+
+    // and the licence is free to activate on a different installation
+    const secondFingerprint = 'FHI-9999-8888-7777-6666';
+    const reactivated = await (await post(cloudBase, '/v1/licence/activate', signup.token, { fingerprint: secondFingerprint })).json();
+    assert.equal(verifyLicence(reactivated.licence, { publicKey: pair.publicKey, fingerprint: secondFingerprint }).ok, true);
+
+    for (const server of [cloud.server, self.server]) {
+      server.closeAllConnections?.();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
