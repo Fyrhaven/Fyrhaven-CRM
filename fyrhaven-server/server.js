@@ -191,6 +191,11 @@ export function openStore(path = ':memory:') {
       revision INTEGER NOT NULL
     );
     INSERT OR IGNORE INTO counter (id, revision) VALUES (1, 0);
+    CREATE TABLE IF NOT EXISTS workspace_storage (
+      workspace TEXT PRIMARY KEY,
+      provider  TEXT NOT NULL,
+      updated   TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS workspaces (
       workspace   TEXT PRIMARY KEY,
       wrapped_key TEXT NOT NULL,
@@ -563,6 +568,51 @@ export function createRequestHandler(db, {
       const presented = tokenOf(req, url, { allowQueryToken });
       if (!presented || !sameToken(adminToken, presented)) return send(res, 401, { error: 'unauthorized' });
       if (tooMany('admin')) return send(res, 429, { error: 'too many requests' });
+
+      // Where a workspace's bytes live (#158). Only the sqlite provider exists
+      // today; the route and the safety rule exist so the S3 adapter drops in
+      // without a redesign.
+      const storageRoute = /^\/v1\/admin\/workspaces\/([^/]+)\/storage$/.exec(path);
+      if (storageRoute && method === 'GET') {
+        const workspace = decodeURIComponent(storageRoute[1]);
+        const row = db.prepare('SELECT provider FROM workspace_storage WHERE workspace = ?').get(workspace);
+        const used = usageOf(workspace);
+        return send(res, 200, {
+          ok: true,
+          workspace,
+          provider: row?.provider ?? 'sqlite',
+          available: ['sqlite'],
+          objects: used.records,
+          bytes: used.bytes,
+        });
+      }
+
+      const migrateRoute = /^\/v1\/admin\/workspaces\/([^/]+)\/migrate$/.exec(path);
+      if (migrateRoute && method === 'POST') {
+        const workspace = decodeURIComponent(migrateRoute[1]);
+        const payload = (await body()) ?? {};
+        const target = String(payload.provider ?? '').trim();
+        const dry = url.searchParams.get('dry') === '1';
+        const used = usageOf(workspace);
+
+        if (dry) {
+          return send(res, 200, { ok: true, dry: true, workspace, target, objects: used.records, bytes: used.bytes });
+        }
+
+        // The rule that makes this safe, and the reason it is written here rather
+        // than in a script: copy, READ BACK AND COMPARE, flip the provider row,
+        // and only then delete the old copies. Deleting first is how a migration
+        // loses a customer's data when the copy was silently truncated.
+        if (target !== 'sqlite') {
+          return send(res, 501, {
+            error: `no storage adapter for "${target}" is configured`,
+            available: ['sqlite'],
+          });
+        }
+        db.prepare('INSERT INTO workspace_storage (workspace, provider, updated) VALUES (?, ?, ?) ON CONFLICT(workspace) DO UPDATE SET provider = excluded.provider, updated = excluded.updated')
+          .run(workspace, 'sqlite', new Date(now()).toISOString());
+        return send(res, 200, { ok: true, workspace, provider: 'sqlite', objects: used.records, bytes: used.bytes });
+      }
 
       if (path === '/v1/admin/usage' && method === 'GET') {
         const spaces = new Map();

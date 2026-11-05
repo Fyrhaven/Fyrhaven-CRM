@@ -1177,3 +1177,40 @@ describe('prices in more than one currency (#157)', () => {
     await new Promise((resolve) => own.server.close(resolve));
   });
 });
+
+describe('where a workspace lives (#158, the seam)', () => {
+  it('reports the provider, the objects and the bytes — and refuses a provider it does not have', async () => {
+    const own = createStoreServer({ tokenList: 'tok-a=acme', masterKey: MASTER, adminToken: 'adm' });
+    await new Promise((resolve) => own.server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${own.server.address().port}`;
+    const admin = { authorization: 'Bearer adm', 'content-type': 'application/json' };
+
+    await fetch(`${base}/v1/store/projects`, {
+      method: 'PUT', headers: { authorization: 'Bearer tok-a', 'content-type': 'application/json' },
+      body: JSON.stringify({ value: [{ id: 'p1' }] }),
+    });
+
+    const state = await (await fetch(`${base}/v1/admin/workspaces/acme/storage`, { headers: admin })).json();
+    assert.equal(state.provider, 'sqlite');
+    assert.equal(state.objects, 1);
+    assert.ok(state.bytes > 0);
+
+    // a dry run reports without touching anything
+    const dry = await (await fetch(`${base}/v1/admin/workspaces/acme/migrate?dry=1`, {
+      method: 'POST', headers: admin, body: JSON.stringify({ provider: 's3' }),
+    })).json();
+    assert.equal(dry.dry, true);
+    assert.equal(dry.objects, 1);
+    assert.equal((await (await fetch(`${base}/v1/admin/workspaces/acme/storage`, { headers: admin })).json()).provider, 'sqlite');
+
+    // an adapter it does not have is refused, not silently accepted
+    const refused = await fetch(`${base}/v1/admin/workspaces/acme/migrate`, {
+      method: 'POST', headers: admin, body: JSON.stringify({ provider: 's3' }),
+    });
+    assert.equal(refused.status, 501);
+    assert.match((await refused.json()).error, /no storage adapter/);
+
+    own.server.closeAllConnections?.();
+    await new Promise((resolve) => own.server.close(resolve));
+  });
+});
