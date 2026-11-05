@@ -370,6 +370,8 @@ export function createRequestHandler(db, {
   const catalogue = catalogOps(db, { now });
   // The one challenge this installation has minted and not yet spent.
   let pendingChallenge = '';
+  // When a webhook last arrived, and what it did — the panel's health line.
+  let lastWebhook = { at: '', type: '', result: '' };
 
   /**
    * A licence key for an account. Signed when the operator holds the signing key
@@ -524,6 +526,7 @@ export function createRequestHandler(db, {
       } catch {
         return send(res, 400, { error: 'body is not JSON' });
       }
+      lastWebhook = { at: new Date(now()).toISOString(), type: String(event?.type ?? ''), result: 'accepted' };
       const meaning = planFromEvent(event);
       if (!meaning) return send(res, 200, { ok: true, ignored: true });
       if (!people.byId(meaning.accountId)) return send(res, 200, { ok: true, ignored: 'no such account' });
@@ -547,6 +550,31 @@ export function createRequestHandler(db, {
       const presented = tokenOf(req, url, { allowQueryToken });
       if (!presented || !sameToken(adminToken, presented)) return send(res, 401, { error: 'unauthorized' });
       if (tooMany('admin')) return send(res, 429, { error: 'too many requests' });
+
+      if (path === '/v1/admin/status' && method === 'GET') {
+        const count = (sql) => Number(db.prepare(sql).get().n ?? 0);
+        return send(res, 200, {
+          ok: true,
+          version: VERSION,
+          mode: licence.mode ?? 'cloud',
+          licence: licence.licence ?? null,
+          installation: installKey,
+          payments: {
+            provider: payments.provider,
+            // A provider with no webhook secret takes money it cannot honour:
+            // the panel should say so rather than let it be discovered later.
+            webhookConfigured: Boolean(payments.webhookSecret),
+            publicUrl: payments.publicUrl,
+            lastWebhook,
+          },
+          counts: {
+            accounts: count('SELECT COUNT(*) AS n FROM accounts'),
+            orders: count('SELECT COUNT(*) AS n FROM orders'),
+            pending: count("SELECT COUNT(*) AS n FROM orders WHERE status = 'pending'"),
+            licences: count('SELECT COUNT(*) AS n FROM licences'),
+          },
+        });
+      }
 
       if (path === '/v1/admin/orders' && method === 'GET') {
         return send(res, 200, { ok: true, orders: people.allOrders() });
