@@ -101,7 +101,7 @@ describe('connecting the host-held credential (#68)', () => {
 
     // the token is the host's business: the plugin only names the credential
     expect(subject.calls('proxy.connect')[0].args)
-      .toEqual([CREDENTIAL_ID, { mode: 'password', server: 'https://crm.example.com' }]);
+      .toEqual(['store-basic', { mode: 'password', server: 'https://crm.example.com' }]);
     expect(result).toMatchObject({ status: 'ok', url: 'https://crm.example.com' });
     expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBe('https://crm.example.com');
     expect(subject.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBe('store-reader');
@@ -149,7 +149,7 @@ describe('connecting the host-held credential (#68)', () => {
     await subject.storage.set(REMOTE_CREDENTIAL_KEY, 'store');
 
     expect(await disconnectServer(subject)).toEqual({ status: 'ok' });
-    expect(subject.calls('proxy.disconnect')[0].args).toEqual([CREDENTIAL_ID]);
+    expect(subject.calls('proxy.disconnect').map((call) => call.args[0])).toEqual(['store-basic', 'store']);
     expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBeUndefined();
     expect(subject.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBeUndefined();
     expect(await readServerState(subject)).toMatchObject({ url: '', credentialId: '' });
@@ -193,15 +193,17 @@ describe('the two ways in: cloud and self-hosted (#147)', () => {
 
     // the address is the service's, not the one in a stale input
     expect(subject.calls('proxy.connect')[0].args)
-      .toEqual([CREDENTIAL_ID, { mode: 'password', server: CLOUD_ORIGIN }]);
+      .toEqual(['store', { mode: 'password', server: CLOUD_ORIGIN }]);
     expect(subject.storageSnapshot()[REMOTE_URL_KEY]).toBe(CLOUD_ORIGIN);
   });
 
   it('sends a self-hosted connect to the address the user typed', async () => {
     const subject = api();
     await connectServer(subject, 'box.example', { mode: 'self' });
+    // a self-hosted server is protected by a user name and password, so it uses
+    // the basic credential — the cloud keeps the bearer token
     expect(subject.calls('proxy.connect')[0].args)
-      .toEqual([CREDENTIAL_ID, { mode: 'password', server: 'https://box.example' }]);
+      .toEqual(['store-basic', { mode: 'password', server: 'https://box.example' }]);
   });
 
   it('reads the plan the server reports, and never guesses it', async () => {
