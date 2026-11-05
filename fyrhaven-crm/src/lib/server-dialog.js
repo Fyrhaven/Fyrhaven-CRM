@@ -26,6 +26,8 @@ export function makeServerDialog(React, api) {
     };
     const [mode, setMode] = useState(state.mode === 'cloud' ? 'cloud' : 'self');
     const [url, setUrl] = useState(state.url ?? '');
+    const [licence, setLicence] = useState('');
+    const [code, setCode] = useState('');
     const connected = Boolean(state.url);
     const cloud = mode === 'cloud';
 
@@ -60,6 +62,37 @@ export function makeServerDialog(React, api) {
             ? h(Text, { tone: 'muted' }, t('server.connected', { url: state.url }))
             : h(Text, { tone: 'muted' }, t('server.localOnly')),
           state.canConnect ? null : h(Text, { tone: 'muted' }, t('server.noConnect')))),
+
+      // The licence (#148): the installation key is what the operator takes to
+      // the website, and everything else here is the server's own answer — this
+      // dialog never decides whether a licence is valid.
+      connected && !cloud
+        ? h(Section, { title: t('server.licenceTitle'), description: t('server.licenceHint') },
+            h(Stack, { gap: 3 },
+              h(Text, null, t('server.fingerprint', { key: state.fingerprint || '—' })),
+              h(Text, { tone: 'muted' }, state.licensed
+                ? t('server.licensed', { summary: state.summary || '' })
+                : t('server.unlicensed')),
+              state.challenge
+                ? h(Stack, { gap: 2 },
+                    h(Text, { tone: 'muted' }, t('server.challengeHint')),
+                    h('code', null, state.challenge),
+                    h(Field, { label: t('server.deactivateCode') },
+                      h(Input, { value: code, onChange: (event) => setCode(event.target.value) })),
+                    h(Button, { disabled: !code.trim(), onClick: () => props.onResult?.({ deactivate: code }) },
+                      t('server.deactivateApply')))
+                : h(Field, { label: t('server.licenceField') },
+                    h(Input, { value: licence, onChange: (event) => setLicence(event.target.value) })),
+              h(Row, { gap: 2, wrap: true },
+                state.challenge
+                  ? null
+                  : h(Button, { disabled: !licence.trim(), onClick: () => props.onResult?.({ licence }) },
+                      t('server.installLicence')),
+                state.licensed && !state.challenge
+                  ? h(Button, { variant: 'secondary', onClick: () => props.onResult?.({ challenge: true }) },
+                      t('server.release'))
+                  : null)))
+        : null,
 
       h(Row, { gap: 2, wrap: true },
         h(Button, {

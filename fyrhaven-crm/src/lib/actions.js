@@ -23,7 +23,8 @@ import { contactsToFile } from './export.js';
 import { saveFile } from './download.js';
 import { fileNameFor } from './smart-lists.js';
 import {
-  accountInfo, connectServer, disconnectServer, readServerState, serverVersion, writeServerMode,
+  accountInfo, applyDeactivation, connectServer, deactivationChallenge, disconnectServer, installLicence,
+  licenceInfo, readServerState, serverVersion, writeServerMode,
 } from './remote.js';
 
 /** Duplicate groups over all contacts, or over `scopeIds` when given. */
@@ -255,12 +256,44 @@ export async function checkServer(api) {
 export async function openServer(api) {
   const t = (key, vars) => api.i18n.t(key, vars);
   const state = await readServerState(api);
+  // What the server says about its own licence — shown, never trusted blindly.
+  const info = state.url ? await licenceInfo(api).catch(() => ({ status: 'failed' })) : { status: 'unconfigured' };
+  const serverState = info.status === 'ok'
+    ? { ...state, fingerprint: info.fingerprint, licensed: info.licensed, summary: info.summary, challenge: state.challenge ?? '' }
+    : state;
   const result = await api.ui.openDialog({
     title: t('server.dialogTitle'),
     slot: 'plugin-dialog',
-    extraProps: { serverEditor: { state } },
+    extraProps: { serverEditor: { state: serverState } },
   });
   if (!result) return null;
+
+  // Installing a pasted licence: the server verifies it and keeps it; a refusal
+  // comes back as a reason, which is what the user needs to see.
+  if (result.licence !== undefined) {
+    const answer = await installLicence(api, result.licence);
+    if (answer.status === 'ok') api.toast.success(t('server.licenceInstalled', { summary: answer.summary ?? '' }));
+    else api.toast.error(t('server.licenceRefused', { reason: answer.reason ?? answer.status }));
+    return answer;
+  }
+
+  // Releasing this installation: ask the server for a challenge, then reopen the
+  // dialog with it, so the operator can take it to the website and come back.
+  if (result.challenge) {
+    const asked = await deactivationChallenge(api);
+    if (asked.status !== 'ok') {
+      api.toast.error(t('server.challengeFailed', { reason: asked.reason ?? asked.status }));
+      return asked;
+    }
+    const again = await api.ui.openDialog({
+      title: t('server.dialogTitle'),
+      slot: 'plugin-dialog',
+      extraProps: { serverEditor: { state: { ...serverState, challenge: asked.challenge } } },
+    });
+    return again?.deactivate ? openServerDeactivate(api, again.deactivate, serverState) : null;
+  }
+
+  if (result.deactivate) return openServerDeactivate(api, result.deactivate, serverState);
 
   if (result.disconnect) {
     await disconnectServer(api);
@@ -295,5 +328,16 @@ export async function openServer(api) {
       plan: account.plan, date: account.expiresAt ? account.expiresAt.slice(0, 10) : '—',
     }));
   }
+  return answer;
+}
+
+
+/** Spends a signed release code, so the licence can move to another server. */
+async function openServerDeactivate(api, code, serverState) {
+  const t = (key, vars) => api.i18n.t(key, vars);
+  const answer = await applyDeactivation(api, code);
+  if (answer.status === 'ok' && answer.deactivated) api.toast.success(t('server.released'));
+  else api.toast.error(t('server.releaseFailed', { reason: answer.reason ?? answer.status }));
+  void serverState;
   return answer;
 }
