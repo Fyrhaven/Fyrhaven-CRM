@@ -1141,3 +1141,39 @@ describe('deactivation: one licence, one installation (#148)', () => {
     }
   });
 });
+
+describe('prices in more than one currency (#157)', () => {
+  it('keeps one Stripe price per currency, and never converts', async () => {
+    const own = createStoreServer({ tokenList: 'tok-a=acme', masterKey: MASTER, adminToken: 'adm' });
+    await new Promise((resolve) => own.server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${own.server.address().port}`;
+    const post = (path, body, token = 'adm') => fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+
+    const list = await (await fetch(`${base}/v1/products`)).json();
+    const cloud = list.products.find((product) => product.code === 'cloud-monthly');
+    assert.equal(cloud.prices[0].currency, 'EUR', 'the product\'s own currency comes first');
+
+    // the operator adds a SEK price with its own Stripe price
+    const added = await (await post(`/v1/admin/products/${cloud.id}/price`, {
+      currency: 'SEK', amount: 6500, stripePriceId: 'price_sek_1',
+    })).json();
+    assert.equal(added.product.prices.length, 2);
+    const sek = added.product.prices.find((price) => price.currency === 'SEK');
+    assert.equal(sek.amount, 6500);
+    assert.equal(sek.label, '65.00 SEK');
+    assert.equal(sek.stripePriceId, 'price_sek_1');
+
+    // asking for a currency nobody priced is refused, not silently converted
+    const signup = await (await post('/v1/accounts', { email: 'cur@example.com', password: 'a-long-password' }, '')).json();
+    const order = await post('/v1/account/order', { productId: cloud.id, currency: 'USD' }, signup.token);
+    assert.equal(order.status, 400);
+    assert.match((await order.json()).error, /no price in USD/);
+
+    own.server.closeAllConnections?.();
+    await new Promise((resolve) => own.server.close(resolve));
+  });
+});

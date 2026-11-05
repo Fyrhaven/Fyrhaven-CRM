@@ -491,7 +491,9 @@ export function createRequestHandler(db, {
 
     // What is for sale: open, because a price list is a shop window.
     if (method === 'GET' && path === '/v1/products') {
-      return send(res, 200, { ok: true, products: catalogue.all({ onlyActive: true }), payments: payments.provider });
+      const products = catalogue.all({ onlyActive: true })
+        .map((product) => ({ ...product, prices: catalogue.pricesFor(catalogue.row(product.id)) }));
+      return send(res, 200, { ok: true, products, payments: payments.provider });
     }
 
     const client = req.socket?.remoteAddress ?? 'unknown';
@@ -643,6 +645,14 @@ export function createRequestHandler(db, {
         const answer = catalogue.save((await body()) ?? {});
         if (answer.status !== 'ok') return send(res, 400, { error: 'a code and a label are needed' });
         return send(res, 200, { ok: true, product: answer.product });
+      }
+
+      const priceRoute = /^\/v1\/admin\/products\/([^/]+)\/price$/.exec(path);
+      if (priceRoute && method === 'POST') {
+        const payload = (await body()) ?? {};
+        const product = catalogue.setPrice(decodeURIComponent(priceRoute[1]), payload);
+        if (!product) return send(res, 400, { error: 'a currency and an amount are needed' });
+        return send(res, 200, { ok: true, product });
       }
 
       const stripeProduct = /^\/v1\/admin\/products\/([^/]+)\/stripe$/.exec(path);
@@ -878,9 +888,20 @@ export function createRequestHandler(db, {
       // With a provider configured the customer is sent to pay; without one the
       // order is a request an operator settles by hand. Neither is a lie, and
       // the client is told which it got.
+      // The currency decides WHICH Stripe price is used: never convert, always
+      // use the price the operator set for that currency.
+      let priceId = product?.stripePriceId ?? '';
+      const wanted = String(payload.currency ?? '').toUpperCase().slice(0, 3);
+      if (product && wanted) {
+        const chosen = catalogue.pricesFor(catalogue.row(product.id))
+          .find((price) => price.currency === wanted);
+        if (!chosen) return send(res, 400, { error: `no price in ${wanted} for that product` });
+        priceId = chosen.stripePriceId;
+      }
+
       const checkout = await createCheckout(payments, {
         order, account: who.account, fetch: fetchJson,
-        priceId: product?.stripePriceId ?? '',
+        priceId,
         mode: product && product.interval === 'once' ? 'payment' : (product ? 'subscription' : ''),
       });
       return send(res, 202, {
