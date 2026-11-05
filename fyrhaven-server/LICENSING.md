@@ -54,3 +54,37 @@ Generate a pair once, offline:
 ```bash
 node -e "const {generateKeyPairSync}=require('node:crypto');const {publicKey,privateKey}=generateKeyPairSync('ed25519');console.log(publicKey.export({type:'spki',format:'der'}).toString('base64'));console.log(privateKey.export({type:'pkcs8',format:'pem'}))"
 ```
+
+
+## Two ways to activate
+
+The server has an **installation key** of its own — `FHI-XXXX-XXXX-XXXX-XXXX`,
+created on first boot and kept on the volume (`/data/install.key`). A licence
+carries it, so a key issued for one installation does not open another.
+
+### Offline (default)
+
+1. On the server: `GET /v1/licence` shows `fingerprint` (or read
+   `/data/install.key`).
+2. On the site, signed in, paste it under *Self-hosted licence* → the service
+   re-signs your licence for **that** installation and shows the key.
+3. Paste the key into the server as `FYRHAVEN_LICENCE` and restart.
+
+Nothing but the pasted key crosses the wire, and it works on a machine that has
+never been online.
+
+### Online (opt-in)
+
+```bash
+FYRHAVEN_ACTIVATION=online
+FYRHAVEN_ACTIVATION_URL=https://crm.mailz.se
+FYRHAVEN_ACTIVATION_TOKEN=<the account token from your signup>
+```
+
+The server presents its fingerprint to the service at boot, receives a key bound
+to it, verifies it locally and caches it in `/data/licence.key`. **It verifies
+the key it receives** — the activation call is a convenience, never trust. If the
+service is down or refuses, the install keeps running on `FYRHAVEN_LICENCE` (or
+its cached key) and logs the reason; it does not fall over because we are down.
+
+Either way the check is identical and local: signature, expiry, fingerprint.

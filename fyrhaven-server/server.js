@@ -39,7 +39,8 @@ import {
 } from './payments.js';
 import { catalogOps, defaultCatalogue, openCatalogTables } from './catalog.js';
 import {
-  describeLicence, licencePayload, loadPrivateKey, signLicence, startupLicence,
+  activateOnline, describeLicence, ensureInstallKey, isInstallKey, licencePayload, loadPrivateKey,
+  signLicence, startupLicence, verifyLicence, publicKeyOf,
 } from './licence.js';
 
 
@@ -328,7 +329,7 @@ export function createRequestHandler(db, {
   tokens = new Map(), keys, allowQueryToken = false, accounts = null, trialDays = DEFAULT_TRIAL_DAYS,
   requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
   adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch,
-  licence = { ok: true, mode: 'cloud' }, licencePrivate = null,
+  licence = { ok: true, mode: 'cloud' }, licencePrivate = null, installKey = '',
 } = {}) {
   const ops = storeOps(db, keys);
   const people = accounts ?? accountOps(db, { trialDays });
@@ -627,11 +628,35 @@ export function createRequestHandler(db, {
       return send(res, 405, { error: 'method not allowed' });
     }
 
+    // Online activation (#148): a self-hosted install with an account token asks
+    // the service for a key bound to its own fingerprint.
+    if (path === '/v1/licence/activate' && method === 'POST') {
+      if (!who.account) return send(res, 409, { error: 'activation belongs to an account, not an installer token' });
+      if (!licencePrivate) return send(res, 503, { error: 'this service cannot sign licences' });
+      const payload = (await body()) ?? {};
+      const fingerprint = String(payload.fingerprint ?? '').trim();
+      if (!isInstallKey(fingerprint)) return send(res, 400, { error: 'that is not an installation key (FHI-XXXX-XXXX-XXXX-XXXX)' });
+
+      const owned = catalogue.licences(who.account.id).filter((entry) => !entry.revoked);
+      if (!owned.length) return send(res, 402, { error: 'no licence to activate — buy one first' });
+      const source = owned[0];
+      const key = signLicence(licencePayload({
+        subject: who.account.email,
+        plan: 'selfhosted',
+        fingerprint,
+        issuedAt: new Date(now()).toISOString(),
+        expiresAt: source.expiresAt,
+      }), licencePrivate);
+      const bound = catalogue.bindLicence(source.id, fingerprint, key);
+      return send(res, 200, { ok: true, licence: key, expiresAt: source.expiresAt, fingerprint, record: bound });
+    }
+
     if (path === '/v1/licence') {
       if (method !== 'GET') return send(res, 405, { error: 'method not allowed' });
       return send(res, 200, {
         ok: true,
         mode: licence.mode ?? 'cloud',
+        fingerprint: installKey,
         licensed: Boolean(licence.licence),
         licence: licence.licence ?? null,
         summary: describeLicence(licence.licence ?? null),
@@ -751,13 +776,14 @@ export function createStoreServer({
   dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false,
   trialDays = DEFAULT_TRIAL_DAYS, now, adminToken = '', payments = paymentConfig(), fetchJson,
   licence = startupLicence(), licencePrivate = loadPrivateKey(),
+  installKey = process.env.FYRHAVEN_INSTALL_KEY ?? '',
 } = {}) {
   const db = openStore(dbPath);
   const tokens = parseTokens(tokenList);
   const keys = workspaceKeys(db, masterKey);
   const server = createHttpServer(createRequestHandler(db, {
     tokens, keys, allowQueryToken, trialDays, now, adminToken, payments, fetchJson,
-    licence, licencePrivate,
+    licence, licencePrivate, installKey,
   }));
   server.on('close', () => {
     try {
@@ -799,6 +825,44 @@ if (isMain) {
   // The lock (#148): a self-hosted install must present a licence key it can
   // verify offline. `FYRHAVEN_MODE=cloud` is the operator's own service, which
   // needs none — it *is* the product.
+  // The installation's own key (#148). It is what a licence binds to, so it is
+  // created once and kept on the volume — a recreated container must keep it or
+  // every restart would invalidate the licence.
+  const installKey = ensureInstallKey(process.env.FYRHAVEN_INSTALL_KEY_FILE ?? '/data/install.key');
+  process.env.FYRHAVEN_INSTALL_KEY = installKey;
+  console.log(`Fyrhaven: installation ${installKey}`);
+
+  // Online activation is an *option*: with a URL and an account token the server
+  // fetches a key bound to this installation and caches it; without them the
+  // operator pastes a key in FYRHAVEN_LICENCE. Both paths are the same check.
+  if (String(process.env.FYRHAVEN_ACTIVATION ?? '') === 'online') {
+    const activated = await activateOnline({
+      url: process.env.FYRHAVEN_ACTIVATION_URL ?? '',
+      token: process.env.FYRHAVEN_ACTIVATION_TOKEN ?? '',
+      fingerprint: installKey,
+    });
+    if (activated.status === 'ok') {
+      const check = verifyLicence(activated.licence, {
+        publicKey: publicKeyOf(process.env), fingerprint: installKey,
+      });
+      if (check.ok) {
+        process.env.FYRHAVEN_LICENCE = activated.licence;
+        try {
+          const { writeFileSync } = await import('node:fs');
+          writeFileSync(process.env.FYRHAVEN_LICENCE_FILE ?? '/data/licence.key', `${activated.licence}
+`, { mode: 0o600 });
+        } catch {
+          // a read-only volume still runs with the key in memory
+        }
+        console.log(`Fyrhaven: activated online — ${describeLicence(check.payload)}`);
+      } else {
+        console.error(`Fyrhaven: online activation returned an unusable key (${check.reason})`);
+      }
+    } else {
+      console.error(`Fyrhaven: online activation failed (${activated.reason ?? activated.status}) — falling back to FYRHAVEN_LICENCE`);
+    }
+  }
+
   const licence = startupLicence(process.env);
   if (!licence.ok) {
     console.error(`Fyrhaven: ${licence.error}`);
@@ -812,6 +876,7 @@ if (isMain) {
   if (!adminToken) console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin and /admin answer 503.');
   const { server, tokens } = createStoreServer({
     dbPath, tokenList, masterKey, allowQueryToken, adminToken, payments: paymentConfig(process.env),
+    installKey,
     trialDays: Number.isFinite(trialDays) && trialDays >= 0 ? trialDays : DEFAULT_TRIAL_DAYS,
   });
   server.listen(port, () => {

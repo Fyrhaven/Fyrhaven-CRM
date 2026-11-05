@@ -69,7 +69,7 @@ export function loadPrivateKey(env = process.env) {
 }
 
 /** A licence body: who it is for, which plan, and when it stops. */
-export function licencePayload({ subject, plan = 'selfhosted', seats = 1, issuedAt, expiresAt }) {
+export function licencePayload({ subject, plan = 'selfhosted', seats = 1, issuedAt, expiresAt, fingerprint = '' }) {
   return {
     v: 1,
     sub: text(subject).slice(0, 200),
@@ -77,6 +77,9 @@ export function licencePayload({ subject, plan = 'selfhosted', seats = 1, issued
     seats: Number.isFinite(Number(seats)) ? Math.max(1, Math.round(Number(seats))) : 1,
     iss: text(issuedAt) || new Date().toISOString(),
     exp: text(expiresAt),
+    // The installation this key opens. Empty means "any" (keys issued before
+    // activation existed), so an old key keeps working.
+    fp: text(fingerprint),
   };
 }
 
@@ -92,7 +95,7 @@ export function signLicence(payload, privateKeyPem) {
  *
  * @returns {{ok: boolean, reason?: string, payload?: object, expiresAt?: string}}
  */
-export function verifyLicence(key, { publicKey = DEFAULT_PUBLIC_KEY, now = Date.now() } = {}) {
+export function verifyLicence(key, { publicKey = DEFAULT_PUBLIC_KEY, now = Date.now(), fingerprint = '' } = {}) {
   const parts = String(key ?? '').trim().split('.');
   if (parts.length !== 3 || parts[0] !== LICENCE_PREFIX) return { ok: false, reason: 'not-a-licence-key' };
   const [, body, signature] = parts;
@@ -118,6 +121,14 @@ export function verifyLicence(key, { publicKey = DEFAULT_PUBLIC_KEY, now = Date.
   if (!Number.isFinite(expires)) return { ok: false, reason: 'unreadable-expiry' };
   if (expires <= now) return { ok: false, reason: 'expired', payload };
 
+  // A key that names an installation only opens that one: a licence copied to a
+  // second server is not a licence for a second server.
+  const bound = text(payload.fp);
+  if (bound && text(fingerprint) && bound !== text(fingerprint)) {
+    return { ok: false, reason: 'wrong-installation', payload };
+  }
+  if (bound && !text(fingerprint)) return { ok: false, reason: 'wrong-installation', payload };
+
   return { ok: true, payload, expiresAt: payload.exp, daysLeft: Math.ceil((expires - now) / 86_400_000) };
 }
 
@@ -136,7 +147,7 @@ export function startupLicence(env = process.env, { now = Date.now() } = {}) {
   if (mode === 'cloud') return { ok: true, mode };
   const key = text(env.FYRHAVEN_LICENCE);
   if (!key) return { ok: false, mode, error: 'FYRHAVEN_LICENCE is not set — a self-hosted install needs a licence key.' };
-  const answer = verifyLicence(key, { publicKey: publicKeyOf(env), now });
+  const answer = verifyLicence(key, { publicKey: publicKeyOf(env), now, fingerprint: text(env.FYRHAVEN_INSTALL_KEY) });
   if (!answer.ok) return { ok: false, mode, error: `The licence key is not valid (${answer.reason}).` };
   return { ok: true, mode, licence: { ...answer.payload, daysLeft: answer.daysLeft } };
 }
@@ -154,4 +165,83 @@ export function keyPair() {
 export function describeLicence(licence) {
   if (!licence) return 'none';
   return `${licence.plan} for ${licence.sub || 'unknown'}, expires ${String(licence.exp).slice(0, 10)}`;
+}
+
+// ── Installation identity and activation (#148, the other half) ──────────────
+//
+// A licence bound to nothing can be copied from one customer to the next. So the
+// server owns an **installation key**, generated once, stored beside its database
+// and shown to the operator — who either pastes it into the website (offline
+// activation) or lets the server present it to the licensing service itself
+// (online activation). Either way the licence carries the fingerprint, and a key
+// issued for one installation does not open another.
+
+import { randomBytes } from 'node:crypto';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+/** Unambiguous alphabet: no O/0, no I/1 — this gets typed by a human. */
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/** `FHI-XXXX-XXXX-XXXX-XXXX` — an installation, not a licence. */
+export function newInstallKey() {
+  const block = () => Array.from(randomBytes(4)).map((b) => ALPHABET[b % ALPHABET.length]).join('');
+  return `FHI-${block()}-${block()}-${block()}-${block()}`;
+}
+
+export const isInstallKey = (value) => /^FHI-[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$/.test(text(value));
+
+/**
+ * The installation key, created on first use and kept on the volume.
+ *
+ * It must survive a restart — a licence bound to it would otherwise invalidate
+ * itself every time the container is recreated — so it is a file next to the
+ * database, not a value in memory.
+ */
+export function ensureInstallKey(path = '/data/install.key') {
+  try {
+    const existing = text(readFileSync(path, 'utf8'));
+    if (isInstallKey(existing)) return existing;
+  } catch {
+    // first boot
+  }
+  const key = newInstallKey();
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${key}\n`, { mode: 0o600 });
+  } catch {
+    // an unwritable volume still lets the install run, unlicensed-bound
+  }
+  return key;
+}
+
+/**
+ * Asks the licensing service for a key for this installation (online activation).
+ *
+ * The caller presents the **account token** it was given when it signed up — the
+ * same bearer the plugin uses — so the service knows whose subscription this is
+ * without another credential. A refused or unreachable service is an answer, not
+ * a throw: the install keeps running on its last good licence.
+ *
+ * @returns {Promise<{status: 'ok'|'unconfigured'|'failed', licence?: string, expiresAt?: string, reason?: string}>}
+ */
+export async function activateOnline({
+  url, token, fingerprint, fetch = globalThis.fetch,
+}) {
+  const base = text(url).replace(/\/+$/, '');
+  if (!base || !text(token)) return { status: 'unconfigured' };
+  if (!isInstallKey(fingerprint)) return { status: 'failed', reason: 'no installation key' };
+  try {
+    const response = await fetch(`${base}/v1/licence/activate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ fingerprint }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) return { status: 'failed', reason: payload?.error ?? `HTTP ${response.status}` };
+    if (!text(payload?.licence)) return { status: 'failed', reason: 'no licence in the answer' };
+    return { status: 'ok', licence: payload.licence, expiresAt: payload.expiresAt };
+  } catch (err) {
+    return { status: 'failed', reason: String(err?.message ?? err) };
+  }
 }
