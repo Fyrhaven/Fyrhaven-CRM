@@ -1,0 +1,56 @@
+# Licensing a self-hosted Fyrhaven server
+
+A self-hosted install **refuses to start** without a licence key it can verify
+itself. No call home, no account needed at boot — the key carries a signature and
+an expiry, and the server checks both.
+
+```bash
+FYRHAVEN_LICENCE=FH1.eyJ2IjoxLCJzdWIiOiJ5b3VAZXhhbXBsZS5jb20i...   # from your order
+FYRHAVEN_LICENCE_PUBLIC=<base64 DER public key>                    # already the default
+```
+
+`FYRHAVEN_MODE=cloud` is **the operator's own service** (the paid tier): it needs
+no key, because it is the product.
+
+## How the key works
+
+```
+FH1.<base64url(payload JSON)>.<base64url(ed25519 signature over the payload)>
+payload = { v, sub, plan, seats, iss, exp }
+```
+
+The server verifies the signature against a **public** key (shipped in
+`licence.js`, overridable with `FYRHAVEN_LICENCE_PUBLIC`). The **private** key
+never leaves the seller — it lives in `FYRHAVEN_LICENCE_PRIVATE_B64` on the
+service that issues licences, and signs a key when a licence product is paid for.
+
+## What this buys, and what it honestly does not
+
+- **It buys**: nobody runs a self-hosted Fyrhaven without a key you issued, and
+  nobody can mint one without your private key. Expiry is enforced.
+- **It does not buy**: revocation in real time. An offline key cannot be taken
+  back once handed out, and anyone willing to patch the source can remove the
+  check. The licence is a **contract with honest customers**, not a lock on the
+determined — that is the price of working offline, and it is stated here rather
+  than implied away.
+
+If you need stronger enforcement later, the honest options are a public-key
+signed **renewal** on every update (which is what the 12-month term already is),
+or an optional anonymous heartbeat that a customer can turn off.
+
+## Operating it
+
+- Issue: a paid `selfhosted` order signs a key and returns it with the order
+  (also visible to the customer on their account page).
+- Track: `GET /v1/admin/licenses` lists every key with `signed`, `revoked`,
+  issue and expiry dates.
+- Revoke: `POST /v1/admin/licenses/{id}/revoke` — it stops the list claiming the
+  key is good and a renewal is issued instead.
+- Rotate: generate a new pair, ship the new public key as the default (or set
+  `FYRHAVEN_LICENCE_PUBLIC`), and keep the old private key only for re-issuing.
+
+Generate a pair once, offline:
+
+```bash
+node -e "const {generateKeyPairSync}=require('node:crypto');const {publicKey,privateKey}=generateKeyPairSync('ed25519');console.log(publicKey.export({type:'spki',format:'der'}).toString('base64'));console.log(privateKey.export({type:'pkcs8',format:'pem'}))"
+```

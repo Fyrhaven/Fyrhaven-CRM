@@ -67,6 +67,14 @@ export function openCatalogTables(db) {
       expires    TEXT NOT NULL
     );
   `);
+  // Added after licences shipped: a signed key, and whether it was revoked.
+  for (const column of ["signed INTEGER NOT NULL DEFAULT 0", "revoked INTEGER NOT NULL DEFAULT 0"]) {
+    try {
+      db.exec(`ALTER TABLE licences ADD COLUMN ${column}`);
+    } catch {
+      // already there
+    }
+  }
 }
 
 /** A product, repaired into the shape the API answers with. */
@@ -170,23 +178,35 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
     },
 
     /** Issues a licence key for a paid licence order. */
-    issueLicence(accountId, productId, days) {
+    issueLicence(accountId, productId, days, { key = '', signed = false } = {}) {
       const id = `l${randomBytes(6).toString('hex')}`;
-      const key = newLicenceKey();
+      const value = text(key) || newLicenceKey();
       const expires = iso(addDays(now(), days));
-      db.prepare('INSERT INTO licences (id, account_id, product_id, key, issued, expires) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(id, String(accountId), String(productId), key, iso(now()), expires);
-      return { id, key, issuedAt: iso(now()), expiresAt: expires };
+      db.prepare('INSERT INTO licences (id, account_id, product_id, key, issued, expires, signed) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(id, String(accountId), String(productId), value, iso(now()), expires, signed ? 1 : 0);
+      return { id, key: value, signed: Boolean(signed), issuedAt: iso(now()), expiresAt: expires };
+    },
+
+    /** Marks a licence revoked. An offline licence cannot be un-run, but the list
+     * stops claiming it is good, and a renewal is issued instead. */
+    revokeLicence(id) {
+      db.prepare('UPDATE licences SET revoked = 1 WHERE id = ?').run(String(id ?? ''));
+      const row2 = db.prepare('SELECT * FROM licences WHERE id = ?').get(String(id ?? ''));
+      return row2
+        ? { id: row2.id, key: row2.key, revoked: row2.revoked === 1, issuedAt: row2.issued, expiresAt: row2.expires }
+        : null;
     },
 
     /** An account's licences, with the product they belong to. */
     licences(accountId) {
-      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, p.label, p.code
+      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, l.signed, l.revoked, p.label, p.code
         FROM licences l LEFT JOIN products p ON p.id = l.product_id
         WHERE l.account_id = ? ORDER BY l.issued DESC`).all(String(accountId)).map((licence) => ({
         id: licence.id,
         key: licence.key,
         label: licence.label ?? licence.code ?? '',
+        signed: licence.signed === 1,
+        revoked: licence.revoked === 1,
         issuedAt: licence.issued,
         expiresAt: licence.expires,
       }));
@@ -194,7 +214,7 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
 
     /** Every licence — the operator's list. */
     allLicences({ limit = 500 } = {}) {
-      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, a.email, p.code
+      return db.prepare(`SELECT l.id, l.key, l.issued, l.expires, l.signed, l.revoked, a.email, p.code
         FROM licences l LEFT JOIN accounts a ON a.id = l.account_id
         LEFT JOIN products p ON p.id = l.product_id
         ORDER BY l.issued DESC LIMIT ?`).all(Number(limit)).map((licence) => ({
@@ -202,6 +222,8 @@ export function catalogOps(db, { now = () => Date.now() } = {}) {
         key: licence.key,
         email: licence.email ?? '',
         code: licence.code ?? '',
+        signed: licence.signed === 1,
+        revoked: licence.revoked === 1,
         issuedAt: licence.issued,
         expiresAt: licence.expires,
       }));

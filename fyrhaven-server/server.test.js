@@ -792,3 +792,125 @@ describe('the catalogue and licences (#148)', () => {
     assert.equal(all.payload.licences[0].email, 'lic@example.com');
   });
 });
+
+describe('self-hosted licences (#148, the lock)', () => {
+  it('accepts a key it signed, and refuses a tampered one', async () => {
+    const { keyPair } = await import('./licence.js');
+    const { signLicence, verifyLicence, licencePayload } = await import('./licence.js');
+    const pair = keyPair();
+    const payload = licencePayload({ subject: 'acme@example.com', expiresAt: new Date(Date.now() + 86_400_000).toISOString() });
+    const key = signLicence(payload, pair.privateKey);
+
+    const good = verifyLicence(key, { publicKey: pair.publicKey });
+    assert.equal(good.ok, true);
+    assert.equal(good.payload.sub, 'acme@example.com');
+
+    // flip one character of the body: the signature no longer matches it
+    const parts = key.split('.');
+    const body = Buffer.from(parts[1], 'base64url').toString();
+    const tampered = body.replace('acme', 'evil');
+    const forged = [parts[0], Buffer.from(tampered).toString('base64url'), parts[2]].join('.');
+    assert.equal(verifyLicence(forged, { publicKey: pair.publicKey }).ok, false);
+    assert.equal(verifyLicence(forged, { publicKey: pair.publicKey }).reason, 'bad-signature');
+  });
+
+  it('refuses an expired key and a key it cannot read', async () => {
+    const { keyPair, signLicence, verifyLicence, licencePayload } = await import('./licence.js');
+    const pair = keyPair();
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+    const key = signLicence(licencePayload({ subject: 'x', expiresAt: yesterday }), pair.privateKey);
+
+    assert.equal(verifyLicence(key, { publicKey: pair.publicKey }).reason, 'expired');
+    assert.equal(verifyLicence('nonsense', { publicKey: pair.publicKey }).reason, 'not-a-licence-key');
+    assert.equal(verifyLicence('FH1.abc.def', { publicKey: pair.publicKey }).reason, 'unreadable-payload');
+  });
+
+  it('will not start a self-hosted install without a valid key, and cloud needs none', async () => {
+    const { keyPair, signLicence, licencePayload, startupLicence } = await import('./licence.js');
+    const pair = keyPair();
+    const publicKey = pair.publicKey;
+    const good = signLicence(licencePayload({
+      subject: 'acme', expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+    }), pair.privateKey);
+
+    // no key at all
+    const bare = startupLicence({ FYRHAVEN_LICENCE_PUBLIC: publicKey });
+    assert.equal(bare.ok, false);
+    assert.equal(bare.mode, 'selfhosted');
+    assert.match(bare.error, /FYRHAVEN_LICENCE/);
+
+    // a key good for a year
+    const licensed = startupLicence({ FYRHAVEN_LICENCE: good, FYRHAVEN_LICENCE_PUBLIC: publicKey });
+    assert.equal(licensed.ok, true);
+    assert.equal(licensed.licence.plan, 'selfhosted');
+
+    // the operator's own service is the product; it needs no key
+    assert.equal(startupLicence({ FYRHAVEN_MODE: 'cloud' }).ok, true);
+  });
+
+  it('reports the licence it is running under, and lists licences for the operator', async () => {
+    const { keyPair, signLicence, licencePayload } = await import('./licence.js');
+    const pair = keyPair();
+    const key = signLicence(licencePayload({
+      subject: 'shop@example.com', expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    }), pair.privateKey);
+
+    const own = createStoreServer({
+      tokenList: 'tok-a=acme', masterKey: MASTER, adminToken: 'adm',
+      licence: { ok: true, mode: 'selfhosted', licence: { plan: 'selfhosted', sub: 'shop@example.com', exp: '2030-01-01' } },
+      licencePrivate: pair.privateKey,
+      payments: { provider: 'none', planDays: 365, webhookSecret: 'whsec_x', publicUrl: '' },
+    });
+    await new Promise((resolve) => own.server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${own.server.address().port}`;
+
+    const status = await (await fetch(`${base}/v1/licence`, { headers: { authorization: 'Bearer tok-a' } })).json();
+    assert.equal(status.ok, true);
+    assert.equal(status.mode, 'selfhosted');
+    assert.equal(status.licence.sub, 'shop@example.com');
+
+    // an issued licence is a signed key the customer can paste into their server
+    const signup = await (await fetch(`${base}/v1/accounts`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'buyer@example.com', password: 'a-long-password' }),
+    })).json();
+    const products = await (await fetch(`${base}/v1/products`)).json();
+    const licenceProduct = products.products.find((product) => product.code === 'selfhosted');
+    const order = await (await fetch(`${base}/v1/account/order`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${signup.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ productId: licenceProduct.id }),
+    })).json();
+
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { metadata: { accountId: signup.account.id, orderId: order.order.id, plan: 'cloud' } } },
+    });
+    const t = Math.floor(Date.now() / 1000);
+    const v1 = createHmac('sha256', 'whsec_x').update(`${t}.${body}`).digest('hex');
+    const paid = await (await fetch(`${base}/v1/payments/webhook`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'stripe-signature': `t=${t},v1=${v1}` },
+      body,
+    })).json();
+
+    assert.equal(paid.licence.signed, true);
+    const { verifyLicence } = await import('./licence.js');
+    const check = verifyLicence(paid.licence.key, { publicKey: pair.publicKey });
+    assert.equal(check.ok, true, 'the key a customer receives verifies offline');
+    assert.equal(check.payload.sub, 'buyer@example.com');
+
+    // and the operator can see it, and revoke it
+    const list = await (await fetch(`${base}/v1/admin/licenses`, { headers: { authorization: 'Bearer adm' } })).json();
+    assert.equal(list.licences[0].signed, true);
+    assert.equal(list.licences[0].revoked, false);
+    const revoked = await (await fetch(`${base}/v1/admin/licenses/${list.licences[0].id}/revoke`, {
+      method: 'POST', headers: { authorization: 'Bearer adm' },
+    })).json();
+    assert.equal(revoked.licence.revoked, true);
+
+    own.server.closeAllConnections?.();
+    await new Promise((resolve) => own.server.close(resolve));
+    void key;
+  });
+});
