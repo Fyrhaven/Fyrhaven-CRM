@@ -18,6 +18,7 @@
 
 import { Badge, Button, Card, Row, Section, Stack, Text } from '@plugin-host/ui';
 import { licenceInfo } from './remote.js';
+import { readRegion, writeRegion } from './region.js';
 import { openServer } from './actions.js';
 
 export function makeSettingsPage(React, api) {
@@ -26,6 +27,7 @@ export function makeSettingsPage(React, api) {
 
   return function SettingsPage({ onDataChanged } = {}) {
     const [state, setState] = useState({ status: 'loading', url: '', mode: 'self', fingerprint: '', licensed: false, summary: '' });
+    const [region, setRegion] = useState('');
 
     // An administrator can lock the connection settings for the whole
     // installation; without the flag (or without `admin:config`), a user may.
@@ -45,7 +47,19 @@ export function makeSettingsPage(React, api) {
 
     const readUrl = async () => (await api.storage.get('remoteUrl')) ?? '';
 
-    useEffect(() => { void load(); }, [load]);
+    useEffect(() => {
+      void load();
+      readRegion(api).then(setRegion).catch(() => setRegion(''));
+    }, [load]);
+
+    // The region is what makes a national number match its international
+    // spelling; without it, matching falls back to digits alone.
+    const saveRegion = async (value) => {
+      const clean = await writeRegion(api, value);
+      setRegion(clean);
+      api.toast?.success?.(t('settings.regionSaved', { region: clean || t('settings.regionNone') }));
+      onDataChanged?.();
+    };
 
     const open = async () => {
       await openServer(api);
@@ -73,6 +87,13 @@ export function makeSettingsPage(React, api) {
       h(Section, { title: t('settings.preferencesTitle'), description: t('settings.preferencesHint') },
         h(Stack, { gap: 2 },
           h(Text, { tone: 'muted' }, t('settings.preferencesWhere')),
+          h(Field, { label: t('settings.region'), hint: t('settings.regionHint') },
+            h(Input, {
+              value: region,
+              placeholder: '+46',
+              onChange: (event) => setRegion(event.target.value.toUpperCase()),
+              onBlur: (event) => void saveRegion(event.target.value),
+            })),
           h(Text, { tone: 'muted' }, t('settings.regionNote')))),
 
       h(Section, { title: t('settings.aboutTitle') },
