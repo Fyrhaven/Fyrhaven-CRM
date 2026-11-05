@@ -292,6 +292,7 @@ const SITE_FILES = {
   '/': 'index.html', '/index.html': 'index.html', '/site.js': 'site.js', '/site.css': 'site.css',
   '/admin': 'admin.html', '/admin.js': 'admin.js',
   '/favicon.svg': 'favicon.svg', '/banner.svg': 'banner.svg',
+  '/terms': 'terms.html', '/privacy': 'privacy.html', '/imprint': 'imprint.html',
 };
 const SITE_TYPES = {
   'index.html': 'text/html; charset=utf-8',
@@ -301,6 +302,9 @@ const SITE_TYPES = {
   'admin.js': 'text/javascript; charset=utf-8',
   'favicon.svg': 'image/svg+xml',
   'banner.svg': 'image/svg+xml',
+  'terms.html': 'text/html; charset=utf-8',
+  'privacy.html': 'text/html; charset=utf-8',
+  'imprint.html': 'text/html; charset=utf-8',
 };
 const SITE_DIR = fileURLToPath(new URL('./site/', import.meta.url));
 

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy — Fyrhaven</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/site.css">
+</head>
+<body>
+  <header><strong><a href="/">Fyrhaven</a></strong></header>
+  <main>
+    <h1>Privacy</h1>
+    <p class="muted">What this service holds about you, why, and how to get rid of it. Written to be read, not to be survived.</p>
+
+    <h2>Who is responsible</h2>
+    <p>
+      The operator of fyrhaven.com — see the <a href="/imprint">imprint</a> for the name and address.
+      Contact for anything on this page: <a href="mailto:hello@fyrhaven.com">hello@fyrhaven.com</a>.
+    </p>
+
+    <h2>What is stored</h2>
+    <ul>
+      <li><strong>Account</strong>: your email address, a password <em>hash</em> (scrypt — the password itself is never stored), your plan and its expiry date, and whether the plan was paid.</li>
+      <li><strong>Your records</strong>: the projects, private notes, consent records and change history the plugin keeps — encrypted at rest with a key held by this service.</li>
+      <li><strong>Licences</strong>: the installation key of each self-hosted server you activated, so a licence cannot be silently copied.</li>
+      <li><strong>Orders</strong>: what you bought and when. Payment details are held by Stripe, not here.</li>
+      <li><strong>Operational</strong>: request counts per minute and byte usage, to enforce the limits and to know what the service is doing.</li>
+    </ul>
+
+    <h2>Why (legal basis)</h2>
+    <ul>
+      <li>To perform the contract: the account, the records, the licences, the invoices (Art. 6(1)(b) GDPR).</li>
+      <li>Legitimate interest: keeping the service secure and working, which is what the rate limits and logs are for (Art. 6(1)(f)).</li>
+      <li>Legal obligation: bookkeeping for paid orders (Art. 6(1)(c)).</li>
+    </ul>
+
+    <h2>Cookies and tracking</h2>
+    <p>
+      <strong>There are none.</strong> No analytics, no advertising pixels, no third-party scripts. The
+      site keeps your session token in this browser's <code>sessionStorage</code> and nothing else;
+      closing the tab signs you out of the website (the plugin's own credential is held by the webmail,
+      not by us).
+    </p>
+
+    <h2>Who else sees it</h2>
+    <ul>
+      <li><strong>Stripe</strong> — processes payments and holds the card data.</li>
+      <li><strong>The hosting provider</strong> — the machine this runs on, inside the EU.</li>
+    </ul>
+    <p>Nothing is sold, and nothing is shared for advertising.</p>
+
+    <h2>How long</h2>
+    <p>
+      Records live until you delete them or close the account. Closing the account deletes the records
+      and the wrapped key that makes them readable, which is a real erasure rather than a flag.
+      Invoices are kept as long as bookkeeping law requires (seven years in Sweden).
+    </p>
+
+    <h2>Your rights</h2>
+    <p>
+      Access, correction, deletion, portability, restriction and objection — all by writing to the
+      address above; no form, no account needed. The plugin itself carries a GDPR toolkit (subject
+      exports, consent records, erasure) for the contacts <em>you</em> control. If you think this
+      service has handled something wrongly you can complain to IMY, the Swedish authority.
+    </p>
+
+    <h2>One honest caveat</h2>
+    <p>
+      Records are encrypted at rest with a key this service unwraps in order to serve them, so the
+      operator can read them. That is the price of a server-held key and it is stated here rather than
+      implied away; a customer-held key is the thing that would change it.
+    </p>
+
+    <p class="muted"><a href="/terms">Terms</a> · <a href="/imprint">Imprint</a></p>
+  </main>
+</body>
+</html>
