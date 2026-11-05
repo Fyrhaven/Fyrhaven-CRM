@@ -51,10 +51,10 @@ describe('the cloud server dialog', () => {
   });
 
   it('offers the address it is already pointed at, and a way to forget it', async () => {
-    const calls = await renderDialog({ url: 'https://crm.mailz.se', credentialId: 'store', canConnect: true });
+    const calls = await renderDialog({ url: 'https://crm.fyrhaven.com', credentialId: 'store', canConnect: true });
 
-    expect(screen.getByText(en()['server.connected'].replace('{url}', 'https://crm.mailz.se'))).toBeTruthy();
-    expect(screen.getByLabelText(en()['server.address']).value).toBe('https://crm.mailz.se');
+    expect(screen.getByText(en()['server.connected'].replace('{url}', 'https://crm.fyrhaven.com'))).toBeTruthy();
+    expect(screen.getByLabelText(en()['server.address']).value).toBe('https://crm.fyrhaven.com');
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: en()['server.disconnect'] })); });
     expect(calls).toEqual([{ disconnect: true }]);
@@ -73,7 +73,7 @@ describe('opening it from the palette', () => {
   const serverApi = (handlers = {}) => fakeApi({
     translations: manifest.locales,
     handlers: {
-      'proxy.connect': async () => ({ connected: true, origin: 'https://crm.mailz.se', credentialId: 'store' }),
+      'proxy.connect': async () => ({ connected: true, origin: 'https://crm.fyrhaven.com', credentialId: 'store' }),
       'proxy.fetch': async () => ({ status: 200, ok: true, headers: {}, body: '{"ok":true,"version":"1.0.0"}' }),
       ...handlers,
     },
@@ -85,12 +85,12 @@ describe('opening it from the palette', () => {
     await openServer(api);
 
     expect(api.calls('proxy.connect')[0].args).toEqual(['store-basic', { mode: 'password', server: 'https://crm.mailz.se' }]);
-    expect(api.storageSnapshot()[REMOTE_URL_KEY]).toBe('https://crm.mailz.se');
+    expect(api.storageSnapshot()[REMOTE_URL_KEY]).toBe('https://crm.fyrhaven.com');
     expect(api.storageSnapshot()[REMOTE_CREDENTIAL_KEY]).toBe('store');
     // the mode is remembered, so the dialog opens where the user left it
     expect(api.storageSnapshot().remoteMode).toBe('self');
     expect(api.calls('toast.success').map((call) => call.args[0]))
-      .toEqual(['Connected to https://crm.mailz.se.']);
+      .toEqual(['Connected to https://crm.fyrhaven.com.']);
     // and the plan is asked for, not assumed
     expect(api.calls('proxy.fetch')).toHaveLength(1);
   });
@@ -119,7 +119,7 @@ describe('opening it from the palette', () => {
 
   it('forgets the server when the dialog asked to disconnect', async () => {
     const api = serverApi({ 'ui.openDialog': async () => ({ disconnect: true }) });
-    await api.storage.set(REMOTE_URL_KEY, 'https://crm.mailz.se');
+    await api.storage.set(REMOTE_URL_KEY, 'https://crm.fyrhaven.com');
 
     await openServer(api);
 
@@ -133,12 +133,12 @@ describe('opening it from the palette', () => {
     const api = serverApi({
       'ui.openDialog': async (request) => { seen.push(request); return null; },
     });
-    await api.storage.set(REMOTE_URL_KEY, 'https://crm.mailz.se');
+    await api.storage.set(REMOTE_URL_KEY, 'https://crm.fyrhaven.com');
 
     await openServer(api);
 
     expect(seen[0].extraProps.serverEditor.state).toMatchObject({
-      url: 'https://crm.mailz.se', credentialId: '', canConnect: true, mode: 'self',
+      url: 'https://crm.fyrhaven.com', credentialId: '', canConnect: true, mode: 'self',
     });
   });
 });

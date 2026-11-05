@@ -1,7 +1,7 @@
 {
   "id": "fyrhaven-crm",
   "name": "Fyrhaven CRM",
-  "version": "1.58.0",
+  "version": "1.59.0",
   "author": "Alexander",
   "description": "Fyrhaven CRM — contacts, companies, projects and time for Bulwark Mail. Finds and merges duplicates, keeps private notes and consent records on your own server or ours, and follows you between devices.",
   "type": "ui-extension",
