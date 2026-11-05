@@ -30,6 +30,7 @@ import { makeGroupsPage } from './lib/groups-page.js';
 import { makeHealthPage } from './lib/health-page.js';
 import { makeHistoryPage } from './lib/history-page.js';
 import { makePrivacyPage } from './lib/privacy-page.js';
+import { makeSettingsPage } from './lib/settings-page.js';
 import { makeProjectDialog } from './lib/project-dialog.js';
 import { makeGroupDialog } from './lib/group-dialog.js';
 import { makeConsentDialog } from './lib/consent-dialog.js';
@@ -70,6 +71,7 @@ const AppShell = makeAppShell(React, api, {
   health: makeHealthPage(React, api),
   history: makeHistoryPage(React, api),
   privacy: makePrivacyPage(React, api),
+  settings: makeSettingsPage(React, api),
 });
 
 // One dialog slot serves eleven purposes: the review/merge dialog, the contact

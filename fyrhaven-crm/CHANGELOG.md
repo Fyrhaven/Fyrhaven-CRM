@@ -7,6 +7,21 @@ and the project uses [semantic versioning](https://semver.org/spec/v2.0.0.html).
 The version in `manifest.json` is the single source of truth — the entry at the
 top of this file must match it.
 
+## [1.58.0] — 2026-11-04
+
+### Added
+
+- **A Settings sub-page.** Server and licence, the preferences that are not the
+  host's, and an About line — together, instead of a button in the Overview menu.
+  The behaviour settings (language, enabled, Gravatar, undo window, digest,
+  save-time warning) stay where the host draws them, Settings → Plugins; this page
+  says so rather than offering a second form over the same value.
+- **The server connection can be locked down for the installation.**
+  `configSchema.allowServerConfig` is an administrator switch (new `admin:config`
+  permission): with it off, a normal user sees *"your administrator manages this
+  connection"* and no button — because changing it moves every record in the
+  company to another server.
+
 ## [1.57.0] — 2026-11-04
 
 ### Added
