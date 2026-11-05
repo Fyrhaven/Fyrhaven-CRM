@@ -140,6 +140,61 @@ async function loadCatalog() {
   }
 }
 
+async function loadLicences() {
+  const answer = await call('/v1/admin/licenses');
+  const box = $('#licences');
+  box.replaceChildren();
+  if (!answer.licences.length) {
+    box.append(el('p', { class: 'muted', text: 'No self-hosted licences sold yet.' }));
+    return;
+  }
+  for (const licence of answer.licences) {
+    box.append(el('div', { class: 'row' },
+      el('div', {},
+        el('strong', { text: licence.email || '(no account)' }),
+        el('div', {
+          class: 'muted',
+          text: `${licence.code || 'licence'} · until ${day(licence.expiresAt)}`
+            + (licence.revoked ? ' · REVOKED' : '')
+            + (licence.signed ? ' · signed' : ' · unsigned'),
+        }),
+        el('div', {
+          class: 'muted',
+          text: licence.fingerprint ? `installed on ${licence.fingerprint}` : 'not activated yet',
+        }),
+        el('code', { text: licence.key.length > 48 ? `${licence.key.slice(0, 48)}…` : licence.key })),
+      el('div', { class: 'actions' },
+        el('button', {
+          type: 'button',
+          text: 'Copy key',
+          onclick: async () => {
+            try {
+              await navigator.clipboard.writeText(licence.key);
+              status('Key copied.');
+            } catch {
+              status('Could not copy — select the key above.', true);
+            }
+          },
+        }),
+        el('button', {
+          type: 'button',
+          class: 'danger',
+          text: licence.revoked ? 'Revoked' : 'Revoke',
+          disabled: licence.revoked,
+          onclick: async () => {
+            if (!window.confirm(`Revoke the licence for ${licence.email}? Their server keeps running until the term ends.`)) return;
+            try {
+              await call(`/v1/admin/licenses/${licence.id}/revoke`, { method: 'POST' });
+              status('Licence revoked.');
+              await loadLicences();
+            } catch (err) {
+              status(String(err.message ?? err), true);
+            }
+          },
+        }))));
+  }
+}
+
 async function loadAccounts() {
   const answer = await call('/v1/admin/accounts');
   $('#payments').textContent = answer.payments.provider === 'stripe'
@@ -216,7 +271,9 @@ document.querySelectorAll('[data-tab]').forEach((button) => {
     const tab = button.dataset.tab;
     status('');
     try {
-      await (tab === 'orders' ? loadOrders() : tab === 'accounts' ? loadAccounts() : loadCatalog());
+      await (tab === 'orders' ? loadOrders()
+        : tab === 'accounts' ? loadAccounts()
+          : tab === 'licences' ? loadLicences() : loadCatalog());
       show(tab);
     } catch (err) {
       status(String(err.message ?? err), true);

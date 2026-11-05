@@ -15,6 +15,7 @@
       <button data-tab="orders" type="button">Orders</button>
       <button data-tab="accounts" type="button">Accounts</button>
       <button data-tab="catalog" type="button">Catalog</button>
+      <button data-tab="licences" type="button">Licences</button>
       <button data-action="signout" type="button" hidden>Lock</button>
     </nav>
   </header>
@@ -64,6 +65,15 @@
           <label>Description <input name="description"></label>
           <button type="submit">Save product</button>
         </form>
+      </div>
+
+      <div data-panel="licences" hidden>
+        <h2>Self-hosted licences</h2>
+        <p class="muted">
+          One key, one installation. A key shows the machine it is bound to; releasing an
+          installation frees the licence to activate somewhere else.
+        </p>
+        <div id="licences"></div>
       </div>
 
       <div data-panel="accounts" hidden>
