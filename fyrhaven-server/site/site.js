@@ -236,7 +236,22 @@ const showBlock = (id, text) => {
   const box = $(id);
   box.hidden = !text;
   box.textContent = text;
+  // the answer's wrapper appears with it, so a step never shows an empty box
+  if (id === '#licence-key') $('#licence-block').hidden = !text;
+  if (id === '#release-code') $('#release-block').hidden = !text;
 };
+
+document.querySelectorAll('[data-copy]').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const source = document.getElementById(button.dataset.copy);
+    try {
+      await navigator.clipboard.writeText(source.textContent.split('\n\n')[0].trim());
+      status('Copied.');
+    } catch {
+      status('Could not copy — select the text instead.', true);
+    }
+  });
+});
 
 async function loadLicences() {
   try {

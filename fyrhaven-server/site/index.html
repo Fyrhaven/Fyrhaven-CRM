@@ -96,29 +96,56 @@
     <section id="selfhosted" hidden>
       <h2>Self-hosted licence</h2>
       <p class="muted">
-        Run the server on your own machine. The server shows an <strong>installation key</strong>
-        (<code>FHI-…</code>); paste it here to have your licence bound to that machine.
+        One licence, one machine. Follow the three steps that match what you are doing —
+        each one tells you what to paste where.
       </p>
-      <form data-form="activate">
-        <label>Installation key <input name="fingerprint" placeholder="FHI-XXXX-XXXX-XXXX-XXXX" required></label>
-        <button type="submit">Get my licence</button>
-      </form>
-      <pre id="licence-key" hidden></pre>
 
-      <h3>Moving to another server</h3>
-      <p class="muted">
-        On the old server, open <em>Dedicated server → Release this installation</em> and copy the
-        challenge. Paste it here; you get a signed release code to paste back there. Then the licence
-        can be activated on the new machine.
-      </p>
-      <form data-form="release">
-        <label>Challenge <input name="challenge" required></label>
-        <button type="submit">Get release code</button>
-      </form>
-      <pre id="release-code" hidden></pre>
+      <ol class="steps">
+        <li>
+          <h3><span class="num">1</span> Activate a new server</h3>
+          <p class="muted">
+            On the server, open <em>Dedicated server → Licence</em> and copy the
+            <strong>installation key</strong> (<code>FHI-…</code>). Paste it here and you get a
+            licence bound to that machine.
+          </p>
+          <form data-form="activate">
+            <label>Installation key <input name="fingerprint" placeholder="FHI-XXXX-XXXX-XXXX-XXXX" required></label>
+            <button type="submit">Get my licence</button>
+          </form>
+          <div id="licence-block" hidden>
+            <pre id="licence-key"></pre>
+            <button type="button" data-copy="licence-key">Copy the licence</button>
+            <p class="muted">Paste it into the server: <em>Dedicated server → Licence → Install licence</em>.</p>
+          </div>
+        </li>
 
-      <h3>Your licences</h3>
-      <div id="licences"></div>
+        <li>
+          <h3><span class="num">2</span> Release the old server</h3>
+          <p class="muted">
+            On the server you are leaving, choose <em>Release this installation</em>. It shows a
+            <strong>challenge</strong>. Paste it here to get a signed release code — the second
+            half of the same handshake.
+          </p>
+          <form data-form="release">
+            <label>Challenge <input name="challenge" required></label>
+            <button type="submit">Get release code</button>
+          </form>
+          <div id="release-block" hidden>
+            <pre id="release-code"></pre>
+            <button type="button" data-copy="release-code">Copy the release code</button>
+            <p class="muted">Paste it back into the <em>old</em> server. It forgets the licence, and
+              step 1 becomes possible on the new one.</p>
+          </div>
+        </li>
+
+        <li>
+          <h3><span class="num">3</span> Check what is where</h3>
+          <p class="muted">Each licence shows the machine it is bound to. A licence that says
+            <em>not activated yet</em> is free to use; one on a machine you no longer run is
+            released with step 2.</p>
+          <div id="licences"></div>
+        </li>
+      </ol>
     </section>
 
     <p id="status" role="status" class="status"></p>
