@@ -53,7 +53,7 @@ async function call(path, { method = 'GET', body } = {}) {
 /** Which panel is visible. `signout` is an action, not a panel. */
 function show(view) {
   const signedIn = Boolean(token());
-  for (const name of ['intro', 'signup', 'login', 'account']) {
+  for (const name of ['intro', 'signup', 'login', 'account', 'selfhosted']) {
     const section = $(`#${name}`);
     if (section) section.hidden = name !== view;
   }
@@ -62,6 +62,9 @@ function show(view) {
   document.querySelector('[data-view="account"]').hidden = !signedIn;
   document.querySelector('[data-view="signout"]').hidden = !signedIn;
   if (view !== 'account') $('#token').hidden = true;
+  const selfhosted = $('#selfhosted');
+  if (selfhosted) selfhosted.hidden = view !== 'account';
+  document.querySelector('[data-view="account"]').hidden = !signedIn;
 }
 
 const formatDate = (value) => {
@@ -81,6 +84,7 @@ async function loadAccount() {
     $('[data-field="expires"]').textContent = formatDate(answer.expiresAt);
     $('[data-field="usage"]').textContent = `${answer.usage.records} of ${answer.usage.maxRecords} records`;
     show('account');
+    await loadLicences();
   } catch (err) {
     if (err.status === 401) {
       setToken('');
@@ -222,8 +226,78 @@ document.querySelectorAll('[data-action]').forEach((button) => {
   });
 });
 
+
+/**
+ * Self-hosted licences (#148): bind a licence to an installation, and release an
+ * installation so the licence can move. Both are the *account's* actions, so they
+ * need a signed-in session — the token is the proof of who is asking.
+ */
+const showBlock = (id, text) => {
+  const box = $(id);
+  box.hidden = !text;
+  box.textContent = text;
+};
+
+async function loadLicences() {
+  try {
+    const answer = await call('/v1/account');
+    const box = $('#licences');
+    if (!box) return;
+    box.replaceChildren();
+    if (!answer.licences.length) {
+      box.append(el('p', { class: 'muted', text: 'No self-hosted licence yet.' }));
+      return;
+    }
+    for (const licence of answer.licences) {
+      box.append(el('div', { class: 'row' },
+        el('div', {},
+          el('strong', { text: licence.label || 'Self-hosted licence' }),
+          el('div', { class: 'muted', text: `until ${licence.expiresAt.slice(0, 10)}` }
+            + (licence.fingerprint ? ` · installed on ${licence.fingerprint}` : ' · not activated yet')),
+          el('div', { class: 'muted', text: licence.revoked ? 'revoked' : (licence.signed ? 'signed' : '') }))));
+    }
+  } catch (err) {
+    status(String(err.message ?? err), true);
+  }
+}
+
+function bindLicenceForms() {
+  const activate = document.querySelector('[data-form="activate"]');
+  const release = document.querySelector('[data-form="release"]');
+  if (activate) {
+    activate.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const fingerprint = String(new FormData(activate).get('fingerprint') ?? '').trim().toUpperCase();
+      try {
+        const answer = await call('/v1/licence/activate', { method: 'POST', body: { fingerprint } });
+        showBlock('#licence-key', `${answer.licence}\n\nPaste this into your server as FYRHAVEN_LICENCE (or Dedicated server → Licence → install). It is bound to ${answer.fingerprint}.`);
+        status('Licence issued for that installation.');
+        await loadLicences();
+      } catch (err) {
+        status(String(err.message ?? err), true);
+      }
+    });
+  }
+  if (release) {
+    release.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const challenge = String(new FormData(release).get('challenge') ?? '').trim();
+      try {
+        const answer = await call('/v1/licence/deactivate', { method: 'POST', body: { challenge } });
+        showBlock('#release-code', `${answer.code}\n\nPaste this into the old server to release it. The licence can then be activated on the new one.`);
+        status('Release code issued.');
+        await loadLicences();
+      } catch (err) {
+        status(String(err.message ?? err), true);
+      }
+    });
+  }
+}
+
 // Opening the page with a session goes straight to the account; without one it
 // stays on the landing panel, which is what a stranger should see.
+bindLicenceForms();
+
 if (token()) void loadAccount();
 else show('intro');
 
