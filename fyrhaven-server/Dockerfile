@@ -7,7 +7,7 @@
 FROM node:24-alpine
 
 WORKDIR /app
-COPY package.json server.js accounts.js payments.js catalog.js ./
+COPY package.json server.js accounts.js payments.js catalog.js licence.js ./
 
 # The signup/ordering site (#148) is static files, served by the store itself.
 COPY site ./site

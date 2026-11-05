@@ -38,6 +38,9 @@ import {
   createCheckout, createStripePrice, paymentConfig, planFromEvent, verifyStripeSignature,
 } from './payments.js';
 import { catalogOps, defaultCatalogue, openCatalogTables } from './catalog.js';
+import {
+  describeLicence, licencePayload, loadPrivateKey, signLicence, startupLicence,
+} from './licence.js';
 
 
 export const VERSION = '1.0.0';
@@ -325,10 +328,30 @@ export function createRequestHandler(db, {
   tokens = new Map(), keys, allowQueryToken = false, accounts = null, trialDays = DEFAULT_TRIAL_DAYS,
   requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
   adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch,
+  licence = { ok: true, mode: 'cloud' }, licencePrivate = null,
 } = {}) {
   const ops = storeOps(db, keys);
   const people = accounts ?? accountOps(db, { trialDays });
   const catalogue = catalogOps(db, { now });
+
+  /**
+   * A licence key for an account. Signed when the operator holds the signing key
+   * (so a self-hosted server can verify it offline), and a plain random key when
+   * not (so the cloud keeps working without one).
+   */
+  const issueLicence = (accountId, product, days) => {
+    const account = people.byId(accountId);
+    const expiresAt = new Date(now() + days * 86_400_000).toISOString();
+    const key = licencePrivate
+      ? signLicence(licencePayload({
+        subject: account?.email ?? accountId,
+        plan: product.kind === 'license' ? 'selfhosted' : 'selfhosted-renewal',
+        issuedAt: new Date(now()).toISOString(),
+        expiresAt,
+      }), licencePrivate)
+      : '';
+    return catalogue.issueLicence(accountId, product.id, days, { key, signed: Boolean(key) });
+  };
 
   /**
    * Who is asking, and what they may do (#148).
@@ -471,7 +494,7 @@ export function createRequestHandler(db, {
       const order = meaning.orderId ? people.order(meaning.orderId) : null;
       const product = order?.productId ? catalogue.get(order.productId) : null;
       if (product && product.kind === 'license') {
-        licence = catalogue.issueLicence(meaning.accountId, product.id, product.days);
+        licence = issueLicence(meaning.accountId, product, product.days);
       }
       return send(res, 200, { ok: true, plan: meaning.plan, licence });
     }
@@ -512,6 +535,13 @@ export function createRequestHandler(db, {
         const product = catalogue.setActive(decodeURIComponent(activeProduct[1]), payload.active !== false);
         if (!product) return send(res, 404, { error: 'no such product' });
         return send(res, 200, { ok: true, product });
+      }
+
+      const revoke = /^\/v1\/admin\/licenses\/([^/]+)\/revoke$/.exec(path);
+      if (revoke && method === 'POST') {
+        const licence2 = catalogue.revokeLicence(decodeURIComponent(revoke[1]));
+        if (!licence2) return send(res, 404, { error: 'no such licence' });
+        return send(res, 200, { ok: true, licence: licence2 });
       }
 
       if (path === '/v1/admin/licenses' && method === 'GET') {
@@ -595,6 +625,17 @@ export function createRequestHandler(db, {
         return send(res, 200, { ok: true, deleted: true });
       }
       return send(res, 405, { error: 'method not allowed' });
+    }
+
+    if (path === '/v1/licence') {
+      if (method !== 'GET') return send(res, 405, { error: 'method not allowed' });
+      return send(res, 200, {
+        ok: true,
+        mode: licence.mode ?? 'cloud',
+        licensed: Boolean(licence.licence),
+        licence: licence.licence ?? null,
+        summary: describeLicence(licence.licence ?? null),
+      });
     }
 
     if (path === '/v1/account/order') {
@@ -709,12 +750,14 @@ export function createRequestHandler(db, {
 export function createStoreServer({
   dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false,
   trialDays = DEFAULT_TRIAL_DAYS, now, adminToken = '', payments = paymentConfig(), fetchJson,
+  licence = startupLicence(), licencePrivate = loadPrivateKey(),
 } = {}) {
   const db = openStore(dbPath);
   const tokens = parseTokens(tokenList);
   const keys = workspaceKeys(db, masterKey);
   const server = createHttpServer(createRequestHandler(db, {
     tokens, keys, allowQueryToken, trialDays, now, adminToken, payments, fetchJson,
+    licence, licencePrivate,
   }));
   server.on('close', () => {
     try {
@@ -753,6 +796,18 @@ if (isMain) {
   const trialDays = Number(process.env.STORE_TRIAL_DAYS ?? DEFAULT_TRIAL_DAYS);
   // The operator's panel is off until a token is set: an admin surface that
   // comes up open on a fresh install is worse than one that has to be enabled.
+  // The lock (#148): a self-hosted install must present a licence key it can
+  // verify offline. `FYRHAVEN_MODE=cloud` is the operator's own service, which
+  // needs none — it *is* the product.
+  const licence = startupLicence(process.env);
+  if (!licence.ok) {
+    console.error(`Fyrhaven: ${licence.error}`);
+    console.error('A self-hosted install needs FYRHAVEN_LICENCE (from your Fyrhaven licence) ');
+    console.error('or FYRHAVEN_MODE=cloud for the service itself. See LICENSING.md.');
+    process.exit(1);
+  }
+  console.log(`Fyrhaven: ${licence.mode} mode` + (licence.licence ? ` — ${describeLicence(licence.licence)}` : ''));
+
   const adminToken = String(process.env.STORE_ADMIN_TOKEN ?? '').trim();
   if (!adminToken) console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin and /admin answer 503.');
   const { server, tokens } = createStoreServer({

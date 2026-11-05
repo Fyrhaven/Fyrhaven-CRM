@@ -40,6 +40,12 @@ services:
       STRIPE_PLAN_DAYS: ${STRIPE_PLAN_DAYS:-365}
       STRIPE_MODE: ${STRIPE_MODE:-payment}
       PUBLIC_URL: ${PUBLIC_URL:-}
+      # The lock (#148): FYRHAVEN_MODE=cloud is the operator's own service; any
+      # other install must present a signed licence key it can verify offline.
+      FYRHAVEN_MODE: ${FYRHAVEN_MODE:-}
+      FYRHAVEN_LICENCE: ${FYRHAVEN_LICENCE:-}
+      FYRHAVEN_LICENCE_PUBLIC: ${FYRHAVEN_LICENCE_PUBLIC:-}
+      FYRHAVEN_LICENCE_PRIVATE_B64: ${FYRHAVEN_LICENCE_PRIVATE_B64:-}
     volumes:
       - store-data:/data
     networks:
