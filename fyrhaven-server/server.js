@@ -370,6 +370,17 @@ export function createRequestHandler(db, {
   const catalogue = catalogOps(db, { now });
   // The one challenge this installation has minted and not yet spent.
   let pendingChallenge = '';
+  // Traffic per workspace, since this process started. Approximate by design:
+  // it counts the bytes of the records that pass through the API, not headers or
+  // TLS overhead — enough to answer "who is using the service and how much".
+  const traffic = new Map();
+  const bump = (workspace, direction, bytes) => {
+    const entry = traffic.get(workspace) ?? { inBytes: 0, outBytes: 0, requests: 0 };
+    entry.requests += 1;
+    if (direction === 'in') entry.inBytes += Math.max(0, Number(bytes) || 0);
+    else entry.outBytes += Math.max(0, Number(bytes) || 0);
+    traffic.set(workspace, entry);
+  };
   // When a webhook last arrived, and what it did — the panel's health line.
   let lastWebhook = { at: '', type: '', result: '' };
 
@@ -550,6 +561,52 @@ export function createRequestHandler(db, {
       const presented = tokenOf(req, url, { allowQueryToken });
       if (!presented || !sameToken(adminToken, presented)) return send(res, 401, { error: 'unauthorized' });
       if (tooMany('admin')) return send(res, 429, { error: 'too many requests' });
+
+      if (path === '/v1/admin/usage' && method === 'GET') {
+        const spaces = new Map();
+        for (const row of db.prepare('SELECT DISTINCT workspace FROM records').all()) spaces.set(row.workspace, true);
+        for (const workspace of traffic.keys()) spaces.set(workspace, true);
+
+        const emails = new Map(
+          db.prepare('SELECT id, email FROM accounts').all().map((row) => [`acct:${row.id}`, row.email]),
+        );
+
+        const perCustomer = [...spaces.keys()].map((workspace) => {
+          const used = usageOf(workspace);
+          const moved = traffic.get(workspace) ?? { inBytes: 0, outBytes: 0, requests: 0 };
+          // How many projects a workspace holds, without loading them all into
+          // memory: the record is JSON, so its length is the count.
+          let projects = 0;
+          try {
+            const row = db.prepare('SELECT value FROM records WHERE workspace = ? AND key = ?').get(workspace, 'projects');
+            const parsed = row ? JSON.parse(row.value) : null;
+            projects = Array.isArray(parsed) ? parsed.length : 0;
+          } catch {
+            projects = 0;
+          }
+          return {
+            workspace,
+            email: emails.get(workspace) ?? null,
+            records: used.records,
+            bytes: used.bytes,
+            projects,
+            requests: moved.requests,
+            inBytes: moved.inBytes,
+            outBytes: moved.outBytes,
+          };
+        }).sort((a, b) => (b.bytes + b.inBytes + b.outBytes) - (a.bytes + a.inBytes + a.outBytes));
+
+        const total = perCustomer.reduce((sum, entry) => ({
+          records: sum.records + entry.records,
+          bytes: sum.bytes + entry.bytes,
+          projects: sum.projects + entry.projects,
+          requests: sum.requests + entry.requests,
+          inBytes: sum.inBytes + entry.inBytes,
+          outBytes: sum.outBytes + entry.outBytes,
+        }), { records: 0, bytes: 0, projects: 0, requests: 0, inBytes: 0, outBytes: 0 });
+
+        return send(res, 200, { ok: true, total, customers: perCustomer, since: new Date(now()).toISOString() });
+      }
 
       if (path === '/v1/admin/status' && method === 'GET') {
         const count = (sql) => Number(db.prepare(sql).get().n ?? 0);
@@ -846,7 +903,9 @@ export function createRequestHandler(db, {
     try {
       if (path === '/v1/store') {
         if (method !== 'GET') return send(res, 405, { error: 'method not allowed' });
-        return send(res, 200, { records: ops.list(workspace, scope), revision: ops.revision() });
+        const records = ops.list(workspace, scope);
+        bump(workspace, 'out', Buffer.byteLength(JSON.stringify(records)));
+        return send(res, 200, { records, revision: ops.revision() });
       }
 
       const match = /^\/v1\/store\/([^/]+)$/.exec(path);
@@ -863,6 +922,7 @@ export function createRequestHandler(db, {
       if (method === 'GET') {
         const value = ops.get(workspace, scope, key);
         if (value === null) return send(res, 404, { error: 'no such record' });
+        bump(workspace, 'out', Buffer.byteLength(JSON.stringify(value)));
         return send(res, 200, { key, value, revision: ops.revision() });
       }
 
@@ -896,6 +956,7 @@ export function createRequestHandler(db, {
         if (usage.bytes - previousBytes + size > maxBytes) {
           return send(res, 409, { error: 'storage limit reached', usage });
         }
+        bump(workspace, 'in', size);
         return send(res, 200, { revision: ops.put(workspace, scope, key, parsed.value) });
       }
 
