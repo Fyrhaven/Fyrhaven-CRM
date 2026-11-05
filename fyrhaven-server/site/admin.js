@@ -63,6 +63,26 @@ function show(name) {
   }
 }
 
+/** What the service says about itself — the line an operator wants first. */
+async function loadStatus() {
+  try {
+    const status = await call('/v1/admin/status');
+    const line = $('#payments');
+    const pay = status.payments;
+    const hook = pay.provider === 'stripe'
+      ? (pay.webhookConfigured
+        ? `webhook ✓${pay.lastWebhook.at ? ` (last ${pay.lastWebhook.type} at ${pay.lastWebhook.at.slice(0, 16).replace('T', ' ')})` : ' — none received yet'}`
+        : 'webhook MISSING — card payments would not switch a plan on')
+      : 'no payment provider configured — orders arrive pending and are settled here';
+    line.textContent = `v${status.version} · ${status.mode} · ${pay.provider} · ${hook} · `
+      + `${status.counts.accounts} accounts, ${status.counts.orders} orders (${status.counts.pending} pending), ${status.counts.licences} licences`;
+  } catch (err) {
+    status && 0;
+    const line = $('#payments');
+    if (line) line.textContent = String(err.message ?? err);
+  }
+}
+
 async function loadOrders() {
   const answer = await call('/v1/admin/orders');
   const box = $('#orders');
@@ -256,6 +276,7 @@ document.querySelector('[data-form="unlock"]').addEventListener('submit', async 
   status('');
   try {
     await loadOrders();
+    await loadStatus();
     show('orders');
   } catch (err) {
     setToken('');
