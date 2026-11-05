@@ -497,6 +497,18 @@ describe('accounts, sessions and the site (#148)', () => {
   });
 });
 
+describe('the version it reports', () => {
+  it('is the version in package.json, not a constant nobody bumps', async () => {
+    const { VERSION } = await import('./server.js');
+    const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
+    assert.equal(VERSION, pkg.version);
+    // and the endpoint a customer's *Check the server* asks answers with it
+    const answer = await (await fetch(`${base}/version`)).json();
+    assert.equal(answer.version, pkg.version);
+  });
+});
+
 describe('payments (#148)', () => {
   const STRIPE = {
     STRIPE_SECRET_KEY: 'sk_test_123', STRIPE_PRICE_CLOUD: 'price_123',
