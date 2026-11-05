@@ -88,3 +88,27 @@ service is down or refuses, the install keeps running on `FYRHAVEN_LICENCE` (or
 its cached key) and logs the reason; it does not fall over because we are down.
 
 Either way the check is identical and local: signature, expiry, fingerprint.
+
+
+## Protecting the server, and moving it
+
+**A username and password.** Set `STORE_AUTH_USER` and `STORE_AUTH_PASSWORD` and
+the server answers HTTP Basic; a bearer token still works, so an operator can
+never lock themselves out. The plugin holds the pair as a credential, so the
+password never reaches the browser page.
+
+**Deactivating, so one licence is one server.** A key that could be copied to a
+second machine silently would defeat the whole point, so release is a signed
+round trip:
+
+```
+POST /v1/licence/challenge        (on YOUR server)  -> { challenge, fingerprint }
+POST /v1/licence/deactivate       (on crm.mailz.se) <- { challenge } -> { code }
+POST /v1/licence/deactivate       (on YOUR server)  <- { code }     -> { deactivated: true }
+```
+
+The challenge names the installation and a one-time nonce. The service releases
+that installation and returns a code **signed by the seller**; your server checks
+the signature, its own fingerprint and the nonce before it forgets the licence,
+and the nonce is then spent — so the same code cannot be replayed. The licence is
+then free to activate somewhere else.

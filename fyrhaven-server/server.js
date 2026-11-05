@@ -39,8 +39,9 @@ import {
 } from './payments.js';
 import { catalogOps, defaultCatalogue, openCatalogTables } from './catalog.js';
 import {
-  activateOnline, describeLicence, ensureInstallKey, isInstallKey, licencePayload, loadPrivateKey,
-  signLicence, startupLicence, verifyLicence, publicKeyOf,
+  activateOnline, deactivationChallenge, describeLicence, ensureInstallKey, isInstallKey, licencePayload,
+  loadPrivateKey, publicKeyOf, readChallenge, signDeactivation, signLicence, startupLicence,
+  verifyDeactivation, verifyLicence,
 } from './licence.js';
 
 
@@ -136,6 +137,30 @@ export function parseTokens(value) {
  * because a token in a URL ends up in access logs, proxy logs, browser history
  * and `Referer` headers — a leak that no amount of TLS prevents.
  */
+/**
+ * HTTP Basic, the way a self-hosted server is protected (#148).
+ *
+ * A token is right for a service you sign up to; a username and password are
+ * right for a machine you own, and they are what the plugin can hold through the
+ * host's credential store. Checked only when both are configured, so a store
+ * without them behaves exactly as before.
+ */
+function basicOf(req, { user = '', password = '' } = {}) {
+  if (!user || !password) return false;
+  const header = String(req.headers?.authorization ?? '');
+  if (!header.toLowerCase().startsWith('basic ')) return false;
+  let decoded = '';
+  try {
+    decoded = Buffer.from(header.slice(6).trim(), 'base64').toString('utf8');
+  } catch {
+    return false;
+  }
+  const index = decoded.indexOf(':');
+  if (index < 0) return false;
+  // Constant time on both halves, so neither can be found a byte at a time.
+  return sameToken(user, decoded.slice(0, index)) && sameToken(password, decoded.slice(index + 1));
+}
+
 function tokenOf(req, url, { allowQueryToken = false } = {}) {
   const bearer = /^Bearer\s+(.+)$/i.exec(String(req.headers?.authorization ?? '').trim());
   if (bearer) return bearer[1].trim();
@@ -328,12 +353,15 @@ function readBody(req, limit = MAX_VALUE_BYTES + 4096) {
 export function createRequestHandler(db, {
   tokens = new Map(), keys, allowQueryToken = false, accounts = null, trialDays = DEFAULT_TRIAL_DAYS,
   requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
-  adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch,
+  adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch, basicUser = '', basicPassword = '',
+  licencePublic = '',
   licence = { ok: true, mode: 'cloud' }, licencePrivate = null, installKey = '',
 } = {}) {
   const ops = storeOps(db, keys);
   const people = accounts ?? accountOps(db, { trialDays });
   const catalogue = catalogOps(db, { now });
+  // The one challenge this installation has minted and not yet spent.
+  let pendingChallenge = '';
 
   /**
    * A licence key for an account. Signed when the operator holds the signing key
@@ -364,6 +392,11 @@ export function createRequestHandler(db, {
    * install notices nothing.
    */
   const authenticate = (req, url) => {
+    // A server with a password set answers to that password; the plugin holds
+    // it like any other credential, so a stranger without it gets 401.
+    if (basicUser && basicPassword && basicOf(req, { user: basicUser, password: basicPassword })) {
+      return { workspace: 'basic', account: null, token: 'basic', plan: 'installer', expiresAt: '', entitled: true };
+    }
     const presented = tokenOf(req, url, { allowQueryToken });
     if (!presented) return null;
     for (const [token, workspace] of tokens) {
@@ -651,6 +684,55 @@ export function createRequestHandler(db, {
       return send(res, 200, { ok: true, licence: key, expiresAt: source.expiresAt, fingerprint, record: bound });
     }
 
+    // Deactivation, both halves. An **account** asks for a release code for the
+    // installation it names; an **installer/basic** caller spends that code and
+    // forgets its licence. A customer cannot mint the code, so a copied key can
+    // not walk away from its server.
+    if (path === '/v1/licence/deactivate' && method === 'POST') {
+      const payload = (await body()) ?? {};
+
+      if (who.account) {
+        if (!licencePrivate) return send(res, 503, { error: 'this service cannot sign licences' });
+        const challenge = readChallenge(payload.challenge);
+        if (!challenge) return send(res, 400, { error: 'that is not a deactivation challenge' });
+        const owned = catalogue.licenceForFingerprint(challenge.fp);
+        if (!owned || owned.accountId !== who.account.id) {
+          return send(res, 404, { error: 'no licence of yours is bound to that installation' });
+        }
+        const released = catalogue.deactivateLicence(owned.id);
+        return send(res, 200, {
+          ok: true,
+          code: signDeactivation({ fingerprint: challenge.fp, nonce: challenge.nonce }, licencePrivate, { now: now() }),
+          licence: released,
+        });
+      }
+
+      // The installation's own side: one pending challenge at a time, because a
+      // server is released once and then re-licensed.
+      if (!pendingChallenge) return send(res, 409, { error: 'ask for a challenge first' });
+      const checked = verifyDeactivation(String(payload.code ?? ''), {
+        publicKey: publicKeyOf({ FYRHAVEN_LICENCE_PUBLIC: licencePublic }),
+        fingerprint: installKey, nonce: pendingChallenge, now: now(),
+      });
+      if (!checked.ok) return send(res, 400, { error: `the deactivation code was not accepted (${checked.reason})` });
+      pendingChallenge = '';
+      process.env.FYRHAVEN_LICENCE = '';
+      try {
+        const { rmSync } = await import('node:fs');
+        rmSync(process.env.FYRHAVEN_LICENCE_FILE ?? '/data/licence.key', { force: true });
+      } catch {
+        // nothing cached
+      }
+      return send(res, 200, { ok: true, deactivated: true, note: 'restart to run unlicensed, or paste a new key' });
+    }
+
+    if (path === '/v1/licence/challenge' && method === 'POST') {
+      const challenge = deactivationChallenge(installKey, { now: now() });
+      const read = readChallenge(challenge);
+      pendingChallenge = read?.nonce ?? '';
+      return send(res, 200, { ok: true, fingerprint: installKey, challenge });
+    }
+
     if (path === '/v1/licence') {
       if (method !== 'GET') return send(res, 405, { error: 'method not allowed' });
       return send(res, 200, {
@@ -775,6 +857,7 @@ export function createRequestHandler(db, {
 export function createStoreServer({
   dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false,
   trialDays = DEFAULT_TRIAL_DAYS, now, adminToken = '', payments = paymentConfig(), fetchJson,
+  basicUser = '', basicPassword = '', licencePublic = '',
   licence = startupLicence(), licencePrivate = loadPrivateKey(),
   installKey = process.env.FYRHAVEN_INSTALL_KEY ?? '',
 } = {}) {
@@ -783,7 +866,7 @@ export function createStoreServer({
   const keys = workspaceKeys(db, masterKey);
   const server = createHttpServer(createRequestHandler(db, {
     tokens, keys, allowQueryToken, trialDays, now, adminToken, payments, fetchJson,
-    licence, licencePrivate, installKey,
+    basicUser, basicPassword, licencePublic, licence, licencePrivate, installKey,
   }));
   server.on('close', () => {
     try {
@@ -878,6 +961,8 @@ if (isMain) {
     dbPath, tokenList, masterKey, allowQueryToken, adminToken, payments: paymentConfig(process.env),
     installKey,
     trialDays: Number.isFinite(trialDays) && trialDays >= 0 ? trialDays : DEFAULT_TRIAL_DAYS,
+    basicUser: String(process.env.STORE_AUTH_USER ?? '').trim(),
+    basicPassword: String(process.env.STORE_AUTH_PASSWORD ?? ''),
   });
   server.listen(port, () => {
     console.log(`contact-manager-store v${VERSION} listening on :${port} — ${tokens.size} token(s), db ${dbPath}, values encrypted at rest`);

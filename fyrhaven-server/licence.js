@@ -245,3 +245,75 @@ export async function activateOnline({
     return { status: 'failed', reason: String(err?.message ?? err) };
   }
 }
+
+// ── Deactivation, so one licence cannot run on two servers ───────────────────
+//
+// The problem: a key is copied, two servers claim one licence, and nothing on
+// earth stops the second one. The fix has to work **without the server being
+// able to forge its own release**, so it is a round trip in three steps:
+//
+//   1. the server mints a **challenge** — its fingerprint and a one-time nonce;
+//   2. the operator takes it to the service, which releases that installation
+//      and hands back a **signed code** naming the same fingerprint and nonce;
+//   3. the server verifies the code against the public key before it forgets the
+//      licence.
+//
+// A customer cannot mint step 2 (it is signed by the seller), and the same
+// challenge cannot be spent twice (the nonce is remembered until it is used).
+
+export const DEACTIVATION_PREFIX = 'DH1';
+
+/** Step 1: the server's side of the bargain. */
+export function deactivationChallenge(fingerprint, { now = Date.now() } = {}) {
+  return Buffer.from(JSON.stringify({
+    fp: text(fingerprint), nonce: randomBytes(12).toString('base64url'), iss: new Date(now).toISOString(),
+  })).toString('base64url');
+}
+
+/** Reads a challenge without trusting it — the service only needs `fp`/`nonce`. */
+export function readChallenge(challenge) {
+  try {
+    const parsed = JSON.parse(Buffer.from(String(challenge ?? ''), 'base64url').toString('utf8'));
+    if (!parsed || !isInstallKey(parsed.fp) || !text(parsed.nonce)) return null;
+    return { fp: parsed.fp, nonce: parsed.nonce, iss: text(parsed.iss) };
+  } catch {
+    return null;
+  }
+}
+
+/** Step 2: the service releases the installation, in a code the server can check. */
+export function signDeactivation({ fingerprint, nonce }, privateKeyPem, { now = Date.now(), minutes = 60 } = {}) {
+  const payload = {
+    v: 1,
+    fp: text(fingerprint),
+    nonce: text(nonce),
+    exp: new Date(now + minutes * 60_000).toISOString(),
+  };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = signRaw(null, Buffer.from(body), privateKeyPem);
+  return `${DEACTIVATION_PREFIX}.${body}.${Buffer.from(signature).toString('base64url')}`;
+}
+
+/** Step 3: the server checks the release before dropping its licence. */
+export function verifyDeactivation(code, { publicKey = DEFAULT_PUBLIC_KEY, fingerprint = '', nonce = '', now = Date.now() } = {}) {
+  const parts = String(code ?? '').trim().split('.');
+  if (parts.length !== 3 || parts[0] !== DEACTIVATION_PREFIX) return { ok: false, reason: 'not-a-deactivation-code' };
+  const [, body, signature] = parts;
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  } catch {
+    return { ok: false, reason: 'unreadable-payload' };
+  }
+  let good = false;
+  try {
+    good = verifyRaw(null, Buffer.from(body), loadPublicKey(publicKey), Buffer.from(signature, 'base64url'));
+  } catch {
+    good = false;
+  }
+  if (!good) return { ok: false, reason: 'bad-signature' };
+  if (text(payload.fp) !== text(fingerprint)) return { ok: false, reason: 'wrong-installation' };
+  if (text(payload.nonce) !== text(nonce)) return { ok: false, reason: 'wrong-challenge' };
+  if (!(Date.parse(payload.exp) > now)) return { ok: false, reason: 'expired' };
+  return { ok: true, payload };
+}
