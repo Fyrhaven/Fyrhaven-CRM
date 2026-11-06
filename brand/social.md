@@ -23,6 +23,50 @@ Claim them **all in one sitting, even if you post nothing for months** — a han
 is a defensive registration, and `@fyrhaven` on a competitor is a bad afternoon.
 Skip LinkedIn for now: it wants a real legal entity behind a company page.
 
+## Descriptions, by length
+
+One sentence about the company, stretched to fit each space GitHub and the shop
+give you. Start at the top: if a longer draft no longer reads as the line above
+it, it is describing something else.
+
+| Where | Length / limit | Text |
+|---|---|---|
+| Tagline | 35 | `Your mail. Your records. Your rock.` |
+| One line | 61 | `Mail hosting and records for people who run their own server.` |
+| **GitHub org description** | 207 / 350 | `Mail hosting and record keeping for people who run their own mail server: a CRM for Bulwark Mail, and the record server that keeps its projects, notes and consent records across your devices — yours or ours.` |
+| Site `<meta name="description">` | 117 / 155 | `Mail hosting and a CRM for people who run their own mail server: contacts, projects and time, on your server or ours.` |
+| Share blurb (`og:description`, `twitter:description`) | 130 / 155 | `Your mail. Your records. Your rock. Contacts, projects and time for people who run their own mail server — on your server or ours.` |
+| Social bio | 131 / 160 | `Your mail. Your records. Your rock. Mail hosting, plus the CRM that gives it contacts, companies, projects and time. → fyrhaven.com` |
+
+Search engines cut around 155–160 characters and social unfurls around 200, so the
+literal lives under the limit rather than at it.
+
+The **repository** description is not in this table on purpose: it is a string in
+[`scripts/brand-github-page.mjs`](../scripts/brand-github-page.mjs), which is the
+one place that writes it, and a copy here would drift from the copy there.
+
+**Fyrhaven or Fyrhaven CRM?** *Fyrhaven* is the host and the record server — the
+company, which is what the organisation page and the shop lead with. *Fyrhaven
+CRM* is the plugin, and only the plugin. A repository description that opens with
+"Fyrhaven CRM" is right; an **organisation** description that does is a product
+page standing where the company should be. The org description above is the one
+to paste at <https://github.com/organizations/Fyrhaven/settings/profile>.
+
+**The long one — an About page, a press note, or the reply to "so what is it?":**
+
+> Fyrhaven is mail hosting and record keeping for people who run their own mail
+> server. It comes in two pieces. **Fyrhaven CRM** is a plugin for Bulwark Mail
+> that adds contacts and companies, projects with milestones, time and expenses,
+> follow-ups, private notes and consent records — and finds the duplicate
+> contacts every address book collects over the years, showing exactly what a
+> merge will change before it changes it. **The record server** is where the
+> plugin's own records live: a small key/value service with no runtime
+> dependencies, encrypted at rest, running on your infrastructure or ours, so a
+> note is not trapped in one browser profile.
+>
+> The line is *your mail, your records, your rock* — the rock being the point:
+> your data sits on something solid, and you can point at it.
+
 ## Bios, by platform
 
 **YouTube (1 000 chars)** — "Mail hosting and a CRM for people who run their own
@@ -40,8 +84,11 @@ CRM, set up properly. → fyrhaven.com"
 **Mastodon (bio + 4 fields)** — same as X, plus fields for `Website`,
 `Source: github.com/Fyrhaven/Fyrhaven-CRM`.
 
-**GitHub org (160)** — "Fyrhaven CRM — contacts, companies, projects and time for
-Bulwark Mail, plus the record server it can talk to."
+**GitHub org** — the description is the ladder's row above. There is no separate
+bio field on an organisation: it is description (350), website, location and
+email, at <https://github.com/organizations/Fyrhaven/settings/profile>. The old
+line here led with "Fyrhaven CRM", which is why the organisation read as a
+product page rather than a company.
 
 ## Artwork (regenerate from `brand/`)
 
