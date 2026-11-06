@@ -357,13 +357,20 @@ export function storeOps(db, keys, { s3 = null, now = () => Date.now() } = {}) {
         return { removed: 0, unreachable: true };
       }
       let removed = 0;
-      for (const scope of await backend.scopes(workspace)) {
-        for (const key of (await backend.list(workspace, scope)).keys()) {
-          await backend.remove(workspace, scope, key);
-          removed += 1;
+      try {
+        for (const scope of await backend.scopes(workspace)) {
+          for (const key of (await backend.list(workspace, scope)).keys()) {
+            await backend.remove(workspace, scope, key);
+            removed += 1;
+          }
         }
+      } catch {
+        // The account is being deleted either way; the operator is told the bucket
+        // needs a look rather than the request failing halfway.
+        return { removed, unreachable: true };
+      } finally {
+        db.prepare('DELETE FROM workspace_storage WHERE workspace = ?').run(workspace);
       }
-      db.prepare('DELETE FROM workspace_storage WHERE workspace = ?').run(workspace);
       return { removed, unreachable: false };
     },
     /** The providers this process can reach. `sqlite` always, `s3` when configured. */
