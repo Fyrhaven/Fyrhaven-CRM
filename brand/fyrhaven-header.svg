@@ -1,34 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 1024" role="img" aria-label="Fyrhaven — profile header">
-  <title>Fyrhaven — profile header (Gravatar cover)</title>
-  <!-- A cover, not a card. Two things the first version got wrong, both visible
-       only once it was on a real profile:
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 460" role="img" aria-label="Fyrhaven — profile header">
+  <title>Fyrhaven — profile header (Gravatar cover, 40:9)</title>
+  <!-- Drawn at the ratio Gravatar displays (about 40:9), so nothing is cropped a
+       second time. What earlier versions got wrong, each visible only on a real
+       profile:
 
-       1. The profile picture sits *on top of* the cover's left side, so a mark
-          drawn there is a second lighthouse behind the first one.
-       2. Gravatar shows the cover as a wide band, not at 2:1, so anything near
-          the top or bottom edge is cropped away.
-
-       So: no mark in the artwork — the avatar is the mark — and the beam leaves
-       the avatar's right edge and runs off the canvas, which is what makes the
-       two read as one picture. All the text lives between y=380 and y=740 and
-       right of x=560: outside the avatar, inside any wide crop. -->
+       1. No mark in the artwork. The profile picture is the mark and it covers
+          the left ~30%, so a drawn one is a second lighthouse behind the first.
+       2. The beam is not a wash over the wordmark. It leaves the avatar's lamp
+          wide, climbs slightly, and is gone before the text starts: light in the
+          top band, words in the bottom band, no overlap between them. -->
   <defs>
-    <linearGradient id="seaP" x1="0" y1="0" x2="0" y2="1">
+    <linearGradient id="seaH3" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0E2233"/>
       <stop offset="1" stop-color="#0A1826"/>
     </linearGradient>
+    <!-- the beam keeps its strength while it is near the lamp, then gives way -->
+    <linearGradient id="beamBroad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F2B441" stop-opacity="0.26"/>
+      <stop offset="0.5" stop-color="#F2B441" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#F2B441" stop-opacity="0.03"/>
+    </linearGradient>
+    <!-- light has no edge: without this the beam reads as a band of brown paint -->
+    <filter id="soft" x="-15%" y="-60%" width="130%" height="220%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F7CE74" stop-opacity="0.30"/>
+      <stop offset="0.55" stop-color="#F2B441" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#F2B441" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beamCore" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F7CE74" stop-opacity="0.42"/>
+      <stop offset="0.45" stop-color="#F2B441" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#F2B441" stop-opacity="0.04"/>
+    </linearGradient>
   </defs>
 
-  <rect width="2048" height="1024" fill="url(#seaP)"/>
+  <rect width="2048" height="460" fill="url(#seaH3)"/>
 
-  <!-- the beam, out of the avatar and off the right edge -->
-  <polygon points="486,468 2048,330 2048,690 486,500" fill="#F2B441" opacity="0.09"/>
-  <polygon points="486,474 2048,404 2048,608 486,494" fill="#F2B441" opacity="0.13"/>
+  <!-- the beam: wide where it leaves the avatar, climbing away from the text -->
+  <g filter="url(#soft)">
+    <polygon points="430,58 2048,0 2048,150 430,206" fill="url(#beamBroad)"/>
+    <polygon points="430,84 2048,16 2048,118 430,182" fill="url(#beamCore)"/>
+    <!-- the lamp's bloom, just outside the avatar: it hides the beam's cut edge -->
+    <ellipse cx="520" cy="228" rx="210" ry="120" fill="url(#bloom)"/>
+  </g>
 
-  <text x="620" y="492" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
-        font-size="128" font-weight="700" letter-spacing="-3" fill="#F7F9FA">fyrhaven</text>
-  <text x="623" y="562" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
-        font-size="38" font-weight="400" fill="#A9BCC9">Your mail. Your records. Your rock.</text>
-  <text x="623" y="618" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
-        font-size="25" font-weight="500" letter-spacing="4" fill="#F2B441">MAIL HOSTING · CRM · SELF-HOSTED</text>
+  <text x="740" y="330" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="84" font-weight="700" letter-spacing="-2" fill="#F7F9FA">fyrhaven</text>
+  <text x="742" y="384" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="27" font-weight="400" fill="#A9BCC9">Your mail. Your records. Your rock.</text>
+  <text x="743" y="422" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="17" font-weight="500" letter-spacing="3" fill="#F2B441">MAIL HOSTING · CRM · SELF-HOSTED</text>
 </svg>
