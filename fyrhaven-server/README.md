@@ -85,11 +85,16 @@ constant, so the distributed copy cannot enter cloud mode at all. That matches
 what [`LICENSING.md`](LICENSING.md) claims: the licence is a contract with honest
 customers, and removing it takes patching the source, not a setting.
 
-**Known gap, stated rather than hidden:** `server.js` still carries the cloud
-route *implementations* inline. In the self-hosted build they are unreachable —
-`closedSurface()` answers 404 before they run — but the code is present in the
-archive. Extracting them into a cloud-only module is the next step, and the
-archive's own `BUILD` file says so.
+**The cloud is not in that archive.** `cloud.js` — the shop pages, the customer
+accounts, the catalogue, the Stripe webhook, the operator panel and licence
+issuing — is replaced by a stub that answers "not mine" to every request.
+`accounts.js`, `catalog.js` and `payments.js` are stubs as well, and `server.js`
+carries none of their code: the routes it used to hold moved out with them, and
+the imports went too. What is left is the record API, the licence check, and
+whatever it takes to run.
+
+That is the difference between "unreachable" and "not there", and the archive's
+own `BUILD` file states which one applies.
 
 ## Security: what this protects, and what it does not
 
