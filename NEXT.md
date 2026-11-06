@@ -9,7 +9,7 @@ re-learn the hard way".
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.16.1** — 83 tests green |
+| Record server | `fyrhaven-server` **1.17.0** — 89 tests green, self-host build separate |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
 | Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
@@ -34,9 +34,21 @@ test fail — checked, not assumed). What is left is the part that needs the hos
    `GET /v1/store` on it and compare with what it held before.
 4. Only then move a customer's workspace, and only from the panel's Usage tab.
 
-After that: **#155** website polish (front page, pricing cards, empty states,
-360 px) and **#156** languages (the site has **no i18n layer**; the plugin needs a
-reviewer for 980 keys before `sv` is worth adding).
+Then: **#155** website polish — **done** (front page, three pricing tiers with a
+recommendation, trial and no-licence empty states, a changelog page, a phone
+layout that stacks). The shop had never rendered a price at all: the page's
+script died on `chosenCurrency()` before its own `const`, so nothing after it ran.
+Left for the owner: the imprint brackets, and a screenshot for the hero.
+
+And the server is now **two builds** (1.17.0): the cloud (this folder, never
+distributed) and the self-hosted archive `npm run dist` emits. `FYRHAVEN_MODE=cloud`
+is a compiled constant there, so a customer's copy cannot become the cloud.
+Next for it: extract the cloud routes out of `server.js` (unreachable today, but
+still present), and a `/setup` page so a self-hosted install can be configured and
+licensed without editing `.env` by hand.
+
+Then **#156** languages: the site has **no i18n layer**, and the plugin carries
+~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.
 
 ## Gotchas this session paid for
 
@@ -70,7 +82,8 @@ reviewer for 980 keys before `sv` is worth adding).
 ```bash
 cd fyrhaven-crm && npm test          # builds, then 1 215 tests
 cd fyrhaven-crm && npm run release   # tag + GitHub release + ZIP (needs clean main)
-cd fyrhaven-server && node --test    # 83 tests
+cd fyrhaven-server && node --test    # 89 tests
+cd fyrhaven-server && npm run dist   # dist/fyrhaven-selfhost-<version>.tar.gz
 ```
 
 Deploy the store (only that container — never touch the others):

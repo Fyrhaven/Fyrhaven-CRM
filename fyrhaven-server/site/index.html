@@ -38,18 +38,19 @@
   </header>
 
   <main>
-    <section id="intro">
-      <h1>Your contact records, on a server that is not your browser</h1>
-      <p>
-        The Contact Manager plugin keeps projects, private notes, consent records
-        and its change history as <em>records</em>. They can live on your own mail
-        server — or here, so they follow you between devices and can be shared
-        with the people you work with.
+    <section id="intro" class="hero">
+      <p class="eyebrow">For people who run their own mail server</p>
+      <h1>Your records, on a server that is not your browser</h1>
+      <p class="lead">
+        The Contact Manager plugin keeps the records the webmail has nowhere to put:
+        projects, private notes, consent records and its own change history. Keep them
+        on your own mail server, or here, so they follow you between devices.
       </p>
-      <p class="muted">
-        This is the same service your plugin talks to. Your workspace token is a
-        password to it: never paste it anywhere else.
+      <p class="hero__actions">
+        <button class="primary" data-view="signup" type="button">Start the free trial</button>
+        <a class="quiet-link" href="#pricing">See what it costs</a>
       </p>
+      <p class="muted small">No card for the trial. The plugin on its own needs no account at all.</p>
     </section>
 
     <section id="signup" hidden>
@@ -73,31 +74,45 @@
 
     <section id="pricing">
       <h2>What it costs</h2>
-      <p class="muted" id="currency-line">Showing prices in
+      <p class="lead">The plugin is free. Pay only when you want your records kept for you, or a server of your own.</p>
+      <p class="muted small" id="currency-line">Prices in
         <select id="currency" aria-label="Currency">
           <option value="EUR">EUR</option>
           <option value="SEK">SEK</option>
           <option value="USD">USD</option>
-        </select>
+        </select> · Swedish VAT included
       </p>
-      <div id="products" class="plans"></div>
-      <p class="muted">
-        Prices include 25% Swedish VAT. Yearly is two months cheaper than monthly;
-        the self-hosted licence includes 12 months of updates and renews separately.
+      <div id="products" class="tiers"></div>
+
+      <details class="compare-wrap">
+        <summary>Compare the three plans</summary>
+        <div class="table-scroll">
+          <table class="compare">
+            <thead>
+              <tr><th scope="col">What you get</th><th scope="col">Free</th><th scope="col">Cloud</th><th scope="col">Self-hosted</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Duplicate finding, merging, bulk edit, export</th><td data-label="Free">yes</td><td data-label="Cloud">yes</td><td data-label="Self-hosted">yes</td></tr>
+              <tr><th scope="row">Projects, notes, consent records kept between devices</th><td data-label="Free">no</td><td data-label="Cloud">yes</td><td data-label="Self-hosted">yes</td></tr>
+              <tr><th scope="row">Shared with colleagues</th><td data-label="Free">no</td><td data-label="Cloud">yes</td><td data-label="Self-hosted">only if you share the folder</td></tr>
+              <tr><th scope="row">Where the data lives</th><td data-label="Free">nowhere</td><td data-label="Cloud">this server</td><td data-label="Self-hosted">your machine</td></tr>
+              <tr><th scope="row">Who runs it</th><td data-label="Free">you</td><td data-label="Cloud">this service</td><td data-label="Self-hosted">you, with a licence key</td></tr>
+              <tr><th scope="row">Updates</th><td data-label="Free">as released</td><td data-label="Cloud">included</td><td data-label="Self-hosted">12 months, then renew</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <p class="muted small">
+        The self-hosted licence includes 12 months of updates and renews separately.
+        Cloud billing can be stopped at any time, and what you already stored keeps
+        working read-only until you come back.
       </p>
-      <table class="compare">
-        <tr><th></th><th>Free (plugin only)</th><th>Cloud</th><th>Self-hosted licence</th></tr>
-        <tr><td>Duplicate finding, merging, bulk edit, export</td><td>yes</td><td>yes</td><td>yes</td></tr>
-        <tr><td>Projects, notes, consent records kept between devices</td><td>no</td><td>yes</td><td>yes</td></tr>
-        <tr><td>Shared with colleagues</td><td>no</td><td>yes</td><td>only if you share the folder</td></tr>
-        <tr><td>Where the data lives</td><td>nowhere</td><td>this server</td><td>your machine</td></tr>
-        <tr><td>Who runs it</td><td>you</td><td>this service</td><td>you, with a licence key</td></tr>
-        <tr><td>Updates</td><td>as released</td><td>included</td><td>12 months, then renew</td></tr>
-      </table>
     </section>
 
     <section id="account" hidden>
       <h2>Your account</h2>
+      <p id="account-note" class="notice" hidden></p>
       <dl>
         <dt>Email</dt><dd data-field="email">—</dd>
         <dt>Plan</dt><dd data-field="plan">—</dd>
@@ -180,7 +195,7 @@
     </p>
     <p class="muted">
       <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> ·
-      <a href="/imprint">Imprint</a> · <a href="mailto:hello@fyrhaven.com">hello@fyrhaven.com</a>
+      <a href="/imprint">Imprint</a> · <a href="/changelog">Changelog</a> · <a href="mailto:hello@fyrhaven.com">hello@fyrhaven.com</a>
     </p>
   </footer>
 

@@ -6,3 +6,6 @@
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# The self-hosted archive is a release asset, not a committed file.
+dist/

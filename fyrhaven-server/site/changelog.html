@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What is new — Fyrhaven</title>
+  <meta name="description" content="What changed on the Fyrhaven record server, newest first. The plugin has its own release notes.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Fyrhaven">
+  <meta property="og:url" content="https://fyrhaven.com/changelog">
+  <meta property="og:title" content="What is new — Fyrhaven">
+  <meta property="og:description" content="What changed on the record server, newest first.">
+  <meta property="og:image" content="https://fyrhaven.com/banner.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="What is new — Fyrhaven">
+  <meta name="twitter:image" content="https://fyrhaven.com/banner.png">
+  <meta name="theme-color" content="#0E2233">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/site.css">
+</head>
+<body>
+  <header>
+    <strong><a href="/">Fyrhaven</a></strong>
+    <nav><a class="quiet-link" href="/">Back to the shop</a></nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Changelog</p>
+      <h1>What is new on the server</h1>
+      <p class="lead">
+        Every change to the service your records live on, newest first. The plugin
+        keeps its own release notes — what changes inside the webmail does not belong
+        here.
+      </p>
+      <p class="muted small">
+        Anything a customer has to do about a change is said in the entry. So far,
+        nothing here has needed a migration by hand.
+      </p>
+    </section>
+
+    <section class="changelog">
+      <article>
+        <h2><span class="version">1.16.1</span> <time datetime="2026-11-06">6 November 2026</time></h2>
+        <ul>
+          <li><strong>This page had no link preview.</strong> Its <code>og:image</code>
+            was a relative <code>.svg</code>, and no crawler resolves a relative path or
+            renders an SVG — so a shared link expanded to nothing. It is an absolute PNG
+            now, with the Twitter spelling beside the Open Graph one, and both are pinned
+            by tests: a broken card fails silently, which is the worst way to fail.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h2><span class="version">1.16.0</span> <time datetime="2026-11-06">6 November 2026</time></h2>
+        <ul>
+          <li><strong>Records can live in a bucket.</strong> A workspace's storage is SQLite
+            or any S3-compatible bucket, chosen from the panel's Usage tab.</li>
+          <li><strong>The move is checked both ways.</strong> A migration writes every record,
+            reads it back and compares before switching the workspace over; a write that
+            quietly truncates aborts the move and leaves the original provider in place.</li>
+          <li>A bucket that answers with the first page of keys no longer looks complete:
+            the listing follows the continuation token.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h2><span class="version">1.15.0</span> <time datetime="2026-11-06">6 November 2026</time></h2>
+        <ul>
+          <li>The S3 client's contract is pinned by tests — the signature, the paging, the
+            encoding of a key — so a bucket provider cannot change behaviour quietly.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h2><span class="version">1.14.3</span> <time datetime="2026-11-06">6 November 2026</time></h2>
+        <ul>
+          <li><code>robots.txt</code> and <code>sitemap.xml</code>, so the public pages are
+            indexable and the private ones are not.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h2><span class="version">1.14.0</span> <time datetime="2026-11-05">5 November 2026</time></h2>
+        <ul>
+          <li>An erasure finishes even when the bucket refuses: the record leaves the
+            workspace, and the report names the object left behind instead of failing the
+            whole request.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h2><span class="version">1.12.0</span> <time datetime="2026-11-04">4 November 2026</time></h2>
+        <ul>
+          <li>Prices in more than one currency, stored as prices rather than converted at
+            checkout — a SEK price is a number somebody chose, not a rate.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h2><span class="version">1.10.0</span> <time datetime="2026-11-03">3 November 2026</time></h2>
+        <ul>
+          <li>Moving a licence is a three-step flow with a signed release code, rather than a
+            form that prints the key again and hopes.</li>
+        </ul>
+      </article>
+
+      <article>
+        <h2><span class="version">1.9.0</span> <time datetime="2026-11-03">3 November 2026</time></h2>
+        <ul>
+          <li>Terms, privacy and imprint as real pages, and a comparison that answers the
+            question people actually ask: where does my data live?</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <p class="muted">
+      This service holds your records encrypted at rest with a key it keeps; the
+      operator can read them. What that means is in the <a href="/privacy">privacy
+      page</a>.
+    </p>
+    <p class="muted">
+      <a href="/">Shop</a> · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> ·
+      <a href="/imprint">Imprint</a> · <a href="mailto:hello@fyrhaven.com">hello@fyrhaven.com</a>
+    </p>
+  </footer>
+</body>
+</html>
