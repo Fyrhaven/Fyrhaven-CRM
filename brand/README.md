@@ -26,17 +26,24 @@ are served by the store itself.
   click, not a step in `npm run release`.
 * **Org avatar / favicon** — `fyrhaven-mark.png` (512×512) or the SVG where SVG
   is accepted.
-* **Profile headers** — `fyrhaven-header.png` is the upload: 2048×460, which is
-  the 40:9 band Gravatar actually renders, so nothing is cropped twice (an
-  earlier 2:1 version was, and lost the bottom line).
+* **Profile headers** — `fyrhaven-header.png`: 2048×460, the 40:9 band Gravatar
+  renders, so nothing is cropped twice. **Beam only, for now** — the wordmark,
+  tagline and capability line were taken out on purpose: settle the light, then
+  put the words back around it.
 
-  Three rules, each from putting a version on a real profile:
-  **no mark in the artwork** — the profile picture is the mark and sits on top of
-  the left ~30%, so a drawn one is a second lighthouse behind the first;
-  **keep the text out of the left 30%**, which the avatar covers;
-  **the beam starts behind the avatar and is blurred**, with the light in the top
-  band and the words in the bottom one. A beam with a sharp edge reads as a band
-  of paint, and a beam that starts outside the circle leaves a visible seam.
+  What the artwork is: a fan of light that leaves the lantern and runs off the
+  right edge. Four rules, each from a version that failed on a real profile:
+  **no mark in the cover** (the profile picture is the mark); **the beam starts at
+  x=200**, far enough left to be hidden behind the avatar, or its blurred ramp
+  shows as a blob at the circle's edge; **the beam sits at ~60% of the height**,
+  because the avatar is not centred on the band but pushed down — its centre is
+  about 63% of the way down, which is where the lantern ends up; and **the near
+  end is narrow, widening to the right**, which is what light does. Broad at the
+  lamp and thinning out reads as a band of paint.
+
+  Two filters, not one: a soft halo for the spread (`soft`, blur 14) and a tight
+  bright core (`tight`, blur 5). A single blur can only do one of those, and the
+  diluted result goes mustard instead of yellow.
 * **Printing one ink** — `fyrhaven-mark-mono.svg`, never a file with a field.
 
 ## Palette

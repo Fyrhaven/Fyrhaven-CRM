@@ -1,55 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 460" role="img" aria-label="Fyrhaven — profile header">
-  <title>Fyrhaven — profile header (Gravatar cover, 40:9)</title>
-  <!-- Drawn at the ratio Gravatar displays (about 40:9), so nothing is cropped a
-       second time. What earlier versions got wrong, each visible only on a real
-       profile:
+  <title>Fyrhaven — profile header (beam study)</title>
+  <!-- Beam only, for now. The wordmark, tagline and capability line were taken
+       out on purpose: settle the light first, then put the words back around it.
 
-       1. No mark in the artwork. The profile picture is the mark and it covers
-          the left ~30%, so a drawn one is a second lighthouse behind the first.
-       2. The beam is not a wash over the wordmark. It leaves the avatar's lamp
-          wide, climbs slightly, and is gone before the text starts: light in the
-          top band, words in the bottom band, no overlap between them. -->
+       The beam is a **fan**: narrow where it leaves the lamp, wider at the far
+       edge, which is what light does. Earlier versions had it the other way up —
+       broad at the lamp and thinning out — and read as a band of colour rather
+       than a beam.
+
+       Its left edge starts at x=200, well behind the profile picture, so the place
+       where it begins is never visible. It sits at ~60% of the height, which is
+       where the lantern is on a real profile: the avatar is not centred on the
+       band but pushed down, its centre about 63% of the way down the cover. -->
   <defs>
-    <linearGradient id="seaH3" x1="0" y1="0" x2="0" y2="1">
+    <!-- flat: the avatar's own tile is #0E2233, so a strong gradient shows its edge -->
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0E2233"/>
       <stop offset="1" stop-color="#0C1E2E"/>
     </linearGradient>
-    <!-- the beam keeps its strength while it is near the lamp, then gives way -->
-    <linearGradient id="beamBroad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#FFDD8F" stop-opacity="0.22"/>
-      <stop offset="0.5" stop-color="#FFD583" stop-opacity="0.08"/>
-      <stop offset="1" stop-color="#FFD583" stop-opacity="0.02"/>
+    <!-- yellow, not amber: amber at low alpha over near-black goes brown -->
+    <linearGradient id="fan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFD400" stop-opacity="0.42"/>
+      <stop offset="0.55" stop-color="#FFD83D" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.025"/>
     </linearGradient>
-    <!-- light has no edge: without this the beam reads as a band of brown paint -->
-    <filter id="soft" x="-15%" y="-60%" width="130%" height="220%">
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFE21A" stop-opacity="0.95"/>
+      <stop offset="0.5" stop-color="#FFD400" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.04"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFF0B8" stop-opacity="0.32"/>
+      <stop offset="0.6" stop-color="#FFD400" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#FFD400" stop-opacity="0"/>
+    </radialGradient>
+    <!-- light has no edge -->
+    <filter id="soft" x="-15%" y="-80%" width="130%" height="260%">
       <feGaussianBlur stdDeviation="14"/>
     </filter>
-    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#FFE7B8" stop-opacity="0.26"/>
-      <stop offset="0.55" stop-color="#FFD583" stop-opacity="0.10"/>
-      <stop offset="1" stop-color="#F2B441" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="beamCore" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#FFE7B8" stop-opacity="0.34"/>
-      <stop offset="0.45" stop-color="#FFD583" stop-opacity="0.12"/>
-      <stop offset="1" stop-color="#FFD583" stop-opacity="0.03"/>
-    </linearGradient>
+    <filter id="tight" x="-15%" y="-120%" width="130%" height="340%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
   </defs>
 
-  <rect width="2048" height="460" fill="url(#seaH3)"/>
+  <rect width="2048" height="460" fill="url(#field)"/>
 
-  <!-- the beam: wide where it leaves the avatar, climbing away from the text -->
   <g filter="url(#soft)">
-    <polygon points="430,112 2048,74 2048,232 430,272" fill="url(#beamBroad)"/>
-    <polygon points="430,132 2048,92 2048,206 430,246" fill="url(#beamCore)"/>
-    <!-- the lamp's bloom, just outside the avatar: it hides the beam's cut edge -->
-    <ellipse cx="520" cy="196" rx="225" ry="130" fill="url(#bloom)"/>
+    <polygon points="200,224 2048,168 2048,348 200,328" fill="url(#fan)"/>
   </g>
-
-  <text x="740" y="352" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
-        font-size="84" font-weight="700" letter-spacing="-2" fill="#F7F9FA">fyrhaven</text>
-  <text x="742" y="404" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
-        font-size="27" font-weight="400" fill="#A9BCC9">Your mail. Your records. Your rock.</text>
-  <text x="743" y="438" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
-        font-size="17" font-weight="500" letter-spacing="3" fill="#F2B441">MAIL HOSTING · CRM · SELF-HOSTED</text>
+  <g filter="url(#tight)">
+    <polygon points="200,246 2048,204 2048,312 200,308" fill="url(#core)"/>
+    <ellipse cx="470" cy="278" rx="150" ry="70" fill="url(#lamp)"/>
+  </g>
 </svg>
