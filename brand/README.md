@@ -106,6 +106,19 @@ by hand once (*New repository*, owner `Fyrhaven`, name `.github`, visibility
 **public**) and re-run the script; it fills it and reads its own writes back. That
 is the whole difference between the two routes.
 
+Two traps this page has already sprung, both of which look fine while you are
+signed in:
+
+* **The images must live in the `.github` repository.** Pointing them at
+  `Fyrhaven-CRM/brand/…` — which is where the logo actually is — renders for the
+  author and 404s for every visitor, because that repository is private. The
+  script copies the lockups into `profile/` and the copy references them
+  relatively.
+* **`readme.md` is not `README.md`.** GitHub renders the lowercase spelling
+  today, but its documentation names the other one, so a second copy beside it is
+  a page that exists twice and drifts. The script writes the documented name and
+  removes the variant.
+
 ## The repository page on GitHub
 
 The description, website and topics are the only part of the branding that is not
