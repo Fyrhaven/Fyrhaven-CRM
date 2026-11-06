@@ -1,0 +1,73 @@
+name: Bug report
+description: The plugin, or the record server, does not do what the documentation says it does
+title: '[bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The two details that decide most reports are the
+        **version** and the **host** — Bulwark Mail and Stalwart change what the plugin
+        is allowed to call, and a missing host API is a different bug from a wrong merge.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead. Steps are worth more than a summary.
+      placeholder: |
+        1. Open Contact Manager → Duplicates
+        2. Select the first group and press Review…
+        3. Expected …, got …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Fyrhaven CRM version
+      description: From Settings → Plugins, or the release you downloaded. For the server, the answer to `GET /version`.
+      placeholder: fyrhaven-crm 1.60.0
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Webmail and mail server
+      description: The Bulwark Mail version, and the Stalwart version behind it.
+      placeholder: Bulwark Mail 1.x, Stalwart 1.x
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where records live
+      description: A record kept in a browser and one kept on a server fail differently, so this matters.
+      options:
+        - The webmail only (no record server configured)
+        - A record server I run myself
+        - The hosted record server
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Anything in the browser console
+      description: >-
+        At activation the plugin logs one line when a host API is missing, and that line is
+        usually the whole answer. Paste it here rather than a screenshot — it is searchable.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending
+      options:
+        - label: I am not pasting a real contact's private data. If you must show a card, change the names and addresses.
+          required: true

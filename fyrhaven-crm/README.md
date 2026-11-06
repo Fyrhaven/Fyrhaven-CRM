@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../brand/fyrhaven-lockup-dark.svg">
+    <img src="../brand/fyrhaven-lockup.svg" alt="Fyrhaven" width="250">
+  </picture>
+</p>
+
 # Fyrhaven CRM — a Bulwark Mail plugin
 
 Fyrhaven CRM — find, review and merge **duplicate contacts** across all address books, drawn
