@@ -91,8 +91,10 @@ use the hosted one.
 ```
 Fyrhaven-CRM/
 ├── brand/                    # logo, lockup, social card, palette — and the rules for using them
+│   └── org-profile.md        # the copy of github.com/Fyrhaven, published by a script
 ├── scripts/
 │   ├── brand-github-page.mjs # description, website and topics — the page settings the API can set
+│   ├── publish-org-profile.mjs # the organisation page: Fyrhaven/.github/profile/README.md
 │   └── migrate-to-org.mjs    # how this repository moved to the Fyrhaven org, and the link sweep
 ├── fyrhaven-crm/             # the plugin
 │   ├── manifest.json         # the contract with the host: permissions, settings, every string

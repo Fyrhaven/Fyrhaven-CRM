@@ -84,6 +84,28 @@ The wordmark is set in a system humanist stack (`Inter`, `Segoe UI`, `system-ui`
 because no typeface is licensed yet. When one is, replace the two `<text>` nodes in
 `fyrhaven-lockup.svg` with outlined paths so the logo stops depending on a font.
 
+## The organisation page
+
+`github.com/Fyrhaven` is rendered from a **public repository named `.github`** in
+the organisation, at `profile/README.md`. That name is the mechanism, not a typo —
+there is no org-level setting for the page, and no API that writes it.
+
+The copy lives here, once: [`org-profile.md`](org-profile.md). The two lockups
+travel with it, because the page's own images are relative. Publishing is one
+command — it creates the repository on the first run and updates the files on
+every run after:
+
+```bash
+node scripts/publish-org-profile.mjs            # the plan, changes nothing
+node scripts/publish-org-profile.mjs --apply    # create or update, then read back
+```
+
+Creating a repository in an organisation needs *Administration: write* — the same
+permission the page settings below need. Until it is granted, make the repository
+by hand once (*New repository*, owner `Fyrhaven`, name `.github`, visibility
+**public**) and re-run the script; it fills it and reads its own writes back. That
+is the whole difference between the two routes.
+
 ## The repository page on GitHub
 
 The description, website and topics are the only part of the branding that is not
