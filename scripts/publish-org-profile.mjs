@@ -48,6 +48,23 @@ const shaOf = (file) => {
   const answer = gh(['api', `/repos/${REPO}/contents/${file}`, '--jq', '.sha']);
   return answer.ok ? answer.out : null;
 };
+
+/**
+ * Files already in `profile/`, so a name that differs only in case is found.
+ * It happens: GitHub renders `profile/readme.md` today, but `README.md` is the
+ * name its documentation gives, and writing one beside the other leaves two
+ * copies of the page to drift apart.
+ */
+const profileFiles = () => {
+  const answer = gh(['api', `/repos/${REPO}/contents/profile`, '--jq', '.[].name']);
+  return answer.ok ? answer.out.split('\n').filter(Boolean) : [];
+};
+const caseVariantsOf = (target) => {
+  const base = target.split('/').pop().toLowerCase();
+  return profileFiles()
+    .filter((name) => name.toLowerCase() === base && name !== target.split('/').pop())
+    .map((name) => `profile/${name}`);
+};
 const source = (file) => readFileSync(path.join(ROOT, file));
 const b64 = (file) => source(file).toString('base64');
 
@@ -58,6 +75,10 @@ function plan() {
   for (const [target, from] of FILES) {
     const action = repoExists() && shaOf(target) ? 'update' : 'create';
     say(`    ${target.padEnd(26)} <- ${from}  (${action})`);
+  }
+  const variants = repoExists() ? FILES.flatMap(([target]) => caseVariantsOf(target)) : [];
+  for (const variant of variants) {
+    say(`    remove ${variant.padEnd(19)} (same file, other spelling: two copies would drift)`);
   }
   say('');
   say('  The page appears at https://github.com/' + ORG);
@@ -106,7 +127,41 @@ for (const [target, from] of FILES) {
     failed = true;
   }
 }
-if (failed) process.exit(1);
+// A copy of the page under another spelling is not a write, it is a removal:
+// leaving both means the next edit changes one of them and the page shows the other.
+for (const [target] of FILES) {
+  for (const variant of caseVariantsOf(target)) {
+    const sha = shaOf(variant);
+    if (!sha) continue;
+    const removed = gh([
+      'api', '-X', 'DELETE', `/repos/${REPO}/contents/${variant}`,
+      '-f', `message=org profile: remove ${variant}, the documented name is ${target}`,
+      '-f', `sha=${sha}`,
+    ]);
+    say(`  ${removed.ok ? 'removed' : 'FAILED '} ${variant}`);
+    if (!removed.ok) {
+      say(`    ${removed.err}`);
+      failed = true;
+    }
+  }
+}
+
+if (failed) {
+  // The distinction that costs the most time: a public repository can be *read*
+  // by an app that is not installed on it, so "I can see it" and "I can write to
+  // it" are different permissions and the 403 says neither.
+  const installed = gh(['api', '/installation/repositories', '--paginate', '--jq', '.repositories[].full_name']);
+  const onIt = installed.ok ? installed.out.split('\n').filter(Boolean) : [];
+  if (installed.ok && !onIt.includes(REPO)) {
+    say('');
+    fail(`this app can read ${REPO} (it is public) but not write to it.`);
+    say(`   it is installed on: ${onIt.join(', ') || '(nothing)'}`);
+    say('   Fix, in the browser — same page as the other permissions, one click:');
+    say(`     https://github.com/organizations/${ORG}/settings/installations`);
+    say(`     -> the Cline app -> Configure -> Repository access -> add ${REPO}`);
+  }
+  process.exit(1);
+}
 
 step('read back');
 for (const [target, from] of FILES) {
@@ -115,6 +170,38 @@ for (const [target, from] of FILES) {
   say(`  ${live === b64(from) ? 'ok      ' : 'MISMATCH'} ${target}`);
   if (live !== b64(from)) failed = true;
 }
+say('');
+step('what a visitor sees');
+try {
+  const page = await (await fetch(`https://github.com/${ORG}`)).text();
+  const hasTagline = page.includes('Your mail. Your records. Your rock.');
+  say(`  ${hasTagline ? 'ok     ' : 'MISSING'} the page carries the README`);
+  if (!hasTagline) failed = true;
+  // The images are the part that fails quietly: a page can look written and
+  // still show a broken image, because the file it points at is in a private
+  // repository that a visitor cannot open.
+  if (page.includes('Fyrhaven-CRM/blob/')) {
+    say('  WARNING the page\'s images point into another repository');
+    say('          (Fyrhaven-CRM, which is private): visitors get a broken image.');
+    say('          They must live in this one, referenced relatively.');
+    failed = true;
+  }
+} catch (error) {
+  say(`  could not read the page: ${error.message}`);
+}
+
+for (const [target] of FILES) {
+  const url = `https://raw.githubusercontent.com/${REPO}/main/${target}`;
+  try {
+    const response = await fetch(url);
+    say(`  ${response.status === 200 ? 'ok     ' : 'BROKEN '} ${target} (${response.status})`);
+    if (response.status !== 200) failed = true;
+  } catch (error) {
+    say(`  BROKEN  ${target}: ${error.message}`);
+    failed = true;
+  }
+}
+
 say('');
 say(`The page is https://github.com/${ORG} — GitHub renders it from`);
 say(`${REPO}/profile/README.md, and the repository must stay public for it to show.`);
