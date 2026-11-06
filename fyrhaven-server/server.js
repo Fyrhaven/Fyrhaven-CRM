@@ -428,7 +428,7 @@ export function storeOps(db, keys, { s3 = null, now = () => Date.now() } = {}) {
 const SITE_FILES = {
   '/': 'index.html', '/index.html': 'index.html', '/site.js': 'site.js', '/site.css': 'site.css',
   '/admin': 'admin.html', '/admin.js': 'admin.js',
-  '/favicon.svg': 'favicon.svg', '/banner.svg': 'banner.svg',
+  '/favicon.svg': 'favicon.svg', '/banner.svg': 'banner.svg', '/banner.png': 'banner.png',
   '/terms': 'terms.html', '/privacy': 'privacy.html', '/imprint': 'imprint.html',
   '/robots.txt': 'robots.txt', '/sitemap.xml': 'sitemap.xml',
 };
@@ -440,6 +440,7 @@ const SITE_TYPES = {
   'admin.js': 'text/javascript; charset=utf-8',
   'favicon.svg': 'image/svg+xml',
   'banner.svg': 'image/svg+xml',
+  'banner.png': 'image/png',
   'terms.html': 'text/html; charset=utf-8',
   'privacy.html': 'text/html; charset=utf-8',
   'imprint.html': 'text/html; charset=utf-8',
@@ -451,7 +452,10 @@ const SITE_DIR = fileURLToPath(new URL('./site/', import.meta.url));
 /** One file from `site/`, or null. Names come from SITE_FILES, never the URL. */
 async function siteFile(name) {
   try {
-    return await readFile(new URL(name, `file://${SITE_DIR}`), 'utf8');
+    // Read with NO encoding. The social card is a PNG, and decoding it as utf8
+    // replaces every byte that is not valid text — the response is a 200 with a
+    // broken image in it, which is the worst kind of wrong: nothing logs.
+    return await readFile(new URL(name, `file://${SITE_DIR}`));
   } catch {
     return null;
   }

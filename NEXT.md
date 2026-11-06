@@ -9,7 +9,7 @@ re-learn the hard way".
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.16.0** — 81 tests green |
+| Record server | `fyrhaven-server` **1.16.1** — 83 tests green |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
 | Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
@@ -70,7 +70,7 @@ reviewer for 980 keys before `sv` is worth adding).
 ```bash
 cd fyrhaven-crm && npm test          # builds, then 1 215 tests
 cd fyrhaven-crm && npm run release   # tag + GitHub release + ZIP (needs clean main)
-cd fyrhaven-server && node --test    # 69 tests
+cd fyrhaven-server && node --test    # 83 tests
 ```
 
 Deploy the store (only that container — never touch the others):
@@ -82,6 +82,13 @@ ssh -i .ssh/id_ed25519 -p 37281 zyntrax@mailz.se \
 ```
 
 Then **verify the live endpoint**, not the file: `curl https://fyrhaven.com/version`.
+
+The same rebuild carries 1.16.1, which fixes the shop's link preview: its
+`og:image` was a **relative `.svg`**, and a crawler resolves no relative path and
+renders no SVG, so a shared link had no card at all. It is now an absolute
+`/banner.png`, served from `site/banner.png`, and pinned by two tests. After the
+deploy, check it with `curl -s https://fyrhaven.com/ | grep og:image` and
+`curl -sI https://fyrhaven.com/banner.png` (`200 image/png`).
 
 ## The repository moved — done (2026-11-06)
 

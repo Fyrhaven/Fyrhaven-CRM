@@ -368,6 +368,29 @@ describe('accounts, sessions and the site (#148)', () => {
     assert.notEqual((await fetch(`${url}/site/../server.js`)).status, 200);
   });
 
+  it('serves the social card as a PNG, not a re-encoded string', async () => {
+    const response = await fetch(`${url}/banner.png`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /image\/png/);
+    // The four-byte PNG signature is the point of the test: a file read with an
+    // encoding still answers 200, with an image that will not decode anywhere.
+    assert.deepEqual([...bytes.slice(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+  });
+
+  it('advertises an absolute PNG for the link preview', async () => {
+    const html = await (await fetch(`${url}/`)).text();
+    const image = /<meta property="og:image" content="([^"]+)"/.exec(html);
+
+    assert.ok(image, 'the landing page declares an og:image');
+    // A crawler resolves nothing and renders no SVG, so a relative .svg path is
+    // a card that silently never appears where the link is shared.
+    assert.match(image[1], /^https:\/\/fyrhaven\.com\/banner\.png$/);
+    assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
+    assert.match(html, /<meta property="og:image:width" content="1200">/);
+  });
+
   it('creates an account on a trial and hands out a session', async () => {
     const answer = await signup();
 
