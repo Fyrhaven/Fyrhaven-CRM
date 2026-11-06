@@ -9,7 +9,7 @@ re-learn the hard way".
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.16.0** — 80 tests green |
+| Record server | `fyrhaven-server` **1.16.0** — 81 tests green |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
 | Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
