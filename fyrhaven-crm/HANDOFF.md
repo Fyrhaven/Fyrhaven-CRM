@@ -1719,14 +1719,14 @@ An *How to read this* legend above the groups explains every indicator.
 
 The roadmap lives on GitHub, not in this file:
 
-- **Milestones** — https://github.com/zyntrax/bulwark-plugins/milestones
+- **Milestones** — https://github.com/Fyrhaven/Fyrhaven-CRM/milestones
   group the feature issues. Their titles (`v1.2.0` … `v2.0.0`) are the
   **originally planned releases**, not the current release train — the plugin is
   at v1.43.0. Read them as phases, and read each milestone's description, which
   records what has shipped and what remains.
-- **Feature issues** — https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap
+- **Feature issues** — https://github.com/Fyrhaven/Fyrhaven-CRM/issues?q=is%3Aissue+label%3Aroadmap
   are the individual todos, grouped by area and milestone.
-- **Pinned roadmap issue** — https://github.com/zyntrax/bulwark-plugins/issues/40
+- **Pinned roadmap issue** — https://github.com/Fyrhaven/Fyrhaven-CRM/issues/40
   is the top-level vision with links to every planned feature; its checkboxes
   mirror the issues (ticked when the issue is **closed**).
 
@@ -1975,7 +1975,7 @@ fyrhaven-crm/
 longer just duplicate cleanup — it is the contact/CRM layer of Bulwark. The
 full map of eWay-CRM modules to host capabilities, the phases and the
 non-goals live in **issue #54**
-(https://github.com/zyntrax/bulwark-plugins/issues/54), linked from the
+(https://github.com/Fyrhaven/Fyrhaven-CRM/issues/54), linked from the
 roadmap issue #40.
 
 Hard limits to remember before promising CRM data — **corrected against the
@@ -2213,7 +2213,7 @@ timer hook. v1.4.0 is complete except **#18**, which needs message bodies —
 > asserting "every record key goes through `read`/`write`" would catch).
 
 ## GitHub Integration
-- Repository: **zyntrax/bulwark-plugins** (private). The plugin lives in
+- Repository: **Fyrhaven/Fyrhaven-CRM** (private). The plugin lives in
   `fyrhaven-crm/`; there is no separate `bulwark-addons` repository.
 - **Branches**: `main` is the release branch and carries the current version.
   `contact-manager` mirrors the plugin work and is kept in step with `main`.
@@ -2222,7 +2222,7 @@ timer hook. v1.4.0 is complete except **#18**, which needs message bodies —
   a feature branch is deleted once its PR has landed, so the branch list stays
   short. Deleting one loses nothing: its commits are in `main` through the
   merge, and the PR keeps the discussion.
-- **Roadmap**: https://github.com/zyntrax/bulwark-plugins/issues/40 is the
+- **Roadmap**: https://github.com/Fyrhaven/Fyrhaven-CRM/issues/40 is the
   single roadmap issue; it links every feature issue, and its checkboxes mirror
   the issues (ticked when closed). Milestones `Contact Manager v1.2.0` …
   `v2.0.0` group them — the titles are the originally planned releases (the

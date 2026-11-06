@@ -87,7 +87,7 @@ price of a server-held key, and it is stated here rather than implied away.
 
 If a customer's data must be unreadable by the operator, the key has to be held
 **by the customer** instead — a passphrase only they have, or a key kept on their
-own server. Issue [#68](https://github.com/zyntrax/bulwark-plugins/issues/68)
+own server. Issue [#68](https://github.com/Fyrhaven/Fyrhaven-CRM/issues/68)
 carries that design and the host change it needs.
 
 **What is visible even so:** the *shape* of the data — which workspace, which

@@ -1893,6 +1893,6 @@ First public release.
   e-mail address, phone number and name.
 - **German translation** — every string is available in `en` and `de`.
 
-[1.2.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.2.0
-[1.1.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.1.0
-[1.0.0]: https://github.com/zyntrax/bulwark-plugins/releases/tag/contact-manager-v1.0.0
+[1.2.0]: https://github.com/Fyrhaven/Fyrhaven-CRM/releases/tag/contact-manager-v1.2.0
+[1.1.0]: https://github.com/Fyrhaven/Fyrhaven-CRM/releases/tag/contact-manager-v1.1.0
+[1.0.0]: https://github.com/Fyrhaven/Fyrhaven-CRM/releases/tag/contact-manager-v1.0.0
