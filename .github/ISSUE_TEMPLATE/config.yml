@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation — the plugin, the server, and the rules for changing them
+    url: https://github.com/Fyrhaven/Fyrhaven-CRM#readme
+    about: How it works, what it needs from the host, and what it deliberately does not do.
+  - name: Fyrhaven — the hosted record server, pricing, legal pages
+    url: https://fyrhaven.com
+    about: For everything that is not a bug in this repository.

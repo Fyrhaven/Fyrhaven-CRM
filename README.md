@@ -1,126 +1,155 @@
-# Fyrhaven — Bulwark Mail plugins
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/fyrhaven-lockup-dark.svg">
+    <img src="brand/fyrhaven-lockup.svg" alt="Fyrhaven — mail · records · people" width="330">
+  </picture>
+</p>
 
-Plugins for [Bulwark Mail](https://github.com/zyntrax/bulwark) — the webmail
-built on Stalwart. Each plugin is published here with its **source** and its
-**build script**; installable ZIPs are attached to
-[GitHub Releases](https://github.com/Fyrhaven/Fyrhaven-CRM/releases).
+<h3 align="center">Your mail. Your records. Your rock.</h3>
 
-The flagship plugin here is **Fyrhaven CRM** — contacts, companies, projects and
-time for Bulwark Mail (it began as a duplicate finder and outgrew the name). This
-repository also carries the **record server** those records live on. A record the plugin invents cannot live in a browser and the
-webmail host has nowhere to put it, so it lives on a small dedicated service —
-see [`fyrhaven-server/`](fyrhaven-server/) and issue
-[#68](https://github.com/Fyrhaven/Fyrhaven-CRM/issues/68).
+<p align="center">
+  Contacts, companies, projects and time inside your own mail server.<br>
+  A CRM plugin for <a href="https://github.com/bulwarkmail/webmail">Bulwark Mail</a> on top of
+  <a href="https://stalw.art">Stalwart</a> — and the small record server those records live on.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Fyrhaven/Fyrhaven-CRM/releases"><img alt="Fyrhaven CRM for Bulwark Mail" src="https://img.shields.io/badge/Bulwark%20Mail-plugin-0E2233?style=flat-square"></a>
+  <a href="https://stalw.art"><img alt="Stalwart 1.0 and later" src="https://img.shields.io/badge/Stalwart-1.0%2B-0E2233?style=flat-square"></a>
+  <a href="fyrhaven-server/"><img alt="Self-hosted or cloud" src="https://img.shields.io/badge/records-self--hosted%20or%20cloud-C8453B?style=flat-square"></a>
+  <a href="fyrhaven-crm/manifest.json"><img alt="English and German" src="https://img.shields.io/badge/languages-EN%20%C2%B7%20DE-5B7382?style=flat-square"></a>
+</p>
 
 ---
 
-## Plugins
+## Why
 
-| Plugin | Version | What it does | Install |
-|---|---|---|---|
-| [**Contact Manager**](fyrhaven-crm/) | 1.60.0 | Find, review and merge duplicate contacts across all address books. One *Contact Manager* page with *Duplicates*, *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* sub-tabs, command palette scan, a duplicate digest when you come back, bulk merge by company or email domain, smarter name matching (nicknames, initials, transliteration, phonetic surnames), duplicate hints in the contact details and while saving, per-address-book duplicate policies, ignore rules (domains, tags, companies) and protected fields, per-address-book roles (viewer/editor/merger/admin, advisory) that disable the actions they do not allow, a full contact editor with create/edit/delete, a 360° contact profile (recent messages, meetings, files with downloads, open tasks with overdue flags, follow-up tasks you can create from the profile, private notes, company rollup, duplicate check) and company profiles, contact groups (distribution lists) as real contact cards with member search and a duplicates-in-a-list warning, a normalisation rules engine (built-in and user-defined rules for names, companies, phones and emails, previewed before they are applied, run on demand, on import and on edit), a change history of the plugin's own writes with the rollback that is still live, a GDPR toolkit (subject-access export, consent records with expiry, and erase/anonymise with a proof-of-deletion report), smart search with `OR`/grouping and a saved search as a bulk scope, an automation rules engine (when/if/then rules over create, edit and import, with a dry run), local projects with milestones as tasks, time and expenses with billable totals and JSON export/import, a first-run *Getting started* guide (import, scan, policies), a *Follow-ups* block on the Overview that shows overdue tasks over every contact at once, a paged contacts list that keeps a large address book fast, smart lists from the command palette, in-app help with a search cheatsheet and keyboard shortcuts, CSV/vCard import with a per-contact decision for duplicates and export, nickname preservation, undo for merges, English and German. | [Latest release](https://github.com/Fyrhaven/Fyrhaven-CRM/releases/latest) |
+Anyone who has run a mail server for a few years has the same address book: the
+same person three times, because a client, an import and a phone each wrote
+their own card. Cleaning that up by hand is the reason people give up on
+contacts entirely.
 
----
+Fyrhaven CRM finds those cards, shows **exactly** what a merge would change
+before it changes anything, and — if the merge turns out wrong — undoes it. It
+is drawn with Bulwark's own UI kit, so it looks like part of the app rather than
+a page bolted onto it.
+
+Two rules hold everywhere, and they are what the test suite is really about:
+
+* **Never delete before the data is safe.** The kept contact is patched first;
+  if that write fails, the group is left untouched.
+* **A record the plugin invents belongs on a server, not in a browser tab.**
+  Notes, consent records and the plugin's other records survive clearing site
+  data and follow you to a second device, because they live on a server —
+  yours, or the one you pay for.
+
+## The two halves
+
+| | What it is | Where records live |
+|---|---|---|
+| **[Fyrhaven CRM](fyrhaven-crm/)**<br>`fyrhaven-crm` 1.60.0 | The plugin: duplicate detection and merge, a contact and company 360°, projects, time and expenses, health and retention, a GDPR toolkit, import and export, smart search | The webmail's own address books, plus — when configured — the record server |
+| **[fyrhaven-server](fyrhaven-server/)**<br>`fyrhaven-server` 1.16.0 | The record server: a small key/value service, no runtime dependencies, encrypted at rest, SQLite or an S3-compatible bucket | On the server — self-hosted, or the hosted tier |
+
+The plugin needs nothing but the webmail. The server is what turns it from a
+clean-up tool into a CRM that outlives one browser profile.
+
+## What the plugin does
+
+| Area | What you get |
+|---|---|
+| **Duplicates** | A scan across every address book, with a review dialog that shows every `+` it would add and `≠` it would leave alone. Undo after a merge, bulk merge by company or email domain, and a digest of what changed since your last visit |
+| **Contacts** | The whole address book, paged and searchable; a full editor; groups (distribution lists) as real cards; a 360° profile with recent messages, meetings, files, open tasks and private notes |
+| **Companies** | Company profiles with their people and contacts rolled up from the cards' organisations |
+| **Work** | Projects with milestones, time and expenses with billable totals, and follow-up tasks that are real host tasks — so they are searchable and survive a reload |
+| **Health & retention** | Rule-based contact health with a score per contact, staleness bands, and *export and delete* that writes the archive first |
+| **Privacy** | Private notes that are a record of their own (never a card field), consent records with expiry, subject-access export, and erase/anonymise with a proof-of-deletion report. Plus a history of the plugin's own writes, and the rollback that is still live |
+| **Matching** | Normalisation rules for names, companies, phones and emails; per-address-book policies, ignore rules and protected fields; and advisory per-book roles that disable actions they do not allow |
+| **Getting data in and out** | CSV and vCard import with a decision per duplicate and remembered column mappings; export as either format; smart search with `OR` and grouping, saved as lists you can act on |
+
+Everything is translated into **English and German**, and every surface is
+rendered with the host's own components.
+
+## Install
+
+1. Download `fyrhaven-crm.zip` from the
+   [latest release](https://github.com/Fyrhaven/Fyrhaven-CRM/releases/latest).
+2. In Bulwark Mail open **Admin → Plugins** (or **Settings → Plugins**, if your
+   administrator allows user uploads) and upload the ZIP.
+3. Confirm the permissions the plugin asks for.
+
+The ZIP holds `manifest.json` and `index.js` at its root — that is what the
+plugin loader expects, and the release script builds it from the tagged source
+so the download and the tag can never disagree.
+
+The plugin works on its own. To connect the record server, open
+**Settings → Fyrhaven CRM → Server and licence** and either point it at a server
+you run (see [`fyrhaven-server/LICENSING.md`](fyrhaven-server/LICENSING.md)) or
+use the hosted one.
 
 ## Repository layout
 
 ```
 Fyrhaven-CRM/
-├── README.md               # this file
-├── .gitignore
-├── .clinerules             # the rules for changing the code, and the contract
+├── brand/                    # logo, lockup, social card, palette — and the rules for using them
 ├── scripts/
-│   └── migrate-to-org.mjs  # how this repository moved to the Fyrhaven org, and the link sweep
-├── fyrhaven-crm/        # source of the Contact Manager plugin
-│   ├── manifest.json
-│   ├── package.json
-│   ├── vitest.config.mjs
-│   ├── CHANGELOG.md
-│   ├── README.md           # full documentation of the plugin
-│   ├── HANDOFF.md          # where the project stands and why
-│   ├── src/                # plugin source
-│   ├── test/               # vitest suite
-│   ├── test-utils/         # fake host API and UI-kit stand-in
-│   └── scripts/            # packaging and release scripts
-└── fyrhaven-server/ # the cloud store the plugin's records live on (#68)
-    ├── server.js           # the service — no dependencies, encrypted at rest
-    ├── server.test.js      # `node --test`
-    ├── Dockerfile
-    ├── docker-compose.yml  # the store + Caddy, which terminates TLS
-    ├── Caddyfile
-    └── README.md
+│   └── migrate-to-org.mjs    # how this repository moved to the Fyrhaven org, and the link sweep
+├── fyrhaven-crm/             # the plugin
+│   ├── manifest.json         # the contract with the host: permissions, settings, every string
+│   ├── src/                  # plugin source
+│   ├── test/                 # the suite — the expected behaviour, in executable form
+│   ├── scripts/              # packaging, release and ship
+│   └── CHANGELOG.md · README.md · HANDOFF.md
+└── fyrhaven-server/          # the record server
+    ├── server.js             # the service — no dependencies, encrypted at rest
+    ├── server.test.js        # `node --test`
+    ├── storage.js · s3.js    # SQLite, and the S3-compatible bucket backend
+    └── Dockerfile · docker-compose.yml · Caddyfile · site/
 ```
 
-**Installable ZIPs live on GitHub Releases.** `npm run release` builds the ZIP
-from the tagged source and attaches it to the release, so the download and the
-tag can never drift apart.
+## Documentation
 
----
+| Where | What it answers |
+|---|---|
+| [`fyrhaven-crm/README.md`](fyrhaven-crm/README.md) | How the plugin works: architecture, the host contract, the data model, and the detection and merge rules |
+| [`fyrhaven-crm/HANDOFF.md`](fyrhaven-crm/HANDOFF.md) | Where the project stands, what is blocked, and why past decisions were made |
+| [`fyrhaven-crm/CHANGELOG.md`](fyrhaven-crm/CHANGELOG.md) | What shipped, release by release, newest first |
+| [`fyrhaven-server/README.md`](fyrhaven-server/README.md) | Running the record server, the API, and what it does and does not protect |
+| [`.clinerules`](.clinerules) | The rules for changing the code, and the contract the suite enforces |
+| [`brand/README.md`](brand/README.md) | The palette, the mark, and which file goes where |
 
-## Installing a plugin
+## Working on it
 
-1. Download the plugin's `fyrhaven-crm.zip` from
-   [GitHub Releases](https://github.com/Fyrhaven/Fyrhaven-CRM/releases).
-2. In Bulwark Mail, go to **Admin → Plugins** (or **Settings → Plugins** if
-   the administrator allows user uploads) and upload the ZIP.
-3. Confirm the permissions the plugin asks for.
-
-The ZIP must contain `manifest.json` and `index.js` **at its root** — that is
-what the plugin loader expects.
-
----
-
-## Working on a plugin
-
-Every plugin with a `package.json` is developed with npm. The source tree is
-self-contained; `node_modules` and build output are never committed.
+Every folder with a `package.json` is developed with npm; the source tree is
+self-contained and `node_modules` and build output are never committed.
 
 ```bash
 cd fyrhaven-crm
 npm install        # once — dev dependencies only
-npm test           # builds first, then runs the vitest suite
+npm test           # builds, then runs the suite
 npm run package    # builds and writes fyrhaven-crm.zip
 ```
 
-See [`fyrhaven-crm/README.md`](fyrhaven-crm/README.md) for the full
-documentation: architecture, the plugin host contract, the data model and the
-duplicate-detection and merge rules. The rules for changing the code are in
-[`.clinerules`](.clinerules), and where the project stands is in
-[`fyrhaven-crm/HANDOFF.md`](fyrhaven-crm/HANDOFF.md).
+```bash
+cd fyrhaven-server && node --test
+```
 
-### Publishing a new version
-
-1. **Merge the work into `main`.** Feature branches (`feat/contact-manager-*`)
-   are merged through a pull request, which also closes the shipped roadmap
-   issues. Keep the `fyrhaven-crm` mirror branch in step with `main`, and
-   delete the merged feature branch — `main` and `fyrhaven-crm` are the only
-   long-lived branches.
-2. Bump `version` in the plugin's `manifest.json` (and `package.json`) on
-   `main`, and add the matching `CHANGELOG.md` entry — newest on top.
-3. `npm test` — all tests green.
-4. Commit and push `main`, then run `npm run release` from `main`.
-5. The release script rebuilds the ZIP, tags `fyrhaven-crm-vX.Y.Z`, pushes
-   the tag and attaches the ZIP to the GitHub release. It refuses to run when
-   `manifest.json`, `package.json` and the top `CHANGELOG.md` entry disagree.
-
-`cd fyrhaven-crm && npm run ship` does the whole thing in one command: it
-merges the open release pull requests into `main` (retargeting stacked ones),
-keeps the `fyrhaven-crm` mirror in step and then runs `npm run release`.
-`npm run ship -- --dry-run` prints the plan and changes nothing;
-`--no-release` stops after the merge.
+A change is done when the suite passes, new behaviour has a test that says what
+the behaviour *is*, new strings exist in `en` **and** `de`, the version is
+bumped with a `CHANGELOG.md` entry, and `npm run package` still produces a valid
+ZIP. The full list is in [`.clinerules`](.clinerules).
 
 ### Roadmap, issues and releases
 
-- **Roadmap** — the [milestones](https://github.com/Fyrhaven/Fyrhaven-CRM/milestones)
-  map the planned Contact Manager releases; every feature is a GitHub issue
-  labelled `roadmap`, grouped by area and milestone.
-- **Releases** — `cd fyrhaven-crm && npm run release` tests, packages,
-  tags `fyrhaven-crm-vX.Y.Z` and uploads the ZIP to GitHub Releases (see
-  [`scripts/release.mjs`](fyrhaven-crm/scripts/release.mjs)).
+* **Issues** — every planned feature is an issue labelled `roadmap`, grouped by
+  area and [milestone](https://github.com/Fyrhaven/Fyrhaven-CRM/milestones).
+* **Releases** — `cd fyrhaven-crm && npm run release` tests, packages, tags
+  `fyrhaven-crm-vX.Y.Z` and attaches the ZIP to the GitHub release. `npm run
+  ship` lands the open release pull requests into `main` first.
 
----
+## Licence
 
-## License
+The plugin is released under the same licence as Bulwark Mail. The record server
+in [`fyrhaven-server/`](fyrhaven-server/) is licensed per install — a
+self-hosted install verifies its own key, offline, with no call back home. See
+[`fyrhaven-server/LICENSING.md`](fyrhaven-server/LICENSING.md).
 
-See the individual plugin folders. Unless stated otherwise, the code in this
-repository is released under the same license as Bulwark Mail.
