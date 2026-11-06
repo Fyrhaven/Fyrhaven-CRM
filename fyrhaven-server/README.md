@@ -60,6 +60,37 @@ npm test     # node --test, 81 tests, no dependencies
 npm start    # node server.js
 ```
 
+## Two builds, one tree
+
+The service in this folder is the **cloud** build: the shop, the customer
+accounts, the catalogue, the Stripe webhook and the operator panel. It runs on
+fyrhaven.com and is never distributed.
+
+`npm run dist` emits the **self-hosted** build:
+
+| | Cloud (this folder) | Self-hosted (`npm run dist`) |
+|---|---|---|
+| Shop, accounts, catalogue, panel | mounted | not mounted — those routes answer 404 |
+| `FYRHAVEN_MODE=cloud` | is the mode | refuses to start, whatever the env says |
+| `accounts.js`, `catalog.js`, `payments.js` | the real modules | stubs; the code is not in the archive |
+| Licence | none needed (it *is* the product) | required, verified offline |
+
+The archive is `dist/fyrhaven-selfhost-<version>.tar.gz`: the record API, the
+licence check, a compose file, an `.env.example` and a README written for a
+customer rather than for us.
+
+`FYRHAVEN_MODE=cloud` used to be a switch any self-hoster could set — one line in
+a compose file, and the paid product ran without a licence. It is now a build
+constant, so the distributed copy cannot enter cloud mode at all. That matches
+what [`LICENSING.md`](LICENSING.md) claims: the licence is a contract with honest
+customers, and removing it takes patching the source, not a setting.
+
+**Known gap, stated rather than hidden:** `server.js` still carries the cloud
+route *implementations* inline. In the self-hosted build they are unreachable —
+`closedSurface()` answers 404 before they run — but the code is present in the
+archive. Extracting them into a cloud-only module is the next step, and the
+archive's own `BUILD` file says so.
+
 ## Security: what this protects, and what it does not
 
 **In transit.** TLS at the edge with an automatic certificate, HSTS,
