@@ -46,6 +46,16 @@ services:
       FYRHAVEN_LICENCE: ${FYRHAVEN_LICENCE:-}
       FYRHAVEN_LICENCE_PUBLIC: ${FYRHAVEN_LICENCE_PUBLIC:-}
       FYRHAVEN_LICENCE_PRIVATE_B64: ${FYRHAVEN_LICENCE_PRIVATE_B64:-}
+      # Blob storage (#158). All three of R2_S3_API / R2_ACCESS_KEY_ID /
+      # R2_SECRET_ACCESS_KEY must be set or the bucket is off and every workspace
+      # stays on SQLite. They belong here, not only in `.env`: a variable that is
+      # in `.env` but not in this block never reaches the container, and the
+      # adapter would report "not configured" inside Docker while working on the
+      # host. `R2_S3_API` already ends in the bucket path.
+      R2_S3_API: ${R2_S3_API:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
     volumes:
       - store-data:/data
     networks:

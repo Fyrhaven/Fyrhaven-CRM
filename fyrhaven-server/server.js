@@ -40,6 +40,11 @@ import {
 } from './payments.js';
 import { catalogOps, defaultCatalogue, openCatalogTables } from './catalog.js';
 import {
+  backendFor, backendsFor, bumpWorkspaceRevision, migrateWorkspace, noteUsage, openStorageTable,
+  providerOf, PROVIDERS, setProvider, storageRow,
+} from './storage.js';
+import { client as s3Client } from './s3.js';
+import {
   activateOnline, deactivationChallenge, describeLicence, ensureInstallKey, isInstallKey, licencePayload,
   loadPrivateKey, publicKeyOf, readChallenge, signDeactivation, signLicence, startupLicence,
   verifyDeactivation, verifyLicence,
@@ -191,17 +196,15 @@ export function openStore(path = ':memory:') {
       revision INTEGER NOT NULL
     );
     INSERT OR IGNORE INTO counter (id, revision) VALUES (1, 0);
-    CREATE TABLE IF NOT EXISTS workspace_storage (
-      workspace TEXT PRIMARY KEY,
-      provider  TEXT NOT NULL,
-      updated   TEXT NOT NULL
-    );
     CREATE TABLE IF NOT EXISTS workspaces (
       workspace   TEXT PRIMARY KEY,
       wrapped_key TEXT NOT NULL,
       created     TEXT NOT NULL
     );
   `);
+  // Where a workspace's bytes live (#158). The columns are added to an existing
+  // table when they are missing, so a deployed store upgrades in place.
+  openStorageTable(db);
   // Accounts and sessions (#148). Safe on an existing database: every statement
   // is IF NOT EXISTS, so a store that predates accounts opens unchanged.
   openAccountTables(db);
@@ -242,50 +245,172 @@ export function workspaceKeys(db, masterKey) {
 }
 
 /**
- * The four store operations, over one open database.
+ * The four store operations, over one open database **or** a bucket (#158).
  *
- * `revision` is a single counter bumped by every write, so a client can tell
- * "something changed" without diffing — and a future sync can ask for
- * everything above the revision it last saw.
+ * `revision` is bumped by every write, so a client can tell "something changed"
+ * without diffing — and a future sync can ask for everything above the revision
+ * it last saw. A workspace on blob storage keeps its own counter, seeded with the
+ * global one when it moves, so the number a client holds never goes backwards.
+ *
+ * The payload is sealed here, in one place, and the backend only ever sees
+ * ciphertext: moving a workspace to a bucket moves the envelope, not the
+ * encryption.
  */
-export function storeOps(db, keys) {
+export function storeOps(db, keys, { s3 = null, now = () => Date.now() } = {}) {
+  const adapters = backendsFor(db, { s3 });
   const revision = () => db.prepare('SELECT revision FROM counter WHERE id = 1').get().revision;
   const bump = () => {
     db.prepare('UPDATE counter SET revision = revision + 1 WHERE id = 1').run();
     return revision();
   };
+  const backendOf = (workspace) => backendFor(db, workspace, adapters);
   return {
-    revision,
-    list(workspace, scope) {
-      const rows = db
-        .prepare('SELECT key, value FROM records WHERE workspace = ? AND scope = ?')
-        .all(workspace, scope);
+    /** The revision a workspace's client should compare with. */
+    revision(workspace) {
+      const global = revision();
+      if (!workspace) return global;
+      const row = storageRow(db, workspace);
+      return row.provider === 'sqlite' ? global : Math.max(global, row.revision);
+    },
+    async list(workspace, scope) {
+      const objects = await backendOf(workspace).list(workspace, scope);
       const records = {};
       // A row that will not open means the key changed or the file was tampered
       // with: fail loudly rather than serve a hole in the data.
-      for (const row of rows) records[row.key] = JSON.parse(open(keys.get(workspace), row.value));
+      for (const [key, sealed] of objects) records[key] = JSON.parse(open(keys.get(workspace), sealed));
       return records;
     },
-    get(workspace, scope, key) {
-      const row = db
-        .prepare('SELECT value FROM records WHERE workspace = ? AND scope = ? AND key = ?')
-        .get(workspace, scope, key);
-      return row ? JSON.parse(open(keys.get(workspace), row.value)) : null;
+    async get(workspace, scope, key) {
+      const sealed = await backendOf(workspace).get(workspace, scope, key);
+      return sealed === null ? null : JSON.parse(open(keys.get(workspace), sealed));
     },
-    put(workspace, scope, key, value) {
-      db.prepare(`
-        INSERT INTO records (workspace, scope, key, value, updated) VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT (workspace, scope, key)
-        DO UPDATE SET value = excluded.value, updated = excluded.updated
-      `).run(workspace, scope, key, seal(keys.get(workspace), JSON.stringify(value)), new Date().toISOString());
+    async put(workspace, scope, key, value) {
+      const backend = backendOf(workspace);
+      const previous = await backend.get(workspace, scope, key);
+      const sealed = seal(keys.get(workspace), JSON.stringify(value));
+      await backend.put(workspace, scope, key, sealed);
+      noteUsage(db, workspace, {
+        records: previous === null ? 1 : 0,
+        bytes: Buffer.byteLength(sealed) - (previous === null ? 0 : Buffer.byteLength(previous)),
+        now,
+      });
+      bumpWorkspaceRevision(db, workspace, { now });
       return bump();
     },
-    remove(workspace, scope, key) {
-      const info = db
-        .prepare('DELETE FROM records WHERE workspace = ? AND scope = ? AND key = ?')
-        .run(workspace, scope, key);
-      if (info.changes) bump();
-      return info.changes > 0;
+    async remove(workspace, scope, key) {
+      const backend = backendOf(workspace);
+      const previous = await backend.get(workspace, scope, key);
+      const removed = await backend.remove(workspace, scope, key);
+      if (removed) {
+        noteUsage(db, workspace, {
+          records: previous === null ? 0 : -1,
+          bytes: previous === null ? 0 : -Buffer.byteLength(previous),
+          now,
+        });
+        bumpWorkspaceRevision(db, workspace, { now });
+        bump();
+      }
+      return removed;
+    },
+    /**
+     * Records and bytes. A SQLite workspace is counted from its rows; a
+     * blob-backed one uses the counters every write maintains, so a save does not
+     * pay for a bucket listing. `recount` is the check that those counters are
+     * still true.
+     */
+    async usage(workspace) {
+      const provider = providerOf(db, workspace);
+      const backend = backendFor(db, workspace, adapters, provider);
+      if (provider === 'sqlite') return backend.usage(workspace);
+      const row = storageRow(db, workspace);
+      return { records: row.objects, bytes: row.bytes };
+    },
+    /** Recounts from the backend and repairs the counters — the operator's check. */
+    async recount(workspace) {
+      const provider = providerOf(db, workspace);
+      const used = await backendFor(db, workspace, adapters, provider).usage(workspace);
+      if (provider !== 'sqlite') {
+        db.prepare('UPDATE workspace_storage SET objects = ?, bytes = ?, updated = ? WHERE workspace = ?')
+          .run(used.records, used.bytes, new Date(now()).toISOString(), workspace);
+      }
+      return used;
+    },
+    /**
+     * Removes a workspace's objects from the bucket when an account is erased.
+     *
+     * SQLite rows are deleted with one statement by the caller; a bucket needs a
+     * call per object. A backend that cannot be reached is reported, never
+     * assumed: "the key is gone so the bytes are unreadable" is true, but it is
+     * not the same as having deleted them.
+     */
+    async erase(workspace) {
+      const provider = providerOf(db, workspace);
+      if (provider === 'sqlite') {
+        db.prepare('DELETE FROM workspace_storage WHERE workspace = ?').run(workspace);
+        return { removed: 0, unreachable: false };
+      }
+      let backend;
+      try {
+        backend = backendFor(db, workspace, adapters, provider);
+      } catch {
+        db.prepare('DELETE FROM workspace_storage WHERE workspace = ?').run(workspace);
+        return { removed: 0, unreachable: true };
+      }
+      let removed = 0;
+      for (const scope of await backend.scopes(workspace)) {
+        for (const key of (await backend.list(workspace, scope)).keys()) {
+          await backend.remove(workspace, scope, key);
+          removed += 1;
+        }
+      }
+      db.prepare('DELETE FROM workspace_storage WHERE workspace = ?').run(workspace);
+      return { removed, unreachable: false };
+    },
+    /** The providers this process can reach. `sqlite` always, `s3` when configured. */
+    get available() {
+      return Object.keys(adapters);
+    },
+    provider(workspace) {
+      return providerOf(db, workspace);
+    },
+    /**
+     * Moves a workspace to another backend (#158). The order — copy, read back,
+     * flip, only then delete — lives in `migrateWorkspace`; what stays here is the
+     * provider row and the revision it is seeded with, so a client's number never
+     * goes backwards when its workspace changes house.
+     */
+    async migrate(workspace, target) {
+      if (!PROVIDERS.includes(target)) {
+        return { ok: false, status: 400, reason: `unknown provider "${target}"`, available: Object.keys(adapters) };
+      }
+      const to = adapters[target];
+      if (!to) {
+        return { ok: false, status: 501, reason: `no storage adapter for "${target}" is configured`, available: Object.keys(adapters) };
+      }
+      const from = providerOf(db, workspace);
+      if (from === target) {
+        const used = await to.usage(workspace);
+        return { ok: true, status: 200, provider: target, moved: false, objects: used.records, bytes: used.bytes };
+      }
+      const result = await migrateWorkspace({
+        from: backendFor(db, workspace, adapters),
+        to,
+        workspace,
+        flip: ({ objects, bytes }) => setProvider(db, workspace, target, {
+          revision: Math.max(revision(), storageRow(db, workspace).revision),
+          objects,
+          bytes,
+          now,
+        }),
+        now,
+      });
+      if (!result.ok) {
+        return { ok: false, status: 502, reason: result.reason, provider: from, objects: result.objects, bytes: result.bytes };
+      }
+      return {
+        ok: true, status: 200, provider: target, moved: true,
+        objects: result.objects, bytes: result.bytes, leftBehind: result.leftBehind,
+      };
     },
   };
 }
@@ -371,9 +496,9 @@ export function createRequestHandler(db, {
   requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
   adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch, basicUser = '', basicPassword = '',
   licencePublic = '',
-  licence = { ok: true, mode: 'cloud' }, licencePrivate = null, installKey = '',
+  licence = { ok: true, mode: 'cloud' }, licencePrivate = null, installKey = '', s3 = null,
 } = {}) {
-  const ops = storeOps(db, keys);
+  const ops = storeOps(db, keys, { s3, now });
   const people = accounts ?? accountOps(db, { trialDays });
   const catalogue = catalogOps(db, { now });
   // The one challenge this installation has minted and not yet spent.
@@ -449,11 +574,11 @@ export function createRequestHandler(db, {
   };
 
   /** Records and bytes a workspace holds — the usage line and the quota. */
-  const usageOf = (workspace) => {
-    const row = db.prepare('SELECT COUNT(*) AS records, COALESCE(SUM(LENGTH(value)), 0) AS bytes FROM records WHERE workspace = ?')
-      .get(workspace);
-    return { records: Number(row.records ?? 0), bytes: Number(row.bytes ?? 0), maxRecords, maxBytes };
-  };
+  const usageOf = async (workspace) => ({
+    ...(await ops.usage(workspace)),
+    maxRecords,
+    maxBytes,
+  });
 
   // One bucket per token, refilled every minute. Cheap, in memory, and enough to
   // stop a script; the host's own proxy also rate-limits.
@@ -572,19 +697,34 @@ export function createRequestHandler(db, {
       if (!presented || !sameToken(adminToken, presented)) return send(res, 401, { error: 'unauthorized' });
       if (tooMany('admin')) return send(res, 429, { error: 'too many requests' });
 
-      // Where a workspace's bytes live (#158). Only the sqlite provider exists
-      // today; the route and the safety rule exist so the S3 adapter drops in
-      // without a redesign.
+      // Where a workspace's bytes live (#158). `sqlite` is always available and
+      // `s3` appears once a bucket is configured, so the panel offers only what
+      // this process can actually reach.
       const storageRoute = /^\/v1\/admin\/workspaces\/([^/]+)\/storage$/.exec(path);
       if (storageRoute && method === 'GET') {
         const workspace = decodeURIComponent(storageRoute[1]);
-        const row = db.prepare('SELECT provider FROM workspace_storage WHERE workspace = ?').get(workspace);
-        const used = usageOf(workspace);
+        const provider = ops.provider(workspace);
+        let used = { records: 0, bytes: 0 };
+        let reachable = true;
+        try {
+          // `?fresh=1` recounts from the bucket; the default reads the counters
+          // every write maintains, so an operator can check them without paying
+          // for a listing on every page view.
+          used = url.searchParams.get('fresh') === '1'
+            ? await ops.recount(workspace)
+            : await ops.usage(workspace);
+        } catch (err) {
+          // A workspace on a bucket this process cannot reach has no count, and
+          // saying "0 objects" would read as "empty" rather than "unreachable".
+          if (!err?.unavailable) throw err;
+          reachable = false;
+        }
         return send(res, 200, {
           ok: true,
           workspace,
-          provider: row?.provider ?? 'sqlite',
-          available: ['sqlite'],
+          provider,
+          available: ops.available,
+          reachable,
           objects: used.records,
           bytes: used.bytes,
         });
@@ -596,51 +736,80 @@ export function createRequestHandler(db, {
         const payload = (await body()) ?? {};
         const target = String(payload.provider ?? '').trim();
         const dry = url.searchParams.get('dry') === '1';
-        const used = usageOf(workspace);
 
         if (dry) {
-          return send(res, 200, { ok: true, dry: true, workspace, target, objects: used.records, bytes: used.bytes });
-        }
-
-        // The rule that makes this safe, and the reason it is written here rather
-        // than in a script: copy, READ BACK AND COMPARE, flip the provider row,
-        // and only then delete the old copies. Deleting first is how a migration
-        // loses a customer's data when the copy was silently truncated.
-        if (target !== 'sqlite') {
-          return send(res, 501, {
-            error: `no storage adapter for "${target}" is configured`,
-            available: ['sqlite'],
+          const used = await usageOf(workspace);
+          return send(res, 200, {
+            ok: true, dry: true, workspace, target,
+            provider: ops.provider(workspace), available: ops.available,
+            objects: used.records, bytes: used.bytes,
           });
         }
-        db.prepare('INSERT INTO workspace_storage (workspace, provider, updated) VALUES (?, ?, ?) ON CONFLICT(workspace) DO UPDATE SET provider = excluded.provider, updated = excluded.updated')
-          .run(workspace, 'sqlite', new Date(now()).toISOString());
-        return send(res, 200, { ok: true, workspace, provider: 'sqlite', objects: used.records, bytes: used.bytes });
+
+        // Copy, READ BACK AND COMPARE, flip the provider row, and only then delete
+        // the old copies. Deleting first is how a migration loses a customer's
+        // data when the copy was silently truncated — the order lives in
+        // `storage.js`, where no route can skip it.
+        const moved = await ops.migrate(workspace, target);
+        if (!moved.ok) {
+          return send(res, moved.status, {
+            ok: false,
+            workspace,
+            provider: ops.provider(workspace),
+            available: ops.available,
+            objects: moved.objects,
+            bytes: moved.bytes,
+            error: moved.reason,
+          });
+        }
+        return send(res, 200, {
+          ok: true,
+          workspace,
+          provider: moved.provider,
+          moved: moved.moved,
+          objects: moved.objects,
+          bytes: moved.bytes,
+          leftBehind: moved.leftBehind ?? [],
+        });
       }
 
       if (path === '/v1/admin/usage' && method === 'GET') {
         const spaces = new Map();
         for (const row of db.prepare('SELECT DISTINCT workspace FROM records').all()) spaces.set(row.workspace, true);
+        // A workspace on a bucket has no rows in this database, so the provider
+        // table is the only complete list of who exists.
+        for (const row of db.prepare('SELECT workspace FROM workspace_storage').all()) spaces.set(row.workspace, true);
         for (const workspace of traffic.keys()) spaces.set(workspace, true);
 
         const emails = new Map(
           db.prepare('SELECT id, email FROM accounts').all().map((row) => [`acct:${row.id}`, row.email]),
         );
 
-        const perCustomer = [...spaces.keys()].map((workspace) => {
-          const used = usageOf(workspace);
+        const perCustomer = (await Promise.all([...spaces.keys()].map(async (workspace) => {
+          const provider = ops.provider(workspace);
+          let used = { records: 0, bytes: 0 };
+          let reachable = true;
+          try {
+            used = await ops.usage(workspace);
+          } catch (err) {
+            if (!err?.unavailable) throw err;
+            reachable = false;
+          }
           const moved = traffic.get(workspace) ?? { inBytes: 0, outBytes: 0, requests: 0 };
-          // How many projects a workspace holds, without loading them all into
-          // memory: the record is JSON, so its length is the count.
+          // How many projects a workspace holds. Read through the store, not the
+          // raw column: the stored value is sealed, so parsing it directly always
+          // said "0 projects".
           let projects = 0;
           try {
-            const row = db.prepare('SELECT value FROM records WHERE workspace = ? AND key = ?').get(workspace, 'projects');
-            const parsed = row ? JSON.parse(row.value) : null;
-            projects = Array.isArray(parsed) ? parsed.length : 0;
+            const value = await ops.get(workspace, DEFAULT_SCOPE, 'projects');
+            projects = Array.isArray(value) ? value.length : 0;
           } catch {
             projects = 0;
           }
           return {
             workspace,
+            provider,
+            reachable,
             email: emails.get(workspace) ?? null,
             records: used.records,
             bytes: used.bytes,
@@ -649,7 +818,7 @@ export function createRequestHandler(db, {
             inBytes: moved.inBytes,
             outBytes: moved.outBytes,
           };
-        }).sort((a, b) => (b.bytes + b.inBytes + b.outBytes) - (a.bytes + a.inBytes + a.outBytes));
+        }))).sort((a, b) => (b.bytes + b.inBytes + b.outBytes) - (a.bytes + a.inBytes + a.outBytes));
 
         const total = perCustomer.reduce((sum, entry) => ({
           records: sum.records + entry.records,
@@ -660,7 +829,9 @@ export function createRequestHandler(db, {
           outBytes: sum.outBytes + entry.outBytes,
         }), { records: 0, bytes: 0, projects: 0, requests: 0, inBytes: 0, outBytes: 0 });
 
-        return send(res, 200, { ok: true, total, customers: perCustomer, since: new Date(now()).toISOString() });
+        return send(res, 200, {
+          ok: true, total, customers: perCustomer, providers: ops.available, since: new Date(now()).toISOString(),
+        });
       }
 
       if (path === '/v1/admin/status' && method === 'GET') {
@@ -772,8 +943,11 @@ export function createRequestHandler(db, {
         const workspace = accountWorkspace(id);
         if (!people.deleteAccount(id)) return send(res, 404, { error: 'no such account' });
         db.prepare('DELETE FROM records WHERE workspace = ?').run(workspace);
+        // A workspace on a bucket has nothing in `records`; its objects go too, so
+        // an erasure is an erasure and not just an unreadable bucket prefix.
+        const purged = await ops.erase(workspace);
         db.prepare('DELETE FROM workspaces WHERE workspace = ?').run(workspace);
-        return send(res, 200, { ok: true, deleted: true });
+        return send(res, 200, { ok: true, deleted: true, objectsRemoved: purged.removed, storageUnreachable: purged.unreachable });
       }
 
       return send(res, 404, { error: 'not found' });
@@ -800,7 +974,7 @@ export function createRequestHandler(db, {
           entitled: who.entitled,
           account: who.account,
           licences: who.account ? catalogue.licences(who.account.id) : [],
-          usage: usageOf(who.workspace),
+          usage: await usageOf(who.workspace),
         });
       }
       // Leaving: the account, its sessions, its orders, its records and the
@@ -811,8 +985,11 @@ export function createRequestHandler(db, {
         const workspace = who.workspace;
         people.deleteAccount(who.account.id);
         db.prepare('DELETE FROM records WHERE workspace = ?').run(workspace);
+        const purged = await ops.erase(workspace);
         db.prepare('DELETE FROM workspaces WHERE workspace = ?').run(workspace);
-        return send(res, 200, { ok: true, deleted: true });
+        return send(res, 200, {
+          ok: true, deleted: true, objectsRemoved: purged.removed, storageUnreachable: purged.unreachable,
+        });
       }
       return send(res, 405, { error: 'method not allowed' });
     }
@@ -977,9 +1154,9 @@ export function createRequestHandler(db, {
     try {
       if (path === '/v1/store') {
         if (method !== 'GET') return send(res, 405, { error: 'method not allowed' });
-        const records = ops.list(workspace, scope);
+        const records = await ops.list(workspace, scope);
         bump(workspace, 'out', Buffer.byteLength(JSON.stringify(records)));
-        return send(res, 200, { records, revision: ops.revision() });
+        return send(res, 200, { records, revision: ops.revision(workspace) });
       }
 
       const match = /^\/v1\/store\/([^/]+)$/.exec(path);
@@ -994,10 +1171,10 @@ export function createRequestHandler(db, {
       if (!KEY_PATTERN.test(key)) return send(res, 400, { error: 'bad key' });
 
       if (method === 'GET') {
-        const value = ops.get(workspace, scope, key);
+        const value = await ops.get(workspace, scope, key);
         if (value === null) return send(res, 404, { error: 'no such record' });
         bump(workspace, 'out', Buffer.byteLength(JSON.stringify(value)));
-        return send(res, 200, { key, value, revision: ops.revision() });
+        return send(res, 200, { key, value, revision: ops.revision(workspace) });
       }
 
       if (!mayWrite) {
@@ -1021,8 +1198,8 @@ export function createRequestHandler(db, {
 
         // Quota: a workspace has a record count and a byte budget, so one
         // account cannot fill the disk. Rewriting a record only costs the delta.
-        const usage = usageOf(workspace);
-        const previous = ops.get(workspace, scope, key);
+        const usage = await usageOf(workspace);
+        const previous = await ops.get(workspace, scope, key);
         const previousBytes = previous === null ? 0 : Buffer.byteLength(JSON.stringify(previous));
         if (previous === null && usage.records >= maxRecords) {
           return send(res, 409, { error: 'record limit reached', usage });
@@ -1031,17 +1208,25 @@ export function createRequestHandler(db, {
           return send(res, 409, { error: 'storage limit reached', usage });
         }
         bump(workspace, 'in', size);
-        return send(res, 200, { revision: ops.put(workspace, scope, key, parsed.value) });
+        return send(res, 200, { revision: await ops.put(workspace, scope, key, parsed.value) });
       }
 
       if (method === 'DELETE') {
-        ops.remove(workspace, scope, key);
+        await ops.remove(workspace, scope, key);
         return send(res, 200, { ok: true });
       }
 
       return send(res, 405, { error: 'method not allowed' });
     } catch (err) {
       if (err?.tooLarge) return send(res, 413, { error: 'too large' });
+      // A workspace whose bytes live somewhere this process cannot reach must say
+      // so. An empty answer would look like an empty address book.
+      if (err?.unavailable) {
+        return send(res, 503, {
+          error: `this workspace lives on ${err.provider}, which is not configured on this server`,
+          provider: err.provider,
+        });
+      }
       return send(res, 500, { error: 'server error' });
     }
   };
@@ -1053,14 +1238,14 @@ export function createStoreServer({
   trialDays = DEFAULT_TRIAL_DAYS, now, adminToken = '', payments = paymentConfig(), fetchJson,
   basicUser = '', basicPassword = '', licencePublic = '',
   licence = startupLicence(), licencePrivate = loadPrivateKey(),
-  installKey = process.env.FYRHAVEN_INSTALL_KEY ?? '',
+  installKey = process.env.FYRHAVEN_INSTALL_KEY ?? '', s3 = null,
 } = {}) {
   const db = openStore(dbPath);
   const tokens = parseTokens(tokenList);
   const keys = workspaceKeys(db, masterKey);
   const server = createHttpServer(createRequestHandler(db, {
     tokens, keys, allowQueryToken, trialDays, now, adminToken, payments, fetchJson,
-    basicUser, basicPassword, licencePublic, licence, licencePrivate, installKey,
+    basicUser, basicPassword, licencePublic, licence, licencePrivate, installKey, s3,
   }));
   server.on('close', () => {
     try {
@@ -1151,9 +1336,24 @@ if (isMain) {
 
   const adminToken = String(process.env.STORE_ADMIN_TOKEN ?? '').trim();
   if (!adminToken) console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin and /admin answer 503.');
+  // The bucket, when one is configured (#158). `R2_S3_API` already ends in the
+  // bucket path, so it is used exactly as given. Without all three parts the
+  // service simply offers `sqlite` and a migration to `s3` answers 501 — it does
+  // not half-work.
+  const bucket = String(process.env.R2_S3_API ?? '').trim();
+  const bucketKey = String(process.env.R2_ACCESS_KEY_ID ?? '').trim();
+  const bucketSecret = String(process.env.R2_SECRET_ACCESS_KEY ?? '');
+  let bucketClient = null;
+  if (bucket && bucketKey && bucketSecret) {
+    bucketClient = s3Client({ base: bucket, accessKeyId: bucketKey, secretKey: bucketSecret });
+    console.log(`Fyrhaven: blob storage offered at ${bucket}`);
+  } else if (bucket || bucketKey || bucketSecret) {
+    console.warn('Fyrhaven: R2_S3_API, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must all be set — blob storage is off.');
+  }
+
   const { server, tokens } = createStoreServer({
     dbPath, tokenList, masterKey, allowQueryToken, adminToken, payments: paymentConfig(process.env),
-    installKey,
+    installKey, s3: bucketClient,
     trialDays: Number.isFinite(trialDays) && trialDays >= 0 ? trialDays : DEFAULT_TRIAL_DAYS,
     basicUser: String(process.env.STORE_AUTH_USER ?? '').trim(),
     basicPassword: String(process.env.STORE_AUTH_PASSWORD ?? ''),

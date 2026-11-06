@@ -1,7 +1,9 @@
 # Moving a workspace to blob storage (#158) — the executable plan
 
-Status: **step 1 done** (the seam and a verified S3 client). This is the rest, written
-down so it can be executed mechanically rather than re-derived.
+Status: **steps 1 and 2 done.** `s3.js` is verified live against R2, and
+`storage.js` (server 1.16.0) carries both backends and the migration, with the
+read-back rule enforced in the module rather than in a route. What remains is
+deployment and one supervised move — see "Then" at the bottom.
 
 ## What exists
 
@@ -65,18 +67,29 @@ write; the global counter stays for compatibility.
 
 ## Tests to write first
 
+All four exist, in `test/storage-migration.test.mjs` and
+`test/s3-client.test.mjs`, against `test/fake-bucket.mjs`:
+
 1. `s3Backend` against a fake `fetch` that stores objects in a Map — put, get,
-   list, remove, and a 404 that reads as `null`.
-2. A migration on a scratch sqlite workspace: seed 3 records, migrate to the Map
-   backend, assert the objects exist with identical bytes, the provider row flipped,
-   and the originals are gone.
-3. The **failure** path: a backend whose write silently truncates → migration must
-   abort, leave the provider as `sqlite`, and leave the original records intact.
-4. `?dry=1` on a real workspace touches nothing (already covered).
+   list, remove, and a 404 that reads as `null`. **Done** (and the client's
+   `list` is pinned to follow the continuation token: S3 answers 1 000 keys a
+   page, and stopping there would migrate one page and hide the rest).
+2. A migration on a scratch sqlite workspace: seed 3 records in **two scopes**,
+   migrate, assert the objects exist with identical bytes, the provider row
+   flipped, and the originals are gone. **Done.**
+3. The **failure** path: a backend whose write silently truncates → the
+   migration aborts, the provider stays `sqlite`, every original record is still
+   readable and nothing half-written is left in the bucket. **Done.** Removing
+   the read-back comparison makes this test fail — checked, not assumed.
+4. `?dry=1` touches nothing. **Done** (in `server.test.js`).
 
 ## Then
 
-- Offer the provider per workspace in the admin panel (a select on the Usage tab).
-- `R2_BUCKET` and the R2 keys must reach the container: add them to the compose
-  `environment:` block, or the adapter will report "not configured" inside Docker
-  while working perfectly on the host.
+- Offer the provider per workspace in the admin panel (**done**: the Usage tab
+  selects and moves one; `?fresh=1` recounts from the bucket).
+- `R2_BUCKET` and the R2 keys must reach the container: they are now in both
+  compose files' `environment:` block, or the adapter reports "not configured"
+  inside Docker while working perfectly on the host.
+- **Still to do**: deploy, confirm `GET /v1/admin/workspaces/{id}/storage` says
+  `available: ["sqlite","s3"]`, then `?dry=1` and one real move of a test
+  workspace before any customer's.

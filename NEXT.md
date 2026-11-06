@@ -4,31 +4,35 @@ One page for a fresh session. The long history is in `fyrhaven-crm/HANDOFF.md`;
 the rules are in `.clinerules`; this file is only "what to do next and what not to
 re-learn the hard way".
 
-## State (verified 2026-11-05)
+## State (verified 2026-11-06)
 
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.15.0** — 69 tests green |
+| Record server | `fyrhaven-server` **1.16.0** — 80 tests green |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
 | Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
-| Storage | `s3.js` verified live against R2; seam in; **not yet wired** |
+| Storage | blob seam **wired** (server 1.16.0): `s3Backend`, the read-back migration, the panel control. Not yet deployed, not yet run against R2 |
 | Git | `main` and `fyrhaven-crm` in step, clean tree |
 
-## The one job: wire blob storage (#158 step 2)
+## The one job: deploy blob storage and move one test workspace
 
-Plan: `fyrhaven-server/docs/storage-migration.md`. Read it first — it has the
-object layout, the adapter shape and the migration order.
+The code is done and its safety property is pinned by a test: a target whose
+write silently truncates must abort the move, leave the provider as `sqlite` and
+leave every original record intact (removing the read-back comparison makes that
+test fail — checked, not assumed). What is left is the part that needs the host:
 
-1. **Write the test first**: a fake backend whose write *silently truncates*.
-   The migration must abort, leave `workspace_storage.provider = 'sqlite'`, and
-   leave every original record intact. That test is the whole safety property.
-2. `s3Backend(client, keys)` beside `sqliteBackend` — same `list/get/put/remove`.
-3. `storeOps` picks the backend from `workspace_storage` (default `sqlite`).
-4. The migration: **read → write → read back and compare sha256 → flip the row →
-   only then delete**. Never delete before the read-back passes.
-5. Provider select on the panel's Usage tab. Then delete the 501 fallback.
+1. Put `R2_S3_API`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in
+   the store's `.env` **and** confirm they are in the compose `environment:`
+   block (they are in both files in the repo now — the deploy folder is a copy).
+2. Rebuild only that container, then
+   `curl -s https://crm.mailz.se/version` and
+   `curl -s -H "Authorization: Bearer $STORE_ADMIN_TOKEN" https://crm.mailz.se/v1/admin/workspaces/<id>/storage`
+   → `available` must now be `["sqlite","s3"]` and `reachable` true.
+3. `POST …/migrate?dry=1` first, then a real move of a **test** workspace, then
+   `GET /v1/store` on it and compare with what it held before.
+4. Only then move a customer's workspace, and only from the panel's Usage tab.
 
 After that: **#155** website polish (front page, pricing cards, empty states,
 360 px) and **#156** languages (the site has **no i18n layer**; the plugin needs a
@@ -36,6 +40,16 @@ reviewer for 980 keys before `sv` is worth adding).
 
 ## Gotchas this session paid for
 
+- **S3 answers 1 000 keys per list page.** `s3.js#list` follows
+  `NextContinuationToken` now; before it did not, and a migration of a workspace
+  with more than 1 000 records would have copied the first page, flipped the
+  provider, and hidden the rest. Any new code that walks a bucket must page.
+- **`CREATE TABLE IF NOT EXISTS` will not add a column.** `workspace_storage`
+  gains its columns with `ALTER TABLE … ADD COLUMN` guarded by
+  `PRAGMA table_info`, or a deployed store fails first in production.
+- **A provider with no backend must be a 503, never `{records:{}}`.** An empty
+  list reads as an empty address book and invites the user to restore over their
+  own data.
 - **`R2_*` must be in the compose `environment:` block**, not only `.env`, or the
   adapter reports "not configured" inside Docker while working on the host.
 - **`docker compose up -d` answering `Running` means nothing was rebuilt.** A
