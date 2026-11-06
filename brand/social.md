@@ -38,7 +38,7 @@ CRM, set up properly. → fyrhaven.com"
 **TikTok (80)** — "Self-hosted mail + CRM. fyrhaven.com"
 
 **Mastodon (bio + 4 fields)** — same as X, plus fields for `Website`,
-`Source: github.com/zyntrax/bulwark-plugins`.
+`Source: github.com/Fyrhaven/Fyrhaven-CRM`.
 
 **GitHub org (160)** — "Fyrhaven CRM — contacts, companies, projects and time for
 Bulwark Mail, plus the record server it can talk to."
