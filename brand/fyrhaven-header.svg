@@ -1,55 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 460" role="img" aria-label="Fyrhaven — profile header">
-  <title>Fyrhaven — profile header (beam study)</title>
-  <!-- Beam only, for now. The wordmark, tagline and capability line were taken
-       out on purpose: settle the light first, then put the words back around it.
+  <title>Fyrhaven — profile header (frosted light)</title>
+  <!-- The mark seen through frosted glass, reduced to what survives a crop: its
+       light. A cover is shown at wildly different widths (a phone cuts it to a
+       sliver), so anything that must line up with the profile picture will be
+       wrong somewhere. This has nothing to line up:
 
-       The beam is a **fan**: narrow where it leaves the lamp, wider at the far
-       edge, which is what light does. Earlier versions had it the other way up —
-       broad at the lamp and thinning out — and read as a band of colour rather
-       than a beam.
-
-       Its left edge starts at x=200, well behind the profile picture, so the place
-       where it begins is never visible. It sits at ~60% of the height, which is
-       where the lantern is on a real profile: the avatar is not centred on the
-       band but pushed down, its centre about 63% of the way down the cover. -->
+       1. an ink field, flat, so the avatar's own tile never shows an edge;
+       2. a broad yellow beam, narrow where it starts and widening to the edge,
+          with a soft halo and a tighter core — light, not a band of paint;
+       3. the lantern's bloom at the left, behind where the avatar sits;
+       4. the tower itself only as a hint: the mark, hugely scaled and blurred
+          past recognition, at very low opacity. Enough to feel like a shape
+          behind the glass; not enough to read as a second logo. -->
   <defs>
-    <!-- flat: the avatar's own tile is #0E2233, so a strong gradient shows its edge -->
     <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0E2233"/>
       <stop offset="1" stop-color="#0C1E2E"/>
     </linearGradient>
-    <!-- yellow, not amber: amber at low alpha over near-black goes brown -->
     <linearGradient id="fan" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#FFD400" stop-opacity="0.42"/>
-      <stop offset="0.55" stop-color="#FFD83D" stop-opacity="0.12"/>
-      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.025"/>
+      <stop offset="0" stop-color="#FFE94A" stop-opacity="0.12"/>
+      <stop offset="0.18" stop-color="#FFE94A" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#FFE066" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.012"/>
     </linearGradient>
     <linearGradient id="core" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#FFE21A" stop-opacity="0.95"/>
-      <stop offset="0.5" stop-color="#FFD400" stop-opacity="0.24"/>
-      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.04"/>
+      <stop offset="0" stop-color="#FFF08A" stop-opacity="0.30"/>
+      <stop offset="0.18" stop-color="#FFF08A" stop-opacity="0.88"/>
+      <stop offset="0.5" stop-color="#FFE04A" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.02"/>
     </linearGradient>
-    <radialGradient id="lamp" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#FFF0B8" stop-opacity="0.32"/>
-      <stop offset="0.6" stop-color="#FFD400" stop-opacity="0.12"/>
+    <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFF0B8" stop-opacity="0.24"/>
+      <stop offset="0.55" stop-color="#FFD400" stop-opacity="0.10"/>
       <stop offset="1" stop-color="#FFD400" stop-opacity="0"/>
     </radialGradient>
-    <!-- light has no edge -->
-    <filter id="soft" x="-15%" y="-80%" width="130%" height="260%">
-      <feGaussianBlur stdDeviation="14"/>
+    <filter id="halo" x="-20%" y="-80%" width="140%" height="260%">
+      <feGaussianBlur stdDeviation="22"/>
     </filter>
-    <filter id="tight" x="-15%" y="-120%" width="130%" height="340%">
-      <feGaussianBlur stdDeviation="5"/>
+    <filter id="tight" x="-20%" y="-120%" width="140%" height="340%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <!-- past recognition: the tower behind frosted glass -->
+    <filter id="glass" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="70"/>
     </filter>
   </defs>
 
   <rect width="2048" height="460" fill="url(#field)"/>
 
-  <g filter="url(#soft)">
-    <polygon points="200,224 2048,168 2048,348 200,328" fill="url(#fan)"/>
+  <!-- the tower, as a shape you sense rather than see -->
+  <g filter="url(#glass)" opacity="0.16">
+    <g transform="translate(-120,-620) scale(24)">
+      <polygon points="25.6,51 29.2,27 34.8,27 38.4,51" fill="#F7F9FA"/>
+      <rect x="24.6" y="24.6" width="14.8" height="2.6" rx="1.1" fill="#F7F9FA"/>
+      <rect x="28.6" y="19.4" width="6.8" height="5.4" fill="#F7F9FA"/>
+      <polygon points="27.4,19.4 32,14.4 36.6,19.4" fill="#F7F9FA"/>
+      <polygon points="29.9,31.5 34.1,31.5 34.5,36.5 29.5,36.5" fill="#C8453B"/>
+    </g>
+  </g>
+
+  <!-- the light -->
+  <g filter="url(#halo)">
+    <polygon points="330,250 620,188 2048,108 2048,330 620,392 330,300" fill="url(#fan)"/>
   </g>
   <g filter="url(#tight)">
-    <polygon points="200,246 2048,204 2048,312 200,308" fill="url(#core)"/>
-    <ellipse cx="470" cy="278" rx="150" ry="70" fill="url(#lamp)"/>
+    <polygon points="330,262 620,232 2048,148 2048,300 620,346 330,290" fill="url(#core)"/>
+    <ellipse cx="330" cy="250" rx="240" ry="130" fill="url(#bloom)"/>
   </g>
 </svg>
