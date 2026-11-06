@@ -9,7 +9,7 @@ re-learn the hard way".
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.17.0** — 89 tests green, self-host build separate |
+| Record server | `fyrhaven-server` **1.18.0** — 89 tests green, self-host build has no cloud code |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
 | Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
@@ -43,9 +43,11 @@ Left for the owner: the imprint brackets, and a screenshot for the hero.
 And the server is now **two builds** (1.17.0): the cloud (this folder, never
 distributed) and the self-hosted archive `npm run dist` emits. `FYRHAVEN_MODE=cloud`
 is a compiled constant there, so a customer's copy cannot become the cloud.
-Next for it: extract the cloud routes out of `server.js` (unreachable today, but
-still present), and a `/setup` page so a self-hosted install can be configured and
-licensed without editing `.env` by hand.
+The cloud's routes now live in `cloud.js` and are **not in the archive**: it ships
+as a stub that answers "not mine", and `server.js` carries none of that code.
+Next for it: a `/setup` page so a self-hosted install can be configured and
+licensed without editing `.env` by hand, a Docker Hub image, and a release with an
+installer + checksums.
 
 Then **#156** languages: the site has **no i18n layer**, and the plugin carries
 ~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.

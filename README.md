@@ -48,7 +48,7 @@ Two rules hold everywhere, and they are what the test suite is really about:
 | | What it is | Where records live |
 |---|---|---|
 | **[Fyrhaven CRM](fyrhaven-crm/)**<br>`fyrhaven-crm` 1.60.0 | The plugin: duplicate detection and merge, a contact and company 360°, projects, time and expenses, health and retention, a GDPR toolkit, import and export, smart search | The webmail's own address books, plus — when configured — the record server |
-| **[fyrhaven-server](fyrhaven-server/)**<br>`fyrhaven-server` 1.16.1 | The record server: a small key/value service, no runtime dependencies, encrypted at rest, SQLite or an S3-compatible bucket | On the server — self-hosted, or the hosted tier |
+| **[fyrhaven-server](fyrhaven-server/)**<br>`fyrhaven-server` 1.18.0 | The record server: a small key/value service, no runtime dependencies, encrypted at rest, SQLite or an S3-compatible bucket. Ships as **two builds** — the cloud service, which is never distributed, and a self-hosted archive that contains no cloud code at all | On the server — self-hosted, or the hosted tier |
 
 The plugin needs nothing but the webmail. The server is what turns it from a
 clean-up tool into a CRM that outlives one browser profile.
@@ -102,11 +102,14 @@ Fyrhaven-CRM/
 │   ├── test/                 # the suite — the expected behaviour, in executable form
 │   ├── scripts/              # packaging, release and ship
 │   └── CHANGELOG.md · README.md · HANDOFF.md
-└── fyrhaven-server/          # the record server
-    ├── server.js             # the service — no dependencies, encrypted at rest
-    ├── server.test.js        # `node --test`
+└── fyrhaven-server/          # the record server — two builds from one tree
+    ├── server.js             # the record API: auth, the store, the licence gate
+    ├── cloud.js              # the cloud only: shop, accounts, catalogue, billing, panel
+    ├── licence.js            # Ed25519 licences, verified offline
     ├── storage.js · s3.js    # SQLite, and the S3-compatible bucket backend
-    └── Dockerfile · docker-compose.yml · Caddyfile · site/
+    ├── scripts/dist.mjs      # builds the self-hosted archive, which has no cloud code
+    ├── packaging/            # the self-hosted Dockerfile, compose file and README
+    └── site/ · Dockerfile · docker-compose.yml · Caddyfile
 ```
 
 ## Documentation
