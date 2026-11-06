@@ -123,17 +123,17 @@ releases stop. <https://github.com/organizations/Fyrhaven/settings/installations
 
 ## On the owner's side (not code)
 
-- The **organisation page** (`github.com/Fyrhaven`) is written and waiting: the
-  copy is `brand/org-profile.md`, and `node scripts/publish-org-profile.mjs
-  --apply` publishes it — but GitHub renders that page only from a **public**
-  repository named `.github`, and creating one needs *Administration: write*,
-  which the app does not have. Either grant it, or create the repository by hand
-  once (*New repository* → owner `Fyrhaven` → name `.github` → **public**) and run
-  the script: it fills it and reads its own writes back. The **org description**
-  is a paste too — `brand/social.md` → *Descriptions, by length* — because the
-  current one leads with "Fyrhaven CRM" and so reads as a product page. That
-  field holds **160 characters and cuts the rest silently**, which is why the
-  live one currently ends mid-word.
+- The **organisation page** is **live** at `github.com/Fyrhaven`: the description is
+  the 131-character company line, and the README renders with both lockups served
+  from `Fyrhaven/.github` — checked as an anonymous visitor, not from a logged-in
+  session. It was built by hand because the API cannot: creating a repository in
+  the org, and writing to one, both need *Administration: write*, and the app's
+  installation covers `Fyrhaven-CRM` only. `node
+  scripts/publish-org-profile.mjs --apply` is the maintained path once that is
+  granted; until then, edit `brand/org-profile.md` and the file in `.github`
+  together. That file is `profile/readme.md` — GitHub renders it today, but
+  `README.md` is the documented name, which is why the script writes that one and
+  removes the other rather than leaving two.
 - The repository page's **description, topics and social preview** are the one
   part of the branding the API refuses — the app holds *Contents: write*, not
   *Administration: write*, so the write answers 403. `node
