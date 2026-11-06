@@ -10,7 +10,8 @@ The mark is a lighthouse on its rock, with the beam that makes it readable at
 | `fyrhaven-lockup.svg` | horizontal logo — this is where the **red/white stripes** live, because there is room for them |
 | `fyrhaven-lockup-dark.svg` | the same lockup with the wordmark in Paper, for a dark page (GitHub's dark theme, the store's footer) |
 | `fyrhaven-banner.svg` | 1200×630 Open Graph / social card |
-| `*.png` | rendered copies of the three above, because some places take no SVG: GitHub's social preview, avatars, slide decks |
+| `fyrhaven-header.svg` | 2048×1024 profile header: a Gravatar profile cover, and any other 2:1 slot |
+| `*.png` | rendered copies of the SVGs above, because some places take no SVG: GitHub's social preview, Gravatars, avatars, slide decks |
 
 Live copies sit in `fyrhaven-server/site/` (`favicon.svg`, `banner.svg`) and
 are served by the store itself.
@@ -25,21 +26,12 @@ are served by the store itself.
   click, not a step in `npm run release`.
 * **Org avatar / favicon** — `fyrhaven-mark.png` (512×512) or the SVG where SVG
   is accepted.
+* **Profile headers** — `fyrhaven-header.png` (2048×1024, 2:1) for Gravatar and
+  anything else shaped like a cover; `fyrhaven-header-wide.png` (1500×500) is the
+  centre crop of the same artwork for a 3:1 slot. Everything that must survive a
+  crop sits between y=300 and y=700 of the 1024, so the wide crop keeps the mark,
+  the wordmark and the line and drops only the rule and the domain.
 * **Printing one ink** — `fyrhaven-mark-mono.svg`, never a file with a field.
-
-The PNGs are rendered from the SVGs with [sharp](https://sharp.pixelplumbing.com)
-— a throwaway install, deliberately **not** a dependency of either package:
-
-```bash
-cd brand
-npx --yes sharp-cli -i fyrhaven-banner.svg      -o fyrhaven-banner.png      resize 1200 630
-npx --yes sharp-cli -i fyrhaven-lockup.svg      -o fyrhaven-lockup.png      resize 1260 288
-npx --yes sharp-cli -i fyrhaven-lockup-dark.svg -o fyrhaven-lockup-dark.png resize 1260 288
-npx --yes sharp-cli -i fyrhaven-mark.svg        -o fyrhaven-mark.png        resize 512 512
-```
-
-Re-render after any change to the palette or the wordmark; a stale PNG is the
-one asset nobody notices is wrong.
 
 ## Palette
 
@@ -71,9 +63,14 @@ install, deliberately **not** a dependency of either package:
 ```bash
 cd brand
 npx --yes sharp-cli -i fyrhaven-banner.svg      -o fyrhaven-banner.png      resize 1200 630
+npx --yes sharp-cli -i fyrhaven-header.svg      -o fyrhaven-header.png      resize 2048 1024
 npx --yes sharp-cli -i fyrhaven-lockup.svg      -o fyrhaven-lockup.png      resize 1260 288
 npx --yes sharp-cli -i fyrhaven-lockup-dark.svg -o fyrhaven-lockup-dark.png resize 1260 288
 npx --yes sharp-cli -i fyrhaven-mark.svg        -o fyrhaven-mark.png        resize 512 512
+
+# the wide cover is the centre crop of the 2:1 header, so the two cannot disagree
+npx --yes sharp-cli -i fyrhaven-header.png      -o fyrhaven-header-wide.png resize 1500 750
+npx --yes sharp-cli -i fyrhaven-header-wide.png -o fyrhaven-header-wide.png extract 125 0 1500 500
 ```
 
 Re-render after any change to the palette or the wordmark: a stale PNG is the one
