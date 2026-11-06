@@ -3,14 +3,14 @@
 Plugins for [Bulwark Mail](https://github.com/zyntrax/bulwark) — the webmail
 built on Stalwart. Each plugin is published here with its **source** and its
 **build script**; installable ZIPs are attached to
-[GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases).
+[GitHub Releases](https://github.com/Fyrhaven/Fyrhaven-CRM/releases).
 
 The flagship plugin here is **Fyrhaven CRM** — contacts, companies, projects and
 time for Bulwark Mail (it began as a duplicate finder and outgrew the name). This
 repository also carries the **record server** those records live on. A record the plugin invents cannot live in a browser and the
 webmail host has nowhere to put it, so it lives on a small dedicated service —
 see [`fyrhaven-server/`](fyrhaven-server/) and issue
-[#68](https://github.com/zyntrax/bulwark-plugins/issues/68).
+[#68](https://github.com/Fyrhaven/Fyrhaven-CRM/issues/68).
 
 ---
 
@@ -18,19 +18,19 @@ see [`fyrhaven-server/`](fyrhaven-server/) and issue
 
 | Plugin | Version | What it does | Install |
 |---|---|---|---|
-| [**Contact Manager**](fyrhaven-crm/) | 1.47.0 | Find, review and merge duplicate contacts across all address books. One *Contact Manager* page with *Duplicates*, *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* sub-tabs, command palette scan, a duplicate digest when you come back, bulk merge by company or email domain, smarter name matching (nicknames, initials, transliteration, phonetic surnames), duplicate hints in the contact details and while saving, per-address-book duplicate policies, ignore rules (domains, tags, companies) and protected fields, per-address-book roles (viewer/editor/merger/admin, advisory) that disable the actions they do not allow, a full contact editor with create/edit/delete, a 360° contact profile (recent messages, meetings, files with downloads, open tasks with overdue flags, follow-up tasks you can create from the profile, private notes, company rollup, duplicate check) and company profiles, contact groups (distribution lists) as real contact cards with member search and a duplicates-in-a-list warning, a normalisation rules engine (built-in and user-defined rules for names, companies, phones and emails, previewed before they are applied, run on demand, on import and on edit), a change history of the plugin's own writes with the rollback that is still live, a GDPR toolkit (subject-access export, consent records with expiry, and erase/anonymise with a proof-of-deletion report), smart search with `OR`/grouping and a saved search as a bulk scope, an automation rules engine (when/if/then rules over create, edit and import, with a dry run), local projects with milestones as tasks, time and expenses with billable totals and JSON export/import, a first-run *Getting started* guide (import, scan, policies), a *Follow-ups* block on the Overview that shows overdue tasks over every contact at once, a paged contacts list that keeps a large address book fast, smart lists from the command palette, in-app help with a search cheatsheet and keyboard shortcuts, CSV/vCard import with a per-contact decision for duplicates and export, nickname preservation, undo for merges, English and German. | [Latest release](https://github.com/zyntrax/bulwark-plugins/releases/latest) |
+| [**Contact Manager**](fyrhaven-crm/) | 1.60.0 | Find, review and merge duplicate contacts across all address books. One *Contact Manager* page with *Duplicates*, *Contacts*, *Groups*, *Projects*, *Health*, *History* and *Privacy* sub-tabs, command palette scan, a duplicate digest when you come back, bulk merge by company or email domain, smarter name matching (nicknames, initials, transliteration, phonetic surnames), duplicate hints in the contact details and while saving, per-address-book duplicate policies, ignore rules (domains, tags, companies) and protected fields, per-address-book roles (viewer/editor/merger/admin, advisory) that disable the actions they do not allow, a full contact editor with create/edit/delete, a 360° contact profile (recent messages, meetings, files with downloads, open tasks with overdue flags, follow-up tasks you can create from the profile, private notes, company rollup, duplicate check) and company profiles, contact groups (distribution lists) as real contact cards with member search and a duplicates-in-a-list warning, a normalisation rules engine (built-in and user-defined rules for names, companies, phones and emails, previewed before they are applied, run on demand, on import and on edit), a change history of the plugin's own writes with the rollback that is still live, a GDPR toolkit (subject-access export, consent records with expiry, and erase/anonymise with a proof-of-deletion report), smart search with `OR`/grouping and a saved search as a bulk scope, an automation rules engine (when/if/then rules over create, edit and import, with a dry run), local projects with milestones as tasks, time and expenses with billable totals and JSON export/import, a first-run *Getting started* guide (import, scan, policies), a *Follow-ups* block on the Overview that shows overdue tasks over every contact at once, a paged contacts list that keeps a large address book fast, smart lists from the command palette, in-app help with a search cheatsheet and keyboard shortcuts, CSV/vCard import with a per-contact decision for duplicates and export, nickname preservation, undo for merges, English and German. | [Latest release](https://github.com/Fyrhaven/Fyrhaven-CRM/releases/latest) |
 
 ---
 
 ## Repository layout
 
 ```
-bulwark-plugins/
+Fyrhaven-CRM/
 ├── README.md               # this file
 ├── .gitignore
 ├── .clinerules             # the rules for changing the code, and the contract
 ├── scripts/
-│   └── migrate-to-org.mjs  # move this repository to the Fyrhaven org, then fix the links
+│   └── migrate-to-org.mjs  # how this repository moved to the Fyrhaven org, and the link sweep
 ├── fyrhaven-crm/        # source of the Contact Manager plugin
 │   ├── manifest.json
 │   ├── package.json
@@ -60,7 +60,7 @@ tag can never drift apart.
 ## Installing a plugin
 
 1. Download the plugin's `fyrhaven-crm.zip` from
-   [GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases).
+   [GitHub Releases](https://github.com/Fyrhaven/Fyrhaven-CRM/releases).
 2. In Bulwark Mail, go to **Admin → Plugins** (or **Settings → Plugins** if
    the administrator allows user uploads) and upload the ZIP.
 3. Confirm the permissions the plugin asks for.
@@ -76,7 +76,7 @@ Every plugin with a `package.json` is developed with npm. The source tree is
 self-contained; `node_modules` and build output are never committed.
 
 ```bash
-cd contact-manager
+cd fyrhaven-crm
 npm install        # once — dev dependencies only
 npm test           # builds first, then runs the vitest suite
 npm run package    # builds and writes fyrhaven-crm.zip
@@ -92,8 +92,8 @@ duplicate-detection and merge rules. The rules for changing the code are in
 
 1. **Merge the work into `main`.** Feature branches (`feat/contact-manager-*`)
    are merged through a pull request, which also closes the shipped roadmap
-   issues. Keep the `contact-manager` mirror branch in step with `main`, and
-   delete the merged feature branch — `main` and `contact-manager` are the only
+   issues. Keep the `fyrhaven-crm` mirror branch in step with `main`, and
+   delete the merged feature branch — `main` and `fyrhaven-crm` are the only
    long-lived branches.
 2. Bump `version` in the plugin's `manifest.json` (and `package.json`) on
    `main`, and add the matching `CHANGELOG.md` entry — newest on top.
@@ -103,18 +103,18 @@ duplicate-detection and merge rules. The rules for changing the code are in
    the tag and attaches the ZIP to the GitHub release. It refuses to run when
    `manifest.json`, `package.json` and the top `CHANGELOG.md` entry disagree.
 
-`cd contact-manager && npm run ship` does the whole thing in one command: it
+`cd fyrhaven-crm && npm run ship` does the whole thing in one command: it
 merges the open release pull requests into `main` (retargeting stacked ones),
-keeps the `contact-manager` mirror in step and then runs `npm run release`.
+keeps the `fyrhaven-crm` mirror in step and then runs `npm run release`.
 `npm run ship -- --dry-run` prints the plan and changes nothing;
 `--no-release` stops after the merge.
 
 ### Roadmap, issues and releases
 
-- **Roadmap** — the [milestones](https://github.com/zyntrax/bulwark-plugins/milestones)
+- **Roadmap** — the [milestones](https://github.com/Fyrhaven/Fyrhaven-CRM/milestones)
   map the planned Contact Manager releases; every feature is a GitHub issue
   labelled `roadmap`, grouped by area and milestone.
-- **Releases** — `cd contact-manager && npm run release` tests, packages,
+- **Releases** — `cd fyrhaven-crm && npm run release` tests, packages,
   tags `fyrhaven-crm-vX.Y.Z` and uploads the ZIP to GitHub Releases (see
   [`scripts/release.mjs`](fyrhaven-crm/scripts/release.mjs)).
 

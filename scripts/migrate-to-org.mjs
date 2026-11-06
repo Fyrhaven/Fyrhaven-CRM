@@ -34,8 +34,12 @@ const option = (name, fallback) => {
   return at >= 0 && args[at + 1] ? args[at + 1] : fallback;
 };
 
-const TARGET = option('--to', 'Fyrhaven/bulwark-plugins');
+const TARGET = option('--to', 'Fyrhaven/Fyrhaven-CRM');
+// The slug the repository had before the move. It stays written down here after
+// the move — the sweep below skips this file — so the record of where the
+// repository came from survives the rewrite that removes every other mention.
 const OLD_SLUG = 'zyntrax/bulwark-plugins';
+const SELF = 'scripts/migrate-to-org.mjs';
 const DRY = flag('--dry-run');
 const TARGET_ORG = TARGET.split('/')[0];
 
@@ -110,6 +114,7 @@ function trackedTextFiles() {
     .split('\n')
     .filter(Boolean)
     .filter((file) => !file.startsWith('.cline-home/'))
+    .filter((file) => file !== SELF)
     .filter((file) => !file.split('/').includes('node_modules'))
     .filter((file) => !file.split('/').includes('dist') && !file.split('/').includes('build'))
     .filter((file) => /\.(md|json|mjs|js|ya?ml|txt|html|css)$/.test(file));

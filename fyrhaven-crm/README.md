@@ -7,7 +7,7 @@ meant to grow into a general contact-management addon.
 > **Direction:** an eWay-CRM-style CRM workspace inside Bulwark — contacts and
 > companies, activities, follow-ups and a pipeline — within what the plugin
 > host allows. The module-by-module map, the phases and the non-goals are in
-> [issue #54](https://github.com/zyntrax/bulwark-plugins/issues/54).
+> [issue #54](https://github.com/Fyrhaven/Fyrhaven-CRM/issues/54).
 
 This document describes what the plugin does, how it is built and how it
 behaves. The rules an automated contributor works to, and the contract the test
@@ -1540,7 +1540,7 @@ text in the source; always use `t('key')`.
 ## 8. Installing in Bulwark
 
 Download `fyrhaven-crm.zip` from
-[GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases), then
+[GitHub Releases](https://github.com/Fyrhaven/Fyrhaven-CRM/releases), then
 upload it:
 
 * **Admin**: Admin dashboard → Plugins (can be enabled for everyone), or
@@ -1563,9 +1563,9 @@ folder.
 | `fyrhaven-crm/` | The full source tree — `src/`, `test/`, `test-utils/`, `scripts/`, `manifest.json`, `package.json`, `vitest.config.mjs`, `README.md`, `HANDOFF.md`, `CHANGELOG.md` |
 | `.clinerules` (repository root) | The rules for changing the code, and the contract the test suite enforces |
 
-The source lives in **`zyntrax/bulwark-plugins`** on GitHub. Installable ZIPs
+The source lives in **`Fyrhaven/Fyrhaven-CRM`** on GitHub. Installable ZIPs
 are published as assets on
-[GitHub Releases](https://github.com/zyntrax/bulwark-plugins/releases); no
+[GitHub Releases](https://github.com/Fyrhaven/Fyrhaven-CRM/releases); no
 build artifacts are committed.
 
 ### 9.2 Release checklist
@@ -1593,11 +1593,11 @@ plan without changing anything; `--no-release` stops after the merge.
 
 There is **no local todo file**. The roadmap lives in GitHub:
 
-* [Milestones](https://github.com/zyntrax/bulwark-plugins/milestones) — group the
+* [Milestones](https://github.com/Fyrhaven/Fyrhaven-CRM/milestones) — group the
   feature issues. Their titles (`v1.2.0` … `v2.0.0`) are the **originally planned
   releases**, not the current release train; read them as phases and read each
   milestone's description for what has shipped and what remains.
-* [Issues labelled `roadmap`](https://github.com/zyntrax/bulwark-plugins/issues?q=is%3Aissue+label%3Aroadmap)
+* [Issues labelled `roadmap`](https://github.com/Fyrhaven/Fyrhaven-CRM/issues?q=is%3Aissue+label%3Aroadmap)
   — the individual features and tasks.
 * The pinned roadmap issue — the top-level vision linking every milestone.
 
