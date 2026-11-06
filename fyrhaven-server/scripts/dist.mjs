@@ -57,6 +57,15 @@ export const catalogOps = absent('catalogOps');
 export const defaultCatalogue = absent('defaultCatalogue');
 export const openCatalogTables = absent('openCatalogTables');
 `,
+  'cloud.js': `// The cloud's routes are not in this build.
+//
+// This file exists so \`server.js\` can import it, and it answers "not mine" to
+// every request: the shop, the accounts, the catalogue, the Stripe webhook, the
+// operator panel and licence issuing all live in the operator's repository.
+export async function cloudRoute() {
+  return false;
+}
+`,
   'payments.js': `${absent('this server takes no payments')}
 // Answers rather than throws: startup asks once for the payment provider, and a
 // build that cannot take money has nothing to configure.
@@ -126,16 +135,19 @@ writeFileSync(path.join(OUT, 'BUILD'), [
   "accounts.js, catalog.js and payments.js are stubs in this archive — the",
   "operator's account, catalogue and Stripe code is not in it.",
   '',
-  'Still to do, and known: server.js carries the cloud route *implementations*',
-  'inline. They are unreachable (closedSurface answers 404 before they run) but',
-  'the code is present. Extracting them into the cloud build is the next step.',
+  'Still to do, and known: nothing. `cloud.js` — the shop, the accounts, the',
+  'catalogue, billing and the panel — is not in this archive. The three cloud',
+  'modules are stubs; the routes that would call them are not here either.',
   '',
 ].join('\n'));
 
 // The assertions that matter, made against what was actually written.
 const problems = [];
 if (existsSync(path.join(OUT, 'site'))) problems.push('site/ is in the archive');
-for (const name of ['accounts.js', 'catalog.js', 'payments.js']) {
+// Every cloud module is a stub, and a stub is small. This is the check that would
+// have caught the archive shipping the real `cloud.js` — 560 lines of the shop,
+// the accounts and billing.
+for (const name of ['cloud.js', 'accounts.js', 'catalog.js', 'payments.js']) {
   const size = statSync(path.join(OUT, name)).size;
   if (size > 1200) problems.push(`${name} is ${size} bytes — that is the cloud's code, not a stub`);
 }
