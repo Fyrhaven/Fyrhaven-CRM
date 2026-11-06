@@ -118,8 +118,10 @@ releases stop. <https://github.com/organizations/Fyrhaven/settings/installations
 
 - The repository page's **description, topics and social preview** are the one
   part of the branding the API refuses — the app holds *Contents: write*, not
-  *Administration: write*, so `gh repo edit` answers 403. The values to paste are
-  in `brand/README.md` → *The repository page on GitHub*.
+  *Administration: write*, so the write answers 403. `node
+  scripts/brand-github-page.mjs` prints the exact strings and the one settings
+  click that unblocks it; the social preview and the org avatar are clicks in any
+  case. See `brand/README.md` → *The repository page on GitHub*.
 - F-skatt + moms registration is **in progress** (2–6 weeks). Do not flip Stripe to
   **live** until it is granted: `sk_live_`, re-create the three prices in live
   mode, add a live webhook with its own `whsec_`.
