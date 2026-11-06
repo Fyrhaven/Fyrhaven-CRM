@@ -1,0 +1,48 @@
+name: Feature request
+description: Something the CRM should do — or should stop doing
+title: '[feature] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The plugin runs inside a host that decides what it is allowed to do, so the
+        useful part of a request is often **the job**, not the button: what are you
+        trying to get done, and what do you do instead today?
+
+        The planned work is in the [milestones](https://github.com/Fyrhaven/Fyrhaven-CRM/milestones),
+        labeled `roadmap` — worth a look first, since your idea may already have an issue.
+
+  - type: textarea
+    id: job
+    attributes:
+      label: What are you trying to do
+      description: The task, in your words. "Every Monday I need to see which customers have gone quiet" beats "add a filter".
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do instead today
+      description: Including "nothing, I gave up" — that is a useful answer.
+    validations:
+      required: false
+
+  - type: textarea
+    id: sketch
+    attributes:
+      label: What it might look like
+      description: Optional. A sketch, a screenshot of another tool, or a sentence.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This needs the record server, not only the webmail.
+          required: false
+        - label: I would be willing to help test it.
+          required: false
