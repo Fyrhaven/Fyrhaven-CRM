@@ -35,6 +35,17 @@ const PAGE = {
   ],
 };
 
+// The organisation's own description, which is a *different field* with a much
+// smaller ceiling than the repository's: 160 characters, not 350. And it
+// truncates silently — a 207-character paste was stored as exactly 160, ending
+// mid-word ("…notes and conse") — so the length is checked here rather than
+// discovered on the page after the fact.
+const ORG = process.env.FYRHAVEN_ORG ?? 'Fyrhaven';
+const ORG_LIMIT = 160;
+const ORG_DESCRIPTION =
+  'Mail hosting and record keeping for people who run their own mail server — '
+  + 'a CRM for Bulwark Mail, and the record server behind it.';
+
 const say = (line = '') => console.log(line);
 const step = (line) => console.log(`\n== ${line}`);
 const fail = (line) => console.error(`\n!! ${line}`);
@@ -50,11 +61,24 @@ function gh(argv) {
 /** The limit GitHub enforces on a topic string, so a bad one is caught here. */
 const validTopic = (topic) => /^[a-z0-9][a-z0-9-]{0,49}$/.test(topic);
 
+/** Over the ceiling is a hard stop: the field does not warn, it just cuts. */
+function checkLengths() {
+  const problems = [];
+  if (ORG_DESCRIPTION.length > ORG_LIMIT) {
+    problems.push(`the organisation description is ${ORG_DESCRIPTION.length} characters; `
+      + `the field holds ${ORG_LIMIT} and truncates the rest silently.`);
+  }
+  return problems;
+}
+
 function printValues() {
   say('  description:');
   say(`    ${PAGE.description}`);
   say(`  website:     ${PAGE.homepage}`);
   say(`  topics:      ${PAGE.topics.join(', ')}`);
+  say('');
+  say(`  organisation description (${ORG_DESCRIPTION.length}/${ORG_LIMIT}):`);
+  say(`    ${ORG_DESCRIPTION}`);
 }
 
 const current = gh(['api', `/repos/${REPO}`, '--jq', '.description, .homepage, (.topics | join(","))']);
@@ -63,11 +87,18 @@ if (!current.ok) {
   process.exit(1);
 }
 const [liveDescription, liveHomepage, liveTopics] = current.out.split('\n');
+const liveOrg = gh(['api', `/orgs/${ORG}`, '--jq', '.description']);
 
 step(`the page for ${REPO}`);
 say(`  description: ${liveDescription || '(unset)'}`);
 say(`  website:     ${liveHomepage || '(unset)'}`);
 say(`  topics:      ${liveTopics || '(none)'}`);
+say('');
+say(`  ${ORG} description: ${liveOrg.ok ? `"${liveOrg.out || '(unset)'}"` : '(cannot read)'}`);
+if (liveOrg.ok && liveOrg.out.length === ORG_LIMIT && liveOrg.out !== ORG_DESCRIPTION) {
+  say('  ^ exactly the ceiling, and not the string below it: that is what a silent');
+  say('    truncation looks like, so check where it ends before trusting it.');
+}
 
 const junk = PAGE.topics.filter((topic) => !validTopic(topic));
 if (junk.length) {
@@ -75,10 +106,17 @@ if (junk.length) {
   process.exit(1);
 }
 
+const problems = checkLengths();
+if (problems.length) {
+  for (const problem of problems) fail(problem);
+  process.exit(1);
+}
+
 const inStep =
   liveDescription === PAGE.description
   && liveHomepage === PAGE.homepage
-  && liveTopics === PAGE.topics.join(',');
+  && liveTopics === PAGE.topics.join(',')
+  && liveOrg.ok && liveOrg.out === ORG_DESCRIPTION;
 if (inStep) {
   say('\n  already in step — nothing to write.');
   process.exit(0);
@@ -128,6 +166,27 @@ const after = gh(['api', `/repos/${REPO}`, '--jq', '.description, .homepage, (.t
 say(`  description: ${after[0] === PAGE.description ? 'ok' : 'MISMATCH'}`);
 say(`  website:     ${after[1] === PAGE.homepage ? 'ok' : 'MISMATCH'}`);
 say(`  topics:      ${after[2] === PAGE.topics.join(',') ? 'ok' : 'MISMATCH'}`);
+
+step(`the ${ORG} description`);
+const orgWrite = gh(['api', '-X', 'PATCH', `/orgs/${ORG}`, '-f', `description=${ORG_DESCRIPTION}`]);
+let orgApplied = false;
+if (orgWrite.ok) {
+  const back = gh(['api', `/orgs/${ORG}`, '--jq', '.description']).out;
+  orgApplied = back === ORG_DESCRIPTION;
+  say(`  written, and read back: ${orgApplied ? 'ok' : 'MISMATCH — it was cut, check where it ends'}`);
+} else {
+  say(`  NOT written: ${orgWrite.err}`);
+  say('');
+  say('  The organisation description is its own permission (organisation');
+  say('  administration), not the repository one. Paste it by hand — it is');
+  say(`  ${ORG_DESCRIPTION.length} of ${ORG_LIMIT} characters, and the field cuts anything past`);
+  say(`  ${ORG_LIMIT} without saying so:`);
+  say(`    https://github.com/organizations/${ORG}/settings/profile`);
+  say('');
+  say(`    ${ORG_DESCRIPTION}`);
+}
+
 say('');
 say('  Not settable from here, by anyone: the social preview image');
 say('  (brand/fyrhaven-banner.png) and the org avatar and bio.');
+process.exit(orgApplied ? 0 : 1);
