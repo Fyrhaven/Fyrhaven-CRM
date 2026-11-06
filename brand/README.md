@@ -105,8 +105,14 @@ Two things no API can set, so they stay clicks:
 
 | Where | What |
 |---|---|
-| *Settings → General → Social preview* | `brand/fyrhaven-banner.png` (1200×630) |
+| *Settings → General → Social preview* | `brand/fyrhaven-banner.png` (1200×630) — **only offered once the repository is public.** The setting first appears when the repository has one, and GitHub's own wording is that an image "can only be shared from a public repository". A private repository has no section to look for, which is not the same as it being somewhere else |
 | The organisation page, `github.com/Fyrhaven` | avatar `brand/fyrhaven-mark.png`; the bio in [`social.md`](social.md) |
+
+The card that works while the repository is private is the shop's, not GitHub's:
+`fyrhaven-server/site/index.html` declares an absolute PNG (`/banner.png`, served
+from `site/banner.png`) for Open Graph and Twitter, and a test pins that it stays
+absolute and stays raster — a crawler resolves no relative path and renders no
+SVG, so either mistake is a card that silently never appears.
 
 The README header needs no clicks at all: it is a `<picture>` with a
 `prefers-color-scheme` source, and GitHub renders it as `<themed-picture>`, so

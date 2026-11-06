@@ -48,7 +48,7 @@ Two rules hold everywhere, and they are what the test suite is really about:
 | | What it is | Where records live |
 |---|---|---|
 | **[Fyrhaven CRM](fyrhaven-crm/)**<br>`fyrhaven-crm` 1.60.0 | The plugin: duplicate detection and merge, a contact and company 360°, projects, time and expenses, health and retention, a GDPR toolkit, import and export, smart search | The webmail's own address books, plus — when configured — the record server |
-| **[fyrhaven-server](fyrhaven-server/)**<br>`fyrhaven-server` 1.16.0 | The record server: a small key/value service, no runtime dependencies, encrypted at rest, SQLite or an S3-compatible bucket | On the server — self-hosted, or the hosted tier |
+| **[fyrhaven-server](fyrhaven-server/)**<br>`fyrhaven-server` 1.16.1 | The record server: a small key/value service, no runtime dependencies, encrypted at rest, SQLite or an S3-compatible bucket | On the server — self-hosted, or the hosted tier |
 
 The plugin needs nothing but the webmail. The server is what turns it from a
 clean-up tool into a CRM that outlives one browser profile.
