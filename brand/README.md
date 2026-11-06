@@ -26,24 +26,24 @@ are served by the store itself.
   click, not a step in `npm run release`.
 * **Org avatar / favicon** — `fyrhaven-mark.png` (512×512) or the SVG where SVG
   is accepted.
-* **Profile headers** — `fyrhaven-header.png`: 2048×460, the 40:9 band Gravatar
-  renders, so nothing is cropped twice. **Beam only, for now** — the wordmark,
-  tagline and capability line were taken out on purpose: settle the light, then
-  put the words back around it.
+* **Profile headers** — `fyrhaven-header.png`, 2048×460 (40:9, the band Gravatar
+  renders). **No words in it**, on purpose: the cover is the light, and anything
+  else is added once the light is settled.
 
-  What the artwork is: a fan of light that leaves the lantern and runs off the
-  right edge. Four rules, each from a version that failed on a real profile:
-  **no mark in the cover** (the profile picture is the mark); **the beam starts at
-  x=200**, far enough left to be hidden behind the avatar, or its blurred ramp
-  shows as a blob at the circle's edge; **the beam sits at ~60% of the height**,
-  because the avatar is not centred on the band but pushed down — its centre is
-  about 63% of the way down, which is where the lantern ends up; and **the near
-  end is narrow, widening to the right**, which is what light does. Broad at the
-  lamp and thinning out reads as a band of paint.
+  What it is: an ink field, a yellow beam that starts narrow, opens at the avatar's
+  edge and fades out to the right, the lantern's bloom behind the profile picture,
+  and the tower as a shape you sense rather than see — the mark, hugely scaled and
+  blurred past recognition, at 16% opacity.
 
-  Two filters, not one: a soft halo for the spread (`soft`, blur 14) and a tight
-  bright core (`tight`, blur 5). A single blur can only do one of those, and the
-  diluted result goes mustard instead of yellow.
+  **Nothing in it is aligned to the avatar.** A cover is shown at wildly different
+  widths — a phone cuts it to a sliver — so anything that has to meet the profile
+  picture will be wrong somewhere. That is why the earlier drawn-beam versions
+  never stayed right, and why this one is built from a beam that spans the canvas
+  and a glow that sits behind whatever covers the left corner.
+
+  Two filters, not one: a soft halo (`halo`, blur 22) and a tighter core (`tight`,
+  blur 7). One blur cannot be both, and the diluted result goes olive instead of
+  yellow — which it did, three times.
 * **Printing one ink** — `fyrhaven-mark-mono.svg`, never a file with a field.
 
 ## Palette
