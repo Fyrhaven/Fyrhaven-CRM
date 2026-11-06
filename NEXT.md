@@ -123,6 +123,13 @@ releases stop. <https://github.com/organizations/Fyrhaven/settings/installations
 
 ## On the owner's side (not code)
 
+- The **organisation page** (`github.com/Fyrhaven`) is written and waiting: the
+  copy is `brand/org-profile.md`, and `node scripts/publish-org-profile.mjs
+  --apply` publishes it — but GitHub renders that page only from a **public**
+  repository named `.github`, and creating one needs *Administration: write*,
+  which the app does not have. Either grant it, or create the repository by hand
+  once (*New repository* → owner `Fyrhaven` → name `.github` → **public**) and run
+  the script: it fills it and reads its own writes back.
 - The repository page's **description, topics and social preview** are the one
   part of the branding the API refuses — the app holds *Contents: write*, not
   *Administration: write*, so the write answers 403. `node
