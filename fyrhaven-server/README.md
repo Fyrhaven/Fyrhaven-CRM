@@ -56,7 +56,7 @@ not come up.
 | `ALLOW_QUERY_TOKEN` | *(unset)* | `1` accepts `?token=` as well as the header. Off because a token in a URL leaks into logs. |
 
 ```bash
-npm test     # node --test, 80 tests, no dependencies
+npm test     # node --test, 81 tests, no dependencies
 npm start    # node server.js
 ```
 

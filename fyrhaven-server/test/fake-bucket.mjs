@@ -10,7 +10,7 @@ import { client } from '../s3.js';
 
 export const BUCKET_BASE = 'https://account.r2.cloudflarestorage.com/bucket';
 
-export function fakeBucket({ truncate = false, pageSize = 1000 } = {}) {
+export function fakeBucket({ truncate = false, pageSize = 1000, failDelete = false } = {}) {
   const objects = new Map();
   const calls = [];
   const fetch = async (url, init = {}) => {
@@ -47,6 +47,7 @@ export function fakeBucket({ truncate = false, pageSize = 1000 } = {}) {
       return { ok: true, status: 200, headers: new Map(), text: async () => '' };
     }
     if (method === 'DELETE') {
+      if (failDelete) return { ok: false, status: 500, text: async () => 'InternalError' };
       objects.delete(key);
       return { ok: true, status: 204, text: async () => '' };
     }
