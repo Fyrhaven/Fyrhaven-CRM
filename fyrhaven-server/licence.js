@@ -20,7 +20,10 @@
 //
 //     FH1.<base64url(payload JSON)>.<base64url(ed25519 signature)>
 
-import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as signRaw, verify as verifyRaw } from 'node:crypto';
+import {
+  createPrivateKey, createPublicKey, generateKeyPairSync, sign as signRaw, verify as verifyRaw,
+} from 'node:crypto';
+import { DISTRIBUTION } from './distribution.js';
 
 export const LICENCE_PREFIX = 'FH1';
 export const LICENCE_PLANS = ['selfhosted', 'selfhosted-renewal'];
@@ -142,9 +145,22 @@ export function verifyLicence(key, { publicKey = DEFAULT_PUBLIC_KEY, now = Date.
  *
  * @returns {{ok: boolean, mode: 'cloud'|'selfhosted', licence?: object, error?: string}}
  */
-export function startupLicence(env = process.env, { now = Date.now() } = {}) {
+export function startupLicence(env = process.env, { now = Date.now(), distribution = DISTRIBUTION } = {}) {
   const mode = text(env.FYRHAVEN_MODE) === 'cloud' ? 'cloud' : 'selfhosted';
-  if (mode === 'cloud') return { ok: true, mode };
+  if (mode === 'cloud') {
+    // The cloud is a build, not a switch. In the self-hosted artifact this
+    // constant is compiled to 'selfhosted', so the customer's copy cannot be
+    // turned into the operator's service by editing a compose file — which is
+    // what `FYRHAVEN_MODE=cloud` used to do for anyone who set it.
+    if (distribution !== 'cloud') {
+      return {
+        ok: false,
+        mode,
+        error: 'This is the self-hosted build, which has no cloud mode.',
+      };
+    }
+    return { ok: true, mode };
+  }
   const key = text(env.FYRHAVEN_LICENCE);
   if (!key) return { ok: false, mode, error: 'FYRHAVEN_LICENCE is not set — a self-hosted install needs a licence key.' };
   const answer = verifyLicence(key, { publicKey: publicKeyOf(env), now, fingerprint: text(env.FYRHAVEN_INSTALL_KEY) });
