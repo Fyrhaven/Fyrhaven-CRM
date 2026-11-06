@@ -33,13 +33,20 @@ it, it is describing something else.
 |---|---|---|
 | Tagline | 35 | `Your mail. Your records. Your rock.` |
 | One line | 61 | `Mail hosting and records for people who run their own server.` |
-| **GitHub org description** | 207 / 350 | `Mail hosting and record keeping for people who run their own mail server: a CRM for Bulwark Mail, and the record server that keeps its projects, notes and consent records across your devices — yours or ours.` |
+| **GitHub org description** | 131 / 160 | `Mail hosting and record keeping for people who run their own mail server — a CRM for Bulwark Mail, and the record server behind it.` |
+| Long description (About page, press, a reply) | 207 | `Mail hosting and record keeping for people who run their own mail server: a CRM for Bulwark Mail, and the record server that keeps its projects, notes and consent records across your devices — yours or ours.` |
 | Site `<meta name="description">` | 117 / 155 | `Mail hosting and a CRM for people who run their own mail server: contacts, projects and time, on your server or ours.` |
 | Share blurb (`og:description`, `twitter:description`) | 130 / 155 | `Your mail. Your records. Your rock. Contacts, projects and time for people who run their own mail server — on your server or ours.` |
 | Social bio | 131 / 160 | `Your mail. Your records. Your rock. Mail hosting, plus the CRM that gives it contacts, companies, projects and time. → fyrhaven.com` |
 
 Search engines cut around 155–160 characters and social unfurls around 200, so the
 literal lives under the limit rather than at it.
+
+**The organisation description holds 160 characters and cuts the rest without
+saying so.** That is measured, not guessed: a 207-character paste was stored by
+the API as *exactly* 160, ending mid-word — `…notes and conse`. There was no
+error, the field simply stopped. So the org row is deliberately short, and
+`scripts/brand-github-page.mjs` refuses to plan one that is longer.
 
 The **repository** description is not in this table on purpose: it is a string in
 [`scripts/brand-github-page.mjs`](../scripts/brand-github-page.mjs), which is the
