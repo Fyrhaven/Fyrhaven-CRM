@@ -29,6 +29,8 @@ bulwark-plugins/
 ├── README.md               # this file
 ├── .gitignore
 ├── .clinerules             # the rules for changing the code, and the contract
+├── scripts/
+│   └── migrate-to-org.mjs  # move this repository to the Fyrhaven org, then fix the links
 ├── fyrhaven-crm/        # source of the Contact Manager plugin
 │   ├── manifest.json
 │   ├── package.json
