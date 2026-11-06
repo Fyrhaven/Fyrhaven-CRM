@@ -114,10 +114,11 @@ signed in:
   author and 404s for every visitor, because that repository is private. Both
   lockups are copied into `profile/` under the names the copy references, so a run
   updates them rather than adding a second set.
-* **`readme.md` is not `README.md`.** GitHub renders the lowercase spelling
-  today, but its documentation names the other one, so a second copy beside it is
-  a page that exists twice and drifts. The script writes the documented name and
-  removes the variant.
+* **`readme.md` is not `README.md`.** GitHub's lookup there is case-insensitive, so
+  the lowercase spelling does render — but its documentation names `README.md`, and
+  so do its own orgs (`github/.github`, `nodejs/.github`, `microsoft/.github`, all
+  `profile/README.md`). The script writes the documented spelling and removes the
+  variant, rather than leaving two copies to drift apart.
 
 ## The repository page on GitHub
 
