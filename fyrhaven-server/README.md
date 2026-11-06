@@ -56,7 +56,7 @@ not come up.
 | `ALLOW_QUERY_TOKEN` | *(unset)* | `1` accepts `?token=` as well as the header. Off because a token in a URL leaks into logs. |
 
 ```bash
-npm test     # node --test, 21 tests, no dependencies
+npm test     # node --test, 80 tests, no dependencies
 npm start    # node server.js
 ```
 
@@ -206,11 +206,61 @@ header).
 `?scope=` narrows within a workspace (default `default`). It is the seam the team
 features (#23/#24) will widen — **it is not a security boundary**: the token is.
 
-`revision` is one counter bumped by every write, so a client can tell "something
+`revision` is a counter bumped by every write, so a client can tell "something
 changed" without diffing, and a later sync can ask for everything above the
-revision it last saw.
+revision it last saw. A workspace on blob storage keeps its own counter, seeded
+with the global one when it moves, so the number a client holds never goes
+backwards.
 
 A key is a slug (`A-Za-z0-9._-`, ≤ 64 chars) and a value is any JSON up to 1 MiB.
+
+## Where a workspace's bytes live (#158)
+
+The bytes are either in the SQLite file (`sqlite`, the default) or in an S3
+bucket (`s3`: Cloudflare R2, B2, Wasabi, MinIO — anything that speaks Signature
+V4). The **value is sealed before it reaches either**, so a leaked bucket is
+opaque without `STORE_MASTER_KEY`: the envelope moves, the encryption does not.
+
+```
+GET  /v1/admin/workspaces/{id}/storage  -> { provider, available, reachable, objects, bytes }
+POST /v1/admin/workspaces/{id}/migrate  <- { provider }   (+ ?dry=1 to only report)
+```
+
+The migration is the only operation here that can lose a customer's data, so its
+order is fixed and enforced in `storage.js`, not in a route:
+
+1. read every record of **every scope** from the source backend
+2. write each to the target, then **read it back and compare the sha256** of the
+   sealed text. Any mismatch → remove what this run wrote, flip nothing
+3. only when every object round-trips: flip `workspace_storage.provider`
+4. only then: remove the source copies
+
+A failure at step 2 or 3 leaves the workspace **exactly as it was** — the
+provider stays `sqlite` and every original record is still there. That is the
+point of doing the read-back before the flip. `?dry=1` reports what would move.
+
+A workspace recorded on a provider this process cannot reach answers **503**
+(`this workspace lives on s3, which is not configured on this server`) rather
+than an empty record list: an empty answer would look like an empty address book
+and invite the user to "restore" over their own data.
+
+The panel's **Usage** tab shows the provider per workspace and moves one with a
+single deliberate click. The provider list it offers is the list this process can
+actually reach, so `s3` appears only when the bucket is configured:
+
+| Variable | Meaning |
+|---|---|
+| `R2_S3_API` | The bucket-scoped endpoint, e.g. `https://<account>.r2.cloudflarestorage.com/<bucket>`. Ends in the bucket path — it is used exactly as given. |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | The bucket credential. All three are needed; set only some and blob storage stays off. |
+| `R2_BUCKET` | The bucket name, for the operator's own reference and the compose file. |
+
+These must be in the compose **`environment:` block**, not only in `.env` — a
+variable that is in `.env` but not in the block never reaches the container.
+
+Object layout is `<workspace>/<scope>/<key>.json`. Moving a workspace back to
+`sqlite` is the same call with `{"provider":"sqlite"}`, and it is the same code
+path, so the disaster-recovery case (point a workspace at a fresh bucket) is
+exercised by the same tests.
 
 ## Pointing the plugin at it
 
