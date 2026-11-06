@@ -180,18 +180,56 @@ async function loadUsage() {
     box.append(el('p', { class: 'muted', text: 'Nothing stored yet.' }));
     return;
   }
+  const providers = answer.providers && answer.providers.length ? answer.providers : ['sqlite'];
   for (const row of answer.customers) {
+    // Where this workspace's bytes live (#158). A provider the server cannot
+    // reach is not offered, so the only choices are ones a move can complete.
+    const choice = el('select', { 'aria-label': `storage for ${row.workspace}` },
+      ...providers.map((provider) => el('option', { value: provider, text: provider })));
+    choice.value = row.provider;
+    if (!providers.includes(row.provider)) {
+      choice.append(el('option', { value: row.provider, text: row.provider }));
+      choice.value = row.provider;
+    }
+    const move = el('button', { type: 'button', text: 'Move' });
+    move.addEventListener('click', async () => {
+      if (choice.value === row.provider) {
+        status(`${row.workspace} already lives on ${row.provider}.`);
+        return;
+      }
+      const ok = confirm(
+        `Move ${row.workspace} to ${choice.value}?\n\n`
+        + 'Every record is copied and read back before anything is removed. '
+        + 'If a copy does not read back identical, the move is abandoned and nothing changes.',
+      );
+      if (!ok) return;
+      move.disabled = true;
+      try {
+        const moved = await call(`/v1/admin/workspaces/${encodeURIComponent(row.workspace)}/migrate`, {
+          method: 'POST', body: { provider: choice.value },
+        });
+        const behind = moved.leftBehind && moved.leftBehind.length ? ` — ${moved.leftBehind.length} copies left behind` : '';
+        status(`${row.workspace}: ${moved.objects} objects now on ${moved.provider}${behind}.`);
+        await loadUsage();
+      } catch (err) {
+        status(`Move failed, nothing was changed: ${err.message}`, true);
+        move.disabled = false;
+      }
+    });
+
     box.append(el('div', { class: 'row' },
       el('div', {},
         el('strong', { text: row.email || row.workspace }),
         el('div', {
           class: 'muted',
-          text: `${bytes(row.bytes)} stored · ${row.records} records · ${row.projects} projects`,
+          text: `${bytes(row.bytes)} stored · ${row.records} records · ${row.projects} projects`
+            + (row.reachable === false ? ' · UNREACHABLE' : ''),
         }),
         el('div', {
           class: 'muted',
           text: `${bytes(row.inBytes)} in / ${bytes(row.outBytes)} out · ${row.requests} requests`,
-        }))));
+        })),
+      el('div', { class: 'actions' }, choice, move)));
   }
 }
 

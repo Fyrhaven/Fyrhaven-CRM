@@ -49,14 +49,35 @@ export function client({ base, accessKeyId, secretKey, fetch = globalThis.fetch 
     method, headers: signRequest({ method, url, payload, accessKeyId, secretKey }), body: payload || undefined,
   });
   return {
+    /**
+     * Every object under a prefix.
+     *
+     * S3 answers at most 1000 keys per page, so this follows
+     * `NextContinuationToken` until the bucket says it is done. Stopping at the
+     * first page would be a data-loss bug one layer up: a migration reads through
+     * this call, and everything it never saw would be left behind in the old
+     * store and then hidden by the flip.
+     */
     async list(prefix = '') {
-      const r = await call('GET', `${root}?list-type=2${prefix ? `&prefix=${enc(prefix)}` : ''}`);
-      const t = await r.text();
-      if (!r.ok) throw new Error(`list ${r.status}: ${t.slice(0, 160)}`);
-      return [...t.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)].map(([, b]) => ({
-        key: (b.match(/<Key>([\s\S]*?)<\/Key>/) ?? [])[1] ?? '',
-        size: Number((b.match(/<Size>(\d+)<\/Size>/) ?? [])[1] ?? 0),
-      }));
+      const found = [];
+      let token = '';
+      for (let page = 0; page < 10_000; page += 1) {
+        const query = `list-type=2${prefix ? `&prefix=${enc(prefix)}` : ''}`
+          + (token ? `&continuation-token=${enc(token)}` : '');
+        const r = await call('GET', `${root}?${query}`);
+        const t = await r.text();
+        if (!r.ok) throw new Error(`list ${r.status}: ${t.slice(0, 160)}`);
+        for (const [, b] of t.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+          found.push({
+            key: (b.match(/<Key>([\s\S]*?)<\/Key>/) ?? [])[1] ?? '',
+            size: Number((b.match(/<Size>(\d+)<\/Size>/) ?? [])[1] ?? 0),
+          });
+        }
+        if (!/<IsTruncated>\s*true\s*<\/IsTruncated>/i.test(t)) break;
+        token = (t.match(/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/) ?? [])[1] ?? '';
+        if (!token) break;
+      }
+      return found;
     },
     async put(key, text) {
       const r = await call('PUT', `${root}/${key.split('/').map(enc).join('/')}`, text);

@@ -73,6 +73,9 @@
         <p class="muted">
           Storage is what the workspace holds right now. Traffic is what has moved through this API
           since the container started — approximate by design: it counts record bytes, not headers.
+          <strong>Where a workspace lives</strong> is chosen per workspace: a move copies every
+          record, reads it back and compares it, and only then removes the copy it came from — so a
+          failed move changes nothing.
         </p>
         <div id="usage-total" class="muted"></div>
         <div id="usage"></div>
