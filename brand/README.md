@@ -10,7 +10,7 @@ The mark is a lighthouse on its rock, with the beam that makes it readable at
 | `fyrhaven-lockup.svg` | horizontal logo — this is where the **red/white stripes** live, because there is room for them |
 | `fyrhaven-lockup-dark.svg` | the same lockup with the wordmark in Paper, for a dark page (GitHub's dark theme, the store's footer) |
 | `fyrhaven-banner.svg` | 1200×630 Open Graph / social card |
-| `fyrhaven-header.svg` | 2048×1024 profile header: a Gravatar profile cover, and any other 2:1 slot |
+| `fyrhaven-header.svg` | profile header: 2048×1024 for uploading, shown by Gravatar as a 4:1 band. **No mark in it** — the profile picture is the mark, and the beam leaves the avatar |
 | `*.png` | rendered copies of the SVGs above, because some places take no SVG: GitHub's social preview, Gravatars, avatars, slide decks |
 
 Live copies sit in `fyrhaven-server/site/` (`favicon.svg`, `banner.svg`) and
@@ -26,11 +26,17 @@ are served by the store itself.
   click, not a step in `npm run release`.
 * **Org avatar / favicon** — `fyrhaven-mark.png` (512×512) or the SVG where SVG
   is accepted.
-* **Profile headers** — `fyrhaven-header.png` (2048×1024, 2:1) for Gravatar and
-  anything else shaped like a cover; `fyrhaven-header-wide.png` (1500×500) is the
-  centre crop of the same artwork for a 3:1 slot. Everything that must survive a
-  crop sits between y=300 and y=700 of the 1024, so the wide crop keeps the mark,
-  the wordmark and the line and drops only the rule and the domain.
+* **Profile headers** — `fyrhaven-header.png` (2048×1024) is what you upload;
+  `fyrhaven-header-wide.png` (2048×512) is the band Gravatar actually shows, cut
+  from it, so what you approve is what appears.
+
+  Two rules came out of putting the first version on a real profile: **do not
+  draw the mark in the cover**, because the profile picture is the mark and it
+  sits on top of that corner; and **keep the text clear of the left ~27%**, which
+  the avatar covers. The beam runs from the avatar's right edge to the edge of the
+  canvas, which is what makes the two read as one picture rather than a logo in
+  front of a poster. Everything that must survive a crop sits between y=380 and
+  y=740 of the 1024 and right of x=560.
 * **Printing one ink** — `fyrhaven-mark-mono.svg`, never a file with a field.
 
 ## Palette
@@ -68,9 +74,9 @@ npx --yes sharp-cli -i fyrhaven-lockup.svg      -o fyrhaven-lockup.png      resi
 npx --yes sharp-cli -i fyrhaven-lockup-dark.svg -o fyrhaven-lockup-dark.png resize 1260 288
 npx --yes sharp-cli -i fyrhaven-mark.svg        -o fyrhaven-mark.png        resize 512 512
 
-# the wide cover is the centre crop of the 2:1 header, so the two cannot disagree
-npx --yes sharp-cli -i fyrhaven-header.png      -o fyrhaven-header-wide.png resize 1500 750
-npx --yes sharp-cli -i fyrhaven-header-wide.png -o fyrhaven-header-wide.png extract 125 0 1500 500
+# the band Gravatar shows, cut from the upload so the two cannot disagree
+# (extract is top, left, width, height: not the other way round)
+npx --yes sharp-cli -i fyrhaven-header.png      -o fyrhaven-header-wide.png extract 256 0 2048 512
 ```
 
 Re-render after any change to the palette or the wordmark: a stale PNG is the one
