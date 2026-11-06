@@ -83,43 +83,36 @@ ssh -i .ssh/id_ed25519 -p 37281 zyntrax@mailz.se \
 
 Then **verify the live endpoint**, not the file: `curl https://fyrhaven.com/version`.
 
-## Moving the repository to the Fyrhaven organisation
+## The repository moved — done (2026-11-06)
 
-**Blocked on one permission, not on code.** The credential this workspace runs as
-is `cline-cloud[bot]`, and that app is installed on **`zyntrax/bulwark-plugins`
-only** — *not* on the `Fyrhaven` org. Reading `https://api.github.com/orgs/Fyrhaven`
-works, because a public organisation answers that to anyone; creating a
-repository in it, or transferring one into it, is refused with
-`Resource not accessible by integration`.
+It now lives at <https://github.com/Fyrhaven/Fyrhaven-CRM>. The move was
+GitHub's own **transfer**, not a copy, and that is checkable rather than
+assumed: the new home answers with the same 28 open issues, every pull request,
+all the 1.60.x releases *and* their ZIPs, the tags, the labels and the
+milestones. The repository was also renamed from `bulwark-plugins` in the same
+move, so the old `zyntrax/bulwark-plugins` URLs redirect here.
 
-An organisation **owner** has to install the app on the org once:
-
-1. <https://github.com/organizations/Fyrhaven/settings/installations>
-2. **Cline** → *Install* (or *Configure* → add repositories)
-3. grant **Administration: write** (a transfer needs it) and **Contents: write**
-
-Then, from this workspace:
+What was run, from a clean tree:
 
 ```bash
-node scripts/migrate-to-org.mjs                # the plan, and the same blocker if it is still there
-node scripts/migrate-to-org.mjs --transfer     # GitHub's own move
-git remote set-url origin https://github.com/Fyrhaven/bulwark-plugins.git
-node scripts/migrate-to-org.mjs --links        # rewrite the references it lists
+git remote set-url origin https://github.com/Fyrhaven/Fyrhaven-CRM.git
+node scripts/migrate-to-org.mjs --links     # 23 references in 7 files
 ```
 
-`--transfer` is the one to use: issues, pull requests, releases, tags, labels,
-milestones and the redirect from the old URL all move with the repository.
-`--create` exists as a fallback for a credential that may create but not
-transfer, and it says plainly what it does **not** carry (issues, PRs, releases).
-The script refuses a dirty tree, and refuses to guess: with no installation on
-the org it prints the three clicks above and exits non-zero.
+Two things about that sweep are deliberate, so do not "tidy" them away:
+`scripts/migrate-to-org.mjs` keeps the old slug in `OLD_SLUG` and **skips
+itself**, which is what stops the record of where the repository came from
+being erased by the rewrite that removes every other mention of it. And
+`--links` must never run before the move, because the old slug is the one that
+works until then.
 
-**Do not run `--links` before the move** — the old slug is the one that works
-until then.
+`npm run release` needed no change: it calls `gh release create` with no
+`--repo`, so it resolves from the clone's `origin`.
 
-`npm run release` keeps working afterwards without a change: it calls
-`gh release create` with no `--repo`, which resolves from the clone's `origin`,
-so the `git remote set-url` line is the whole of the follow-up.
+**Still the owner's, not code:** the GitHub App must stay installed on
+`Fyrhaven` with **Contents: write** (and **Administration: write** if another
+repository is ever transferred in), or the automated contributor's pushes and
+releases stop. <https://github.com/organizations/Fyrhaven/settings/installations>
 
 ## On the owner's side (not code)
 

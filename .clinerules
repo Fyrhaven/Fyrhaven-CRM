@@ -126,7 +126,7 @@ A change is complete when:
 ### Making a change — the loop
 
 ```bash
-cd contact-manager
+cd fyrhaven-crm
 npm test                 # 1. build + run the suite
 npm run package          # 2. rebuild the installable ZIP
 ```
@@ -134,7 +134,7 @@ npm run package          # 2. rebuild the installable ZIP
 Then commit the source and push. Merge the branch into `main` through a PR
 first; releases are cut from `main` with `npm run release`; there is no
 committed `build/` directory. Delete the feature branch once its PR has landed
-— `main` and `contact-manager` are the only long-lived branches.
+— `main` and `fyrhaven-crm` are the only long-lived branches.
 
 ### Test-writing conventions
 
