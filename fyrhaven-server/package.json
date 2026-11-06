@@ -1,6 +1,6 @@
 {
   "name": "fyrhaven-store",
-  "version": "1.16.1",
+  "version": "1.17.0",
   "private": true,
   "type": "module",
   "description": "The Contact Manager cloud store (#68): the key/value service the plugin's record stores live on.",
@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "dist": "node scripts/dist.mjs"
   }
 }

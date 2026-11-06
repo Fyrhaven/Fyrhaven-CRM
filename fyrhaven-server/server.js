@@ -39,6 +39,7 @@ import {
   createCheckout, createStripePrice, paymentConfig, planFromEvent, verifyStripeSignature,
 } from './payments.js';
 import { catalogOps, defaultCatalogue, openCatalogTables } from './catalog.js';
+import { DISTRIBUTION, surfaceFor } from './distribution.js';
 import {
   backendFor, backendsFor, bumpWorkspaceRevision, migrateWorkspace, noteUsage, openStorageTable,
   providerOf, PROVIDERS, setProvider, storageRow,
@@ -178,7 +179,7 @@ function tokenOf(req, url, { allowQueryToken = false } = {}) {
 }
 
 /** Opens (and migrates) the SQLite file. `:memory:` is for the tests. */
-export function openStore(path = ':memory:') {
+export function openStore(path = ':memory:', { operator = true } = {}) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   if (path !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
@@ -205,15 +206,20 @@ export function openStore(path = ':memory:') {
   // Where a workspace's bytes live (#158). The columns are added to an existing
   // table when they are missing, so a deployed store upgrades in place.
   openStorageTable(db);
-  // Accounts and sessions (#148). Safe on an existing database: every statement
-  // is IF NOT EXISTS, so a store that predates accounts opens unchanged.
-  openAccountTables(db);
-  // What is for sale (#148). Seeded once, then owned by the operator's panel.
-  openCatalogTables(db);
-  const seeded = db.prepare('SELECT COUNT(*) AS n FROM products').get().n;
-  if (!seeded) {
-    const catalogue = catalogOps(db);
-    for (const product of defaultCatalogue()) catalogue.save(product);
+  // Accounts, the shop and what is for sale are the **cloud's** tables. A
+  // self-hosted build never creates them, so its database has no customer
+  // accounts and no price list in it at all.
+  if (operator) {
+    // Safe on an existing database: every statement is IF NOT EXISTS, so a store
+    // that predates accounts opens unchanged.
+    openAccountTables(db);
+    // Seeded once, then owned by the operator's panel.
+    openCatalogTables(db);
+    const seeded = db.prepare('SELECT COUNT(*) AS n FROM products').get().n;
+    if (!seeded) {
+      const catalogue = catalogOps(db);
+      for (const product of defaultCatalogue()) catalogue.save(product);
+    }
   }
   return db;
 }
@@ -430,6 +436,7 @@ const SITE_FILES = {
   '/admin': 'admin.html', '/admin.js': 'admin.js',
   '/favicon.svg': 'favicon.svg', '/banner.svg': 'banner.svg', '/banner.png': 'banner.png',
   '/terms': 'terms.html', '/privacy': 'privacy.html', '/imprint': 'imprint.html',
+  '/changelog': 'changelog.html',
   '/robots.txt': 'robots.txt', '/sitemap.xml': 'sitemap.xml',
 };
 const SITE_TYPES = {
@@ -442,6 +449,7 @@ const SITE_TYPES = {
   'banner.svg': 'image/svg+xml',
   'banner.png': 'image/png',
   'terms.html': 'text/html; charset=utf-8',
+  'changelog.html': 'text/html; charset=utf-8',
   'privacy.html': 'text/html; charset=utf-8',
   'imprint.html': 'text/html; charset=utf-8',
   'robots.txt': 'text/plain; charset=utf-8',
@@ -502,16 +510,37 @@ function readBody(req, limit = MAX_VALUE_BYTES + 4096) {
  * server* has to answer before a credential is configured, and neither reveals
  * anything but a version string. Everything under `/v1/store` needs a token.
  */
+/**
+ * Which operator-only surface a path belongs to, or `''` for the record API
+ * itself. One table, so a route cannot be added to the cloud and forgotten here
+ * without a test noticing.
+ */
+export function closedSurface(path, surface = surfaceFor()) {
+  const off = (name) => (surface[name] ? '' : name);
+  if (path === '/admin' || path === '/admin.js') return off('admin');
+  if (SITE_FILES[path]) return off('shop');
+  if (path === '/v1/products' || path === '/v1/accounts') return off('shop');
+  if (path === '/v1/sessions') return off('accounts');
+  if (path === '/v1/account' || path.startsWith('/v1/account/')) return off('accounts');
+  if (path === '/v1/payments/webhook') return off('billing');
+  if (path === '/v1/admin' || path.startsWith('/v1/admin/')) return off('admin');
+  if (path === '/v1/licence' || path.startsWith('/v1/licence/')) return off('issuing');
+  return '';
+}
+
 export function createRequestHandler(db, {
   tokens = new Map(), keys, allowQueryToken = false, accounts = null, trialDays = DEFAULT_TRIAL_DAYS,
   requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
   adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch, basicUser = '', basicPassword = '',
   licencePublic = '',
   licence = { ok: true, mode: 'cloud' }, licencePrivate = null, installKey = '', s3 = null,
+  surface = surfaceFor(),
 } = {}) {
   const ops = storeOps(db, keys, { s3, now });
-  const people = accounts ?? accountOps(db, { trialDays });
-  const catalogue = catalogOps(db, { now });
+  // Built only when this build serves them: the self-hosted build has no
+  // accounts and no catalogue, so nothing is opened and no route can reach one.
+  const people = surface.accounts ? (accounts ?? accountOps(db, { trialDays })) : null;
+  const catalogue = surface.shop ? catalogOps(db, { now }) : null;
   // The one challenge this installation has minted and not yet spent.
   let pendingChallenge = '';
   // Traffic per workspace, since this process started. Approximate by design:
@@ -569,7 +598,7 @@ export function createRequestHandler(db, {
         return { workspace, account: null, token: presented, plan: 'installer', expiresAt: '', entitled: true };
       }
     }
-    const account = people.sessionAccount(presented, now());
+    const account = people ? people.sessionAccount(presented, now()) : null;
     if (!account) return null;
     const view = people.view(account, now());
     return {
@@ -618,6 +647,12 @@ export function createRequestHandler(db, {
     if (method === 'GET' && (path === '/health' || path === '/version')) {
       return send(res, 200, { ok: true, version: VERSION });
     }
+
+    // What this build serves. The cloud build mounts the shop, the accounts, the
+    // catalogue, the panel and licence issuing; the self-hosted build mounts none
+    // of them. A closed surface answers **404**, not 403: a 403 would confirm that
+    // the surface exists on this server.
+    if (closedSurface(path, surface)) return send(res, 404, { error: 'not found' });
 
     // The site (#148): the page a customer signs up and orders on. Static files,
     // no build step, served by the same container as the API.
@@ -1250,13 +1285,15 @@ export function createStoreServer({
   basicUser = '', basicPassword = '', licencePublic = '',
   licence = startupLicence(), licencePrivate = loadPrivateKey(),
   installKey = process.env.FYRHAVEN_INSTALL_KEY ?? '', s3 = null,
+  surface = surfaceFor(),
 } = {}) {
-  const db = openStore(dbPath);
+  const operator = Object.values(surface).some(Boolean);
+  const db = openStore(dbPath, { operator });
   const tokens = parseTokens(tokenList);
   const keys = workspaceKeys(db, masterKey);
   const server = createHttpServer(createRequestHandler(db, {
     tokens, keys, allowQueryToken, trialDays, now, adminToken, payments, fetchJson,
-    basicUser, basicPassword, licencePublic, licence, licencePrivate, installKey, s3,
+    basicUser, basicPassword, licencePublic, licence, licencePrivate, installKey, s3, surface,
   }));
   server.on('close', () => {
     try {
@@ -1339,14 +1376,21 @@ if (isMain) {
   const licence = startupLicence(process.env);
   if (!licence.ok) {
     console.error(`Fyrhaven: ${licence.error}`);
-    console.error('A self-hosted install needs FYRHAVEN_LICENCE (from your Fyrhaven licence) ');
-    console.error('or FYRHAVEN_MODE=cloud for the service itself. See LICENSING.md.');
+    console.error('This server needs FYRHAVEN_LICENCE — the key Fyrhaven signed for this installation,');
+    console.error('bound to the installation key printed above. It is verified offline; see LICENSING.md.');
+    if (DISTRIBUTION === 'cloud') {
+      console.error("The operator's own service may run with FYRHAVEN_MODE=cloud instead.");
+    }
     process.exit(1);
   }
   console.log(`Fyrhaven: ${licence.mode} mode` + (licence.licence ? ` — ${describeLicence(licence.licence)}` : ''));
 
   const adminToken = String(process.env.STORE_ADMIN_TOKEN ?? '').trim();
-  if (!adminToken) console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin and /admin answer 503.');
+  // Only the cloud has a panel to be closed; saying this in a self-hosted build
+  // would advertise a surface that is not in the build at all.
+  if (!adminToken && DISTRIBUTION === 'cloud') {
+    console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin and /admin answer 503.');
+  }
   // The bucket, when one is configured (#158). `R2_S3_API` already ends in the
   // bucket path, so it is used exactly as given. Without all three parts the
   // service simply offers `sqlite` and a migration to `s3` answers 501 — it does
@@ -1365,11 +1409,15 @@ if (isMain) {
   const { server, tokens } = createStoreServer({
     dbPath, tokenList, masterKey, allowQueryToken, adminToken, payments: paymentConfig(process.env),
     installKey, s3: bucketClient,
+    surface: surfaceFor(DISTRIBUTION),
     trialDays: Number.isFinite(trialDays) && trialDays >= 0 ? trialDays : DEFAULT_TRIAL_DAYS,
     basicUser: String(process.env.STORE_AUTH_USER ?? '').trim(),
     basicPassword: String(process.env.STORE_AUTH_PASSWORD ?? ''),
   });
   server.listen(port, () => {
     console.log(`contact-manager-store v${VERSION} listening on :${port} — ${tokens.size} token(s), db ${dbPath}, values encrypted at rest`);
+    console.log(`Fyrhaven: ${DISTRIBUTION} build — ` + (DISTRIBUTION === 'cloud'
+      ? 'shop, accounts, billing and panel are mounted'
+      : 'record API only: no shop, no accounts, no billing, no panel'));
   });
 }

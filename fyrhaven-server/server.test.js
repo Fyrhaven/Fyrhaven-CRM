@@ -391,6 +391,107 @@ describe('accounts, sessions and the site (#148)', () => {
     assert.match(html, /<meta property="og:image:width" content="1200">/);
   });
 
+  it('ships a changelog, so a customer has a reason to come back', async () => {
+    const response = await fetch(`${url}/changelog`);
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /text\/html/);
+    assert.match(body, /1\.16\.1/);
+    assert.match(body, /<time datetime="\d{4}-\d\d-\d\d"/);
+  });
+
+  it('uses the chosen currency only after declaring it', () => {
+    // The module called chosenCurrency() above its own `const`, so setup threw on
+    // load and every line after it — the whole price list — never ran. The shop
+    // looked like "nothing is for sale" for as long as that was true.
+    const script = readFileSync(new URL('./site/site.js', import.meta.url), 'utf8');
+    const declared = script.indexOf('const chosenCurrency');
+    // The call site, not the bare name: the comment that explains this bug mentions
+    // `chosenCurrency()` too, and a guard that trips over prose is a guard nobody
+    // keeps.
+    const firstUse = script.indexOf('= chosenCurrency()');
+
+    assert.ok(declared >= 0, 'chosenCurrency is declared');
+    assert.ok(firstUse >= 0, 'chosenCurrency is used');
+    assert.ok(declared < firstUse, 'chosenCurrency() is called before it is declared');
+  });
+
+  it('labels every comparison cell, so the stacked phone view keeps its columns', async () => {
+    const html = await (await fetch(`${url}/`)).text();
+    const start = html.indexOf('<table class="compare"');
+    const table = html.slice(start, html.indexOf('</table>', start));
+    const cells = table.match(/<td[^>]*>/g) ?? [];
+
+    assert.ok(start >= 0, 'the comparison table is on the page');
+    assert.ok(cells.length >= 18, `expected three columns per row, saw ${cells.length} cells`);
+    // Below 560px the columns become cards; a cell without a label shows a bare
+    // "yes" and the reader cannot tell which plan it belongs to.
+    for (const cell of cells) assert.match(cell, /data-label="/);
+  });
+
+  it('a self-hosted build has no cloud mode, whatever the environment says', async () => {
+    const { startupLicence } = await import('./licence.js');
+
+    // The cloud is a build, not a switch: FYRHAVEN_MODE=cloud is how anyone used
+    // to run a paid product for free, one line in a compose file.
+    const refused = startupLicence({ FYRHAVEN_MODE: 'cloud' }, { distribution: 'selfhosted' });
+    assert.equal(refused.ok, false);
+    assert.match(refused.error, /no cloud mode/);
+
+    const allowed = startupLicence({ FYRHAVEN_MODE: 'cloud' }, { distribution: 'cloud' });
+    assert.equal(allowed.ok, true);
+  });
+
+  it('maps every operator route to the surface that serves it', async () => {
+    const { closedSurface } = await import('./server.js');
+    const { SURFACES } = await import('./distribution.js');
+    const narrow = SURFACES.selfhosted;
+
+    for (const path of ['/', '/admin', '/admin.js', '/v1/products', '/v1/accounts', '/v1/sessions',
+      '/v1/account', '/v1/account/order', '/v1/payments/webhook', '/v1/admin/status',
+      '/v1/licence/activate']) {
+      assert.notEqual(closedSurface(path, narrow), '', `${path} should be closed in a self-hosted build`);
+    }
+    // The record API itself, and the two open probes, are the whole of that build.
+    for (const path of ['/', '/v1/store/notes', '/health', '/version']) {
+      assert.equal(closedSurface(path, SURFACES.cloud), '', `${path} is open in the cloud build`);
+    }
+    for (const path of ['/v1/store/notes', '/health', '/version']) {
+      assert.equal(closedSurface(path, narrow), '', `${path} must stay open on a self-hosted server`);
+    }
+  });
+
+  it('a self-hosted server serves the record API and nothing else', async () => {
+    const { surfaceFor } = await import('./distribution.js');
+    const own = createStoreServer({
+      masterKey: parseMasterKey(Buffer.alloc(32, 3).toString('base64')),
+      tokenList: 'selfhost-token=personal',
+      surface: surfaceFor('selfhosted'),
+    });
+    await new Promise((resolve) => own.server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${own.server.address().port}`;
+    try {
+      // no shop, no catalogue, no panel, no licence issuing
+      for (const path of ['/', '/v1/products', '/admin', '/v1/admin/status', '/v1/licence']) {
+        assert.equal((await fetch(`${base}${path}`)).status, 404, `${path} must not exist`);
+      }
+      // and the thing it is for still works
+      const write = await fetch(`${base}/v1/store/notes`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer selfhost-token' },
+        body: JSON.stringify({ value: { hello: 'world' } }),
+      });
+      assert.equal(write.status, 200);
+      const read = await fetch(`${base}/v1/store/notes`, {
+        headers: { authorization: 'Bearer selfhost-token' },
+      });
+      assert.deepEqual((await read.json()).value, { hello: 'world' });
+    } finally {
+      await new Promise((resolve) => own.server.close(resolve));
+    }
+  });
+
   it('creates an account on a trial and hands out a session', async () => {
     const answer = await signup();
 
