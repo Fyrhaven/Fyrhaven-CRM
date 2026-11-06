@@ -27,8 +27,10 @@ const DESCRIPTION = 'The Fyrhaven organisation page: mail hosting and a CRM for 
 /** The page, and the images it references, as <path in .github repo, source here>. */
 const FILES = [
   ['profile/README.md', 'brand/org-profile.md'],
-  ['profile/lockup.svg', 'brand/fyrhaven-lockup.svg'],
-  ['profile/lockup-dark.svg', 'brand/fyrhaven-lockup-dark.svg'],
+  // The names the live page already uses: a run must *update* the logo, not add
+  // a second one beside it under a different name.
+  ['profile/fyrhaven-lockup.svg', 'brand/fyrhaven-lockup.svg'],
+  ['profile/fyrhaven-lockup-dark.svg', 'brand/fyrhaven-lockup-dark.svg'],
 ];
 
 const say = (line = '') => console.log(line);
@@ -74,11 +76,11 @@ function plan() {
   say('  writes:');
   for (const [target, from] of FILES) {
     const action = repoExists() && shaOf(target) ? 'update' : 'create';
-    say(`    ${target.padEnd(26)} <- ${from}  (${action})`);
+    say(`    ${target.padEnd(35)} <- ${from}  (${action})`);
   }
   const variants = repoExists() ? FILES.flatMap(([target]) => caseVariantsOf(target)) : [];
   for (const variant of variants) {
-    say(`    remove ${variant.padEnd(19)} (same file, other spelling: two copies would drift)`);
+    say(`    remove ${variant.padEnd(33)} (same file, other spelling: two copies would drift)`);
   }
   say('');
   say('  The page appears at https://github.com/' + ORG);

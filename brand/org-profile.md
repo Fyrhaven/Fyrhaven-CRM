@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="lockup-dark.svg">
-    <img src="lockup.svg" alt="Fyrhaven — mail · records · people" width="300">
+    <source media="(prefers-color-scheme: dark)" srcset="fyrhaven-lockup-dark.svg">
+    <img src="fyrhaven-lockup.svg" alt="Fyrhaven — mail · records · people" width="300">
   </picture>
 </p>
 
