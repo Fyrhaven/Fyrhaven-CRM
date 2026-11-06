@@ -39,7 +39,7 @@ export function signRequest({ method, url, payload = '', accessKeyId, secretKey,
   return { ...headers, authorization: `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${scope}, SignedHeaders=${signed.join(';')}, Signature=${signature}` };
 }
 
-export function client({ base, accessKeyId, secretKey }) {
+export function client({ base, accessKeyId, secretKey, fetch = globalThis.fetch }) {
   // Fail here, at start-up, rather than at 3am with a 403 from a bucket.
   if (!base || !accessKeyId || !secretKey) {
     throw new Error('s3: base, accessKeyId and secretKey are required');
