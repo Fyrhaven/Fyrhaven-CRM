@@ -83,6 +83,44 @@ ssh -i .ssh/id_ed25519 -p 37281 zyntrax@mailz.se \
 
 Then **verify the live endpoint**, not the file: `curl https://fyrhaven.com/version`.
 
+## Moving the repository to the Fyrhaven organisation
+
+**Blocked on one permission, not on code.** The credential this workspace runs as
+is `cline-cloud[bot]`, and that app is installed on **`zyntrax/bulwark-plugins`
+only** — *not* on the `Fyrhaven` org. Reading `https://api.github.com/orgs/Fyrhaven`
+works, because a public organisation answers that to anyone; creating a
+repository in it, or transferring one into it, is refused with
+`Resource not accessible by integration`.
+
+An organisation **owner** has to install the app on the org once:
+
+1. <https://github.com/organizations/Fyrhaven/settings/installations>
+2. **Cline** → *Install* (or *Configure* → add repositories)
+3. grant **Administration: write** (a transfer needs it) and **Contents: write**
+
+Then, from this workspace:
+
+```bash
+node scripts/migrate-to-org.mjs                # the plan, and the same blocker if it is still there
+node scripts/migrate-to-org.mjs --transfer     # GitHub's own move
+git remote set-url origin https://github.com/Fyrhaven/bulwark-plugins.git
+node scripts/migrate-to-org.mjs --links        # rewrite the references it lists
+```
+
+`--transfer` is the one to use: issues, pull requests, releases, tags, labels,
+milestones and the redirect from the old URL all move with the repository.
+`--create` exists as a fallback for a credential that may create but not
+transfer, and it says plainly what it does **not** carry (issues, PRs, releases).
+The script refuses a dirty tree, and refuses to guess: with no installation on
+the org it prints the three clicks above and exits non-zero.
+
+**Do not run `--links` before the move** — the old slug is the one that works
+until then.
+
+`npm run release` keeps working afterwards without a change: it calls
+`gh release create` with no `--repo`, which resolves from the clone's `origin`,
+so the `git remote set-url` line is the whole of the follow-up.
+
 ## On the owner's side (not code)
 
 - F-skatt + moms registration is **in progress** (2–6 weeks). Do not flip Stripe to
