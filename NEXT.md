@@ -129,7 +129,9 @@ releases stop. <https://github.com/organizations/Fyrhaven/settings/installations
   repository named `.github`, and creating one needs *Administration: write*,
   which the app does not have. Either grant it, or create the repository by hand
   once (*New repository* → owner `Fyrhaven` → name `.github` → **public**) and run
-  the script: it fills it and reads its own writes back.
+  the script: it fills it and reads its own writes back. The **org description**
+  is a paste too — `brand/social.md` → *Descriptions, by length* — because the
+  current one leads with "Fyrhaven CRM" and so reads as a product page.
 - The repository page's **description, topics and social preview** are the one
   part of the branding the API refuses — the app holds *Contents: write*, not
   *Administration: write*, so the write answers 403. `node
