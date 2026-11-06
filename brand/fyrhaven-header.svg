@@ -12,27 +12,27 @@
   <defs>
     <linearGradient id="seaH3" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#0E2233"/>
-      <stop offset="1" stop-color="#0A1826"/>
+      <stop offset="1" stop-color="#0C1E2E"/>
     </linearGradient>
     <!-- the beam keeps its strength while it is near the lamp, then gives way -->
     <linearGradient id="beamBroad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#F2B441" stop-opacity="0.26"/>
-      <stop offset="0.5" stop-color="#F2B441" stop-opacity="0.10"/>
-      <stop offset="1" stop-color="#F2B441" stop-opacity="0.03"/>
+      <stop offset="0" stop-color="#FFDD8F" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#FFD583" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#FFD583" stop-opacity="0.02"/>
     </linearGradient>
     <!-- light has no edge: without this the beam reads as a band of brown paint -->
     <filter id="soft" x="-15%" y="-60%" width="130%" height="220%">
-      <feGaussianBlur stdDeviation="18"/>
+      <feGaussianBlur stdDeviation="14"/>
     </filter>
     <radialGradient id="bloom" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#F7CE74" stop-opacity="0.30"/>
-      <stop offset="0.55" stop-color="#F2B441" stop-opacity="0.12"/>
+      <stop offset="0" stop-color="#FFE7B8" stop-opacity="0.26"/>
+      <stop offset="0.55" stop-color="#FFD583" stop-opacity="0.10"/>
       <stop offset="1" stop-color="#F2B441" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="beamCore" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#F7CE74" stop-opacity="0.42"/>
-      <stop offset="0.45" stop-color="#F2B441" stop-opacity="0.16"/>
-      <stop offset="1" stop-color="#F2B441" stop-opacity="0.04"/>
+      <stop offset="0" stop-color="#FFE7B8" stop-opacity="0.34"/>
+      <stop offset="0.45" stop-color="#FFD583" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#FFD583" stop-opacity="0.03"/>
     </linearGradient>
   </defs>
 
@@ -40,16 +40,16 @@
 
   <!-- the beam: wide where it leaves the avatar, climbing away from the text -->
   <g filter="url(#soft)">
-    <polygon points="430,58 2048,0 2048,150 430,206" fill="url(#beamBroad)"/>
-    <polygon points="430,84 2048,16 2048,118 430,182" fill="url(#beamCore)"/>
+    <polygon points="430,112 2048,74 2048,232 430,272" fill="url(#beamBroad)"/>
+    <polygon points="430,132 2048,92 2048,206 430,246" fill="url(#beamCore)"/>
     <!-- the lamp's bloom, just outside the avatar: it hides the beam's cut edge -->
-    <ellipse cx="520" cy="228" rx="210" ry="120" fill="url(#bloom)"/>
+    <ellipse cx="520" cy="196" rx="225" ry="130" fill="url(#bloom)"/>
   </g>
 
-  <text x="740" y="330" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+  <text x="740" y="352" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
         font-size="84" font-weight="700" letter-spacing="-2" fill="#F7F9FA">fyrhaven</text>
-  <text x="742" y="384" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+  <text x="742" y="404" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
         font-size="27" font-weight="400" fill="#A9BCC9">Your mail. Your records. Your rock.</text>
-  <text x="743" y="422" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+  <text x="743" y="438" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
         font-size="17" font-weight="500" letter-spacing="3" fill="#F2B441">MAIL HOSTING · CRM · SELF-HOSTED</text>
 </svg>
