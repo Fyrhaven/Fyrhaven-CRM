@@ -86,25 +86,31 @@ because no typeface is licensed yet. When one is, replace the two `<text>` nodes
 
 ## The repository page on GitHub
 
-The parts of the page that live in GitHub's settings rather than in this tree.
-The API refuses them for the credential this workspace runs as — the app holds
-*Contents: write*, not *Administration: write* — so they are pasted by hand,
-once. These are the values to paste.
+The description, website and topics are the only part of the branding that is not
+a file in this tree. Writing them needs a permission that pushing a commit does
+not — *Administration: write* rather than *Contents: write* — and the app this
+workspace runs as has the second and not the first. So the values live in one
+script, which plans first and writes when it is allowed to:
 
-**Settings → General**
+```bash
+node scripts/brand-github-page.mjs            # the exact strings, changes nothing
+node scripts/brand-github-page.mjs --apply    # writes them, then reads them back
+```
 
-| Field | Value |
+The script is the single source of the wording, so the plan and the write cannot
+disagree. Without the permission it refuses and prints the one settings click that
+grants it, instead of a stack trace.
+
+Two things no API can set, so they stay clicks:
+
+| Where | What |
 |---|---|
-| Description | `Contacts, companies, projects and time for Bulwark Mail — find and merge duplicate contacts across every address book, keep notes and consent records on a server you own, and follow them between devices. Plus the record server they live on.` |
-| Website | `https://fyrhaven.com` |
-| Topics | `crm`, `contacts`, `address-book`, `duplicate-detection`, `email`, `stalwart`, `bulwark-mail`, `webmail`, `plugin`, `self-hosted` |
-| Social preview | `brand/fyrhaven-banner.png` |
+| *Settings → General → Social preview* | `brand/fyrhaven-banner.png` (1200×630) |
+| The organisation page, `github.com/Fyrhaven` | avatar `brand/fyrhaven-mark.png`; the bio in [`social.md`](social.md) |
 
-**The organisation page** (`github.com/Fyrhaven`) — avatar `brand/fyrhaven-mark.png`,
-and the 160-character bio in [`social.md`](social.md).
-
-The README header needs no clicks: it is a `<picture>` with a
-`prefers-color-scheme` source, so each GitHub theme gets the variant it can read.
+The README header needs no clicks at all: it is a `<picture>` with a
+`prefers-color-scheme` source, and GitHub renders it as `<themed-picture>`, so
+each theme gets the lockup it can actually read.
 
 ## The name
 

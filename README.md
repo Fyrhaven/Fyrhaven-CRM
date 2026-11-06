@@ -92,6 +92,7 @@ use the hosted one.
 Fyrhaven-CRM/
 ├── brand/                    # logo, lockup, social card, palette — and the rules for using them
 ├── scripts/
+│   ├── brand-github-page.mjs # description, website and topics — the page settings the API can set
 │   └── migrate-to-org.mjs    # how this repository moved to the Fyrhaven org, and the link sweep
 ├── fyrhaven-crm/             # the plugin
 │   ├── manifest.json         # the contract with the host: permissions, settings, every string
