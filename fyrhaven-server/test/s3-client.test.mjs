@@ -7,45 +7,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { client } = await import('../s3.js');
+import { fakeBucket, s3For } from './fake-bucket.mjs';
+import { client } from '../s3.js';
 
-/** A bucket in a Map, behind a `fetch` that understands the four calls. */
-function fakeBucket() {
-  const objects = new Map();
-  const calls = [];
-  const fetch = async (url, init = {}) => {
-    const method = init.method ?? 'GET';
-    calls.push({ method, url });
-    const parsed = new URL(url);
-    if (method === 'GET' && parsed.searchParams.get('list-type') === '2') {
-      const prefix = parsed.searchParams.get('prefix') ?? '';
-      const contents = [...objects.entries()]
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, value]) => `<Contents><Key>${key}</Key><Size>${value.length}</Size></Contents>`)
-        .join('');
-      return { ok: true, status: 200, text: async () => `<ListBucketResult>${contents}</ListBucketResult>` };
-    }
-    const key = decodeURIComponent(parsed.pathname.replace(/^\/[^/]+\//, ''));
-    if (method === 'PUT') {
-      objects.set(key, String(init.body));
-      return { ok: true, status: 200, headers: new Map(), text: async () => '' };
-    }
-    if (method === 'DELETE') {
-      objects.delete(key);
-      return { ok: true, status: 204, text: async () => '' };
-    }
-    if (!objects.has(key)) return { ok: false, status: 404, text: async () => 'NoSuchKey' };
-    return { ok: true, status: 200, text: async () => objects.get(key) };
-  };
-  return { fetch, objects, calls };
-}
-
-const built = (bucket) => client({
-  base: 'https://account.r2.cloudflarestorage.com/bucket',
-  accessKeyId: 'AKIAEXAMPLE',
-  secretKey: 'secret',
-  fetch: bucket.fetch,
-});
+const built = s3For;
 
 test('a write is readable back, byte for byte', async () => {
   const bucket = fakeBucket();
@@ -83,6 +48,30 @@ test('the listing carries every key under a prefix, with its size', async () => 
     'acct:one/default/notes.json', 'acct:one/default/projects.json',
   ]);
   assert.equal(mine.find((entry) => entry.key.endsWith('projects.json')).size, 5);
+});
+
+test('a listing follows the continuation token, so nothing past the first page is missed', async () => {
+  // S3 answers 1000 keys at a time. A client that stops there would leave every
+  // record past the first page behind in a migration — and then hide them.
+  const bucket = fakeBucket({ pageSize: 2 });
+  const s3 = built(bucket);
+  for (const name of ['a', 'b', 'c', 'd', 'e']) await s3.put(`acct:one/default/${name}.json`, name);
+
+  const mine = await s3.list('acct:one/');
+  assert.deepEqual(mine.map((entry) => entry.key).sort(), [
+    'acct:one/default/a.json',
+    'acct:one/default/b.json',
+    'acct:one/default/c.json',
+    'acct:one/default/d.json',
+    'acct:one/default/e.json',
+  ]);
+
+  // three pages, and each one carried its token rather than starting over
+  const listings = bucket.calls.filter((entry) => entry.url.includes('list-type=2'));
+  assert.equal(listings.length, 3);
+  assert.equal(new URL(listings[0].url).searchParams.get('continuation-token'), null);
+  assert.equal(new URL(listings[1].url).searchParams.get('continuation-token'), '2');
+  assert.equal(new URL(listings[2].url).searchParams.get('continuation-token'), '4');
 });
 
 test('a refused request is an error, not an empty answer', async () => {

@@ -2092,6 +2092,49 @@ file, volume or backup is opaque. **The limit, stated in the server's README
 rather than implied away: the running server must unwrap a key to serve it, so
 whoever operates the service can read the data.**
 
+#### Blob storage — the seam, the adapter and the migration (server 1.16.0, #158 step 2)
+
+A workspace's bytes now live either in the SQLite file (`sqlite`, still the
+default) or in an S3 bucket (`s3`: R2, B2, Wasabi, MinIO — anything that speaks
+Signature V4). The **sealed** text is what moves, so the envelope changes and the
+encryption does not.
+
+- **`storage.js`** — `sqliteBackend` and `s3Backend`, the same four calls
+  (`list/get/put/remove`) plus `scopes`, and `migrateWorkspace`. The backend is
+  chosen per workspace from `workspace_storage`; `storeOps` seals and opens, so
+  a backend never sees plaintext.
+- **The migration order is enforced in that module, not in the route**: read
+  every record of every scope → write each → **read it back and compare the
+  sha256** → flip the provider row → only then delete the source. A copy that
+  reads back different bytes aborts the whole move, removes what the run wrote,
+  and leaves the provider and every original record untouched. `?dry=1` reports
+  without touching anything.
+- **A provider the process cannot reach is a 503, never an empty list.** Serving
+  `{records:{}}` would look like an empty address book and invite a "restore"
+  over the customer's own data.
+- **`s3.js#list` now follows `NextContinuationToken`.** Without it a workspace
+  with more than 1 000 objects would be migrated page one only and the rest
+  would be left behind *and* hidden by the flip — the one bug in this change
+  that could have lost data silently. Its test pages at 2 to prove it.
+- **`workspace_storage` gains `revision`, `objects` and `bytes`** — added to an
+  existing table with `ALTER TABLE`, because `CREATE TABLE IF NOT EXISTS` is a
+  no-op there and a deployed store would otherwise fail only in production. A
+  blob workspace keeps its own revision, seeded with the global one on the way
+  in, so a client's number never goes backwards across a move.
+- **The panel's Usage tab** shows the provider per workspace and moves one with
+  an explicit click; the list it offers is only what the process can reach.
+  `?fresh=1` recounts from the bucket, so the counters a save maintains can be
+  checked.
+- **Erasing an account now empties its bucket too**, not just its rows.
+- Both compose files pass `R2_S3_API`, `R2_BUCKET`, `R2_ACCESS_KEY_ID` and
+  `R2_SECRET_ACCESS_KEY` through the `environment:` block — the gotcha that cost
+  a session: a variable in `.env` alone never reaches the container.
+
+**Not done yet**: the migration has not been run against the live R2 bucket, and
+the deployed container does not carry the new variables. The next step is
+deploy, `GET /v1/admin/workspaces/{id}/storage` to confirm `s3` is offered, then
+a `?dry=1` and a real move of one test workspace before any customer's.
+
 **The better home for these records is the customer's own server, and it is one
 host change away.** Stalwart already implements **JMAP Metadata**
 (`urn:ietf:params:jmap:metadata`) — a per-account key/value store with a *shared*
