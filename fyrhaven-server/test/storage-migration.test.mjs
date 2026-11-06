@@ -239,6 +239,38 @@ describe('a moved workspace is served from the bucket (#158)', () => {
     }
   });
 
+  it('finishes deleting an account when the bucket refuses, and says what to clean up', async () => {
+    // An erasure that stops halfway because a bucket said 500 would leave the
+    // account gone but the workspace row and the objects behind.
+    const bucket = fakeBucket({ failDelete: true });
+    const own = await listen({ s3: s3For(bucket) });
+    try {
+      const signup = await (await fetch(`${own.base}/v1/accounts`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'stuck@example.com', password: 'a-long-password' }),
+      })).json();
+      const workspace = `acct:${signup.account.id}`;
+      await put(own.base, 'projects', [{ id: 'p1' }], { token: signup.token });
+      await fetch(`${own.base}/v1/admin/workspaces/${encodeURIComponent(workspace)}/migrate`, {
+        method: 'POST', headers: admin, body: JSON.stringify({ provider: 's3' }),
+      });
+      assert.equal(bucket.objects.size, 1);
+
+      const answer = await fetch(`${own.base}/v1/account`, { method: 'DELETE', headers: store(signup.token) });
+      assert.equal(answer.status, 200, await answer.clone().text());
+      const erased = await answer.json();
+      assert.equal(erased.deleted, true);
+      assert.equal(erased.storageUnreachable, true);
+      // The account is gone even though the bucket still holds the object.
+      assert.equal(own.db.prepare('SELECT COUNT(*) AS n FROM accounts WHERE id = ?').get(signup.account.id).n, 0);
+      assert.equal(own.db.prepare('SELECT COUNT(*) AS n FROM workspace_storage WHERE workspace = ?').get(workspace).n, 0);
+      assert.equal(bucket.objects.size, 1, 'the residue is reported, not hidden');
+    } finally {
+      await own.close();
+    }
+  });
+
   it('counts the projects a workspace holds in the panel, which the sealed column could not', async () => {
     const own = await listen();
     try {
