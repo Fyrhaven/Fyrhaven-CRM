@@ -27,23 +27,22 @@ are served by the store itself.
 * **Org avatar / favicon** — `fyrhaven-mark.png` (512×512) or the SVG where SVG
   is accepted.
 * **Profile headers** — `fyrhaven-header.png`, 2048×460 (40:9, the band Gravatar
-  renders). **No words in it**, on purpose: the cover is the light, and anything
-  else is added once the light is settled.
+  renders). Content: **the slogan, and a beam that comes from outside the frame**.
 
-  What it is: an ink field, a yellow beam that starts narrow, opens at the avatar's
-  edge and fades out to the right, the lantern's bloom behind the profile picture,
-  and the tower as a shape you sense rather than see — the mark, hugely scaled and
-  blurred past recognition, at 16% opacity.
+  The beam's apex is off-canvas at upload scale (`-140,206`), so it enters as a
+  sliver at the left edge and fans across the cover. That is deliberate: an apex
+  inside the artwork has to be positioned relative to the profile picture, and the
+  cover is shown at wildly different widths — a phone cuts it to a sliver — so any
+  such position is wrong somewhere. Light entering from outside has no start to
+  align, and nothing in the picture can be "out of place".
 
-  **Nothing in it is aligned to the avatar.** A cover is shown at wildly different
-  widths — a phone cuts it to a sliver — so anything that has to meet the profile
-  picture will be wrong somewhere. That is why the earlier drawn-beam versions
-  never stayed right, and why this one is built from a beam that spans the canvas
-  and a glow that sits behind whatever covers the left corner.
+  The slogan sits below the beam, where the ink is clean and white text has
+  contrast. No wordmark: the profile prints the name itself, twice, under the
+  cover.
 
-  Two filters, not one: a soft halo (`halo`, blur 22) and a tighter core (`tight`,
-  blur 7). One blur cannot be both, and the diluted result goes olive instead of
-  yellow — which it did, three times.
+  Colour note: yellow blended onto ink at equal luminance goes green, so the beam
+  uses a pale yellow (`#FFF8D6` → `#FFE94A`) and a fade that ends around 80% of the
+  width. A slower fade leaves an olive smear that reads as paint, not light.
 * **Printing one ink** — `fyrhaven-mark-mono.svg`, never a file with a field.
 
 ## Palette
