@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 1440" role="img" aria-label="Fyrhaven">
+  <title>Fyrhaven — YouTube channel banner</title>
+  <!-- YouTube keeps three areas: the whole 2560x1440 on a TV, a 2560x423 strip on
+       desktop, and only the middle 1546x423 on a phone. So everything that must
+       be read lives inside 1546x423 — x 507..2053, y 508..931 — and the rest of
+       the canvas is the beam, which is texture: it can be cropped anywhere.
+
+       A mark placed outside that box is how a banner ends up with half a
+       lighthouse on a phone, which is what the first attempt did. -->
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0E2233"/>
+      <stop offset="1" stop-color="#0C1E2E"/>
+    </linearGradient>
+    <linearGradient id="fan" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFE94A" stop-opacity="0.40"/>
+      <stop offset="0.22" stop-color="#FFE94A" stop-opacity="0.24"/>
+      <stop offset="0.55" stop-color="#FFE066" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.01"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFF8D6" stop-opacity="0.55"/>
+      <stop offset="0.22" stop-color="#FFF4A8" stop-opacity="0.30"/>
+      <stop offset="0.55" stop-color="#FFE04A" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#FFE07A" stop-opacity="0.01"/>
+    </linearGradient>
+    <filter id="halo" x="-15%" y="-50%" width="130%" height="200%">
+      <feGaussianBlur stdDeviation="44"/>
+    </filter>
+    <filter id="tight" x="-15%" y="-70%" width="130%" height="240%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <clipPath id="tile"><rect width="64" height="64" rx="14"/></clipPath>
+  </defs>
+
+  <rect width="2560" height="1440" fill="url(#field)"/>
+
+  <!-- the beam enters from outside the frame and fans across; it is the only thing
+       allowed outside the safe area -->
+  <g filter="url(#halo)">
+    <polygon points="-260,720 2560,240 2560,1100" fill="url(#fan)"/>
+  </g>
+  <g filter="url(#tight)">
+    <polygon points="-260,700 2560,470 2560,1010" fill="url(#core)"/>
+  </g>
+
+  <!-- the lockup, wholly inside the safe box -->
+  <g transform="translate(870,588) scale(2.35)">
+    <rect width="64" height="64" rx="14" fill="#0E2233" stroke="#1E3A52"/>
+    <g clip-path="url(#tile)">
+      <polygon points="35,19.5 63,10 63,29 35,23" fill="#F2B441" opacity="0.55"/>
+      <polygon points="35,20.5 63,15 63,24 35,22.5" fill="#F2B441" opacity="0.85"/>
+    </g>
+    <ellipse cx="31" cy="53.5" rx="17" ry="3.4" fill="#F7F9FA"/>
+    <polygon points="25.6,51 29.2,27 34.8,27 38.4,51" fill="#F7F9FA"/>
+    <rect x="24.6" y="24.6" width="14.8" height="2.6" rx="1.1" fill="#F7F9FA"/>
+    <rect x="28.6" y="19.4" width="6.8" height="5.4" fill="#F7F9FA"/>
+    <polygon points="27.4,19.4 32,14.4 36.6,19.4" fill="#F7F9FA"/>
+    <polygon points="29.9,31.5 34.1,31.5 34.5,36.5 29.5,36.5" fill="#C8453B"/>
+    <polygon points="29,40 35,40 35.5,45.5 28.5,45.5" fill="#C8453B"/>
+  </g>
+
+  <text x="1070" y="700" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="104" font-weight="700" letter-spacing="-2.5" fill="#F7F9FA">fyrhaven</text>
+  <text x="1073" y="768" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="40" font-weight="400" fill="#D8E2EA">Your mail. Your records. Your rock.</text>
+  <text x="1074" y="818" font-family="Inter, 'Segoe UI', system-ui, -apple-system, sans-serif"
+        font-size="24" font-weight="500" letter-spacing="4" fill="#F2B441">MAIL HOSTING · CRM · SELF-HOSTED</text>
+</svg>
