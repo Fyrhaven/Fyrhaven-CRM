@@ -4,80 +4,145 @@ One page for a fresh session. The long history is in `fyrhaven-crm/HANDOFF.md`;
 the rules are in `.clinerules`; this file is only "what to do next and what not to
 re-learn the hard way".
 
-## State (verified 2026-11-06)
+## State (verified 2026-11-07)
 
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.18.0** — 89 tests green, self-host build has no cloud code |
+| Record server | `fyrhaven-server` **1.18.0** — 89 tests green; **two builds**, and the self-hosted archive contains no cloud code |
+| Cloud repository | `Fyrhaven/Fyrhaven-CRM-Cloud` exists and is **empty**. The content is staged on branch `cloud-split` — see *the one job* |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
 | Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
-| Storage | blob seam **wired** (server 1.16.0): `s3Backend`, the read-back migration, the panel control. Not yet deployed, not yet run against R2 |
-| Git | `main` and `fyrhaven-crm` in step, clean tree |
+| Storage | blob seam wired (server 1.16.0): `s3Backend`, the read-back migration, the panel control. Not deployed, not yet run against R2 |
+| Brand | profile header, YouTube banner, org page, repository page — all shipped (see `brand/`) |
+| Git | `main` and `fyrhaven-crm` in step, clean tree; `cloud-split` pushed but not merged |
 
-## The one job: deploy blob storage and move one test workspace
+## The one job: land the cloud repository
 
-The code is done and its safety property is pinned by a test: a target whose
-write silently truncates must abort the move, leave the provider as `sqlite` and
-leave every original record intact (removing the read-back comparison makes that
-test fail — checked, not assumed). What is left is the part that needs the host:
+`Fyrhaven/Fyrhaven-CRM-Cloud` is created but empty. Its content is ready and
+verified — 29 commits of server history, files at the root, 89 tests passing and
+`npm run dist` still emitting the self-hosted archive when run from it.
+
+It is blocked on **one permission**, not on code: the GitHub App this workspace
+runs as is installed on *selected repositories* — `Fyrhaven-CRM` and `.github` —
+so the new private repository answers `404` to everything, reads included.
+
+**Either** an org owner adds the repository to the installation
+(<https://github.com/organizations/Fyrhaven/settings/installations> → *Cline* →
+*Configure* → Repository access → add `Fyrhaven-CRM-Cloud`, Contents: read & write),
+
+**or** land it from a machine that can push, using the bundle in this workspace's
+artifacts (`fyrhaven-cloud.bundle`, 207 kB, complete history):
+
+```bash
+git clone fyrhaven-cloud.bundle fyrhaven-cloud
+cd fyrhaven-cloud
+git remote set-url origin https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git
+git push -u origin main
+```
+
+Then, from a fresh clone of *this* repository — which already holds the branch:
+
+```bash
+git fetch origin cloud-split
+git push https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git \
+  origin/cloud-split:refs/heads/main
+```
+
+Verify it landed as its own project, not as a folder:
+
+```bash
+git clone https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git /tmp/cloud && cd /tmp/cloud
+node --test          # 89 tests
+npm run dist         # dist/fyrhaven-selfhost-<version>.tar.gz
+```
+
+**Then delete `cloud-split` here** — it exists only to carry the content across.
+
+### The decision that follows
+
+Right now the server would live in **both** repositories, and that is the drift
+trap: two copies of `server.js`, `cloud.js`, `storage.js` and `licence.js`, fixed
+in one place and not the other.
+
+* **Recommended:** remove `fyrhaven-server/` from this repository once the cloud
+  copy is live. This repo becomes plugin + docs. The self-hosted archive keeps
+  being built by `npm run dist` *in the cloud repository*, so customers still get
+  it; the self-host **source** then lives only in the private repository, while
+  the archive itself ships readable JS anyway.
+* **The alternative:** keep `fyrhaven-server/` here as the canonical record API
+  and have the cloud repository consume it (submodule or vendored copy). Choose
+  this only if the self-host server should be developed in public.
+
+## Still open from before
+
+Deploy blob storage and move one test workspace. The code is done and its safety
+property is pinned by a test: a target whose write silently truncates must abort
+the move, leave the provider as `sqlite` and leave every original record intact.
 
 1. Put `R2_S3_API`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in
-   the store's `.env` **and** confirm they are in the compose `environment:`
-   block (they are in both files in the repo now — the deploy folder is a copy).
-2. Rebuild only that container, then
-   `curl -s https://crm.mailz.se/version` and
+   the store's `.env` **and** in the compose `environment:` block.
+2. Rebuild only that container, then check
    `curl -s -H "Authorization: Bearer $STORE_ADMIN_TOKEN" https://crm.mailz.se/v1/admin/workspaces/<id>/storage`
-   → `available` must now be `["sqlite","s3"]` and `reachable` true.
-3. `POST …/migrate?dry=1` first, then a real move of a **test** workspace, then
-   `GET /v1/store` on it and compare with what it held before.
-4. Only then move a customer's workspace, and only from the panel's Usage tab.
+   → `available` must be `["sqlite","s3"]` and `reachable` true.
+3. `POST …/migrate?dry=1` first, then move a **test** workspace, then read it back.
+4. Only then a customer's workspace, and only from the panel's Usage tab.
 
-Then: **#155** website polish — **done** (front page, three pricing tiers with a
-recommendation, trial and no-licence empty states, a changelog page, a phone
-layout that stacks). The shop had never rendered a price at all: the page's
-script died on `chosenCurrency()` before its own `const`, so nothing after it ran.
-Left for the owner: the imprint brackets, and a screenshot for the hero.
+After that: **#156** languages — the site has **no i18n layer**, and the plugin
+carries ~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.
 
-And the server is now **two builds** (1.17.0): the cloud (this folder, never
-distributed) and the self-hosted archive `npm run dist` emits. `FYRHAVEN_MODE=cloud`
-is a compiled constant there, so a customer's copy cannot become the cloud.
-The cloud's routes now live in `cloud.js` and are **not in the archive**: it ships
-as a stub that answers "not mine", and `server.js` carries none of that code.
-Next for it: a `/setup` page so a self-hosted install can be configured and
-licensed without editing `.env` by hand, a Docker Hub image, and a release with an
-installer + checksums.
+## Decided — do not re-litigate
 
-Then **#156** languages: the site has **no i18n layer**, and the plugin carries
-~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.
+* **Two builds from one tree.** `cloud.js` (shop, accounts, catalogue, billing,
+  panel, licence issuing) is the cloud's; `npm run dist` replaces it and the three
+  operator modules with stubs and rewrites `DISTRIBUTION` to `selfhosted`, so the
+  archive cannot enter cloud mode. Demonstrated, not asserted: the built archive
+  answers `404` to `/`, `/v1/products`, `/admin`, `/v1/account`, `/v1/licence` and
+  still serves `/v1/store`.
+* **Licences are offline Ed25519 and are a contract, not DRM** — said in
+  `LICENSING.md`. Making them impossible is not achievable for distributed code;
+  making it take a patch rather than a flag is, and that is done.
+* **Covers never draw the mark.** The profile picture *is* the mark. The beam
+  enters from outside the frame, so nothing has to line up with the avatar at any
+  width. No wordmark on the Gravatar cover; the slogan yes.
+* **Palette.** Amber only works on ink (8.79:1); on paper it is 1.75:1. Red is for
+  the tower's bands, never a link colour. Slate on ink is 3.26:1 — fine for large
+  text, too low for body copy (use `#93A5B2`, 6.38:1).
+* **npm.** The scope `@fyrhaven` already exists, owned by the npm user
+  `fyrhaven`. npm orgs belong to npm *users*; the only place a GitHub org appears
+  is a package's trusted publisher. The plugin stays a ZIP — it is not a package.
 
 ## Gotchas this session paid for
 
+- **`send()` returns nothing.** A route ending `return send(...)` reported "not
+  mine" to its caller, which then answered a second time on the same socket — 114
+  `ERR_HTTP_HEADERS_SENT`. `cloud.js` answers through a `send` that returns `true`.
+- **A private repository the app is not installed on is invisible, not just
+  read-only.** That is why `Fyrhaven-CRM-Cloud` 404s; a *public* one it is not
+  installed on is readable but still not writable.
+- **Gravatar is not 2:1 and its avatar is not centred.** The cover renders around
+  40:9, and the profile picture's centre sits about **63%** down the band. Every
+  beam that looked right in a centred simulation was too high on the real page.
+- **YouTube keeps three areas of one 2560×1440 upload**: the canvas on a TV, a
+  2560×423 strip on desktop, and only the middle **1546×423** on a phone. Check by
+  cropping the PNG, not by looking at the canvas.
+- **Yellow over navy at equal luminance goes green.** Use a pale yellow
+  (`#FFF8D6` → `#FFE94A`) and two blurs — a halo and a tighter core. One blur that
+  is wide enough to be soft dilutes the colour to olive.
+- **The shop had never rendered a price.** `chosenCurrency()` was called above its
+  own `const`, so the module died on load and every line after it — including the
+  price list — never ran. Pinned by a test on the call site, not the word.
+- **A table cell without `data-label` breaks the phone layout silently**: the
+  stacked view shows a bare "yes" and the reader cannot tell which plan it is.
 - **S3 answers 1 000 keys per list page.** `s3.js#list` follows
-  `NextContinuationToken` now; before it did not, and a migration of a workspace
-  with more than 1 000 records would have copied the first page, flipped the
-  provider, and hidden the rest. Any new code that walks a bucket must page.
+  `NextContinuationToken`; any new code that walks a bucket must page.
 - **`CREATE TABLE IF NOT EXISTS` will not add a column.** `workspace_storage`
-  gains its columns with `ALTER TABLE … ADD COLUMN` guarded by
-  `PRAGMA table_info`, or a deployed store fails first in production.
-- **A provider with no backend must be a 503, never `{records:{}}`.** An empty
-  list reads as an empty address book and invites the user to restore over their
-  own data.
-- **`R2_*` must be in the compose `environment:` block**, not only `.env`, or the
-  adapter reports "not configured" inside Docker while working on the host.
-- **`docker compose up -d` answering `Running` means nothing was rebuilt.** A
-  401 that looked like a routing bug was a stale container. Verify against the
-  **live endpoint**, never the file on disk.
+  gains columns with `ALTER TABLE … ADD COLUMN` guarded by `PRAGMA table_info`.
 - **`open(path,'w')` truncates before it writes.** A failed write left
-  `imprint.html` at 0 bytes and it was deployed that way. Write to a temp file or
-  assert before/after.
-- **The S3 signer needs `x-amz-date` without milliseconds** and a per-segment
-  percent-encoded canonical URI; `R2_S3_API` already ends in the bucket path.
-- **`fetch` must be injectable** everywhere (it now is in `s3.js`), or a test
-  cannot fake a bucket and silently reaches the network.
-- **Insert strings into the manifest carefully**: a block appended with the wrong
-  offset lands in the *English* locale. The locale-parity test catches it; run it.
+  `imprint.html` at 0 bytes and it was deployed that way.
+- **`docker compose up -d` answering `Running` means nothing was rebuilt.** Verify
+  against the live endpoint, never the file on disk.
 
 ## Commands
 
@@ -98,68 +163,25 @@ ssh -i .ssh/id_ed25519 -p 37281 zyntrax@mailz.se \
 
 Then **verify the live endpoint**, not the file: `curl https://fyrhaven.com/version`.
 
-The same rebuild carries 1.16.1, which fixes the shop's link preview: its
-`og:image` was a **relative `.svg`**, and a crawler resolves no relative path and
-renders no SVG, so a shared link had no card at all. It is now an absolute
-`/banner.png`, served from `site/banner.png`, and pinned by two tests. After the
-deploy, check it with `curl -s https://fyrhaven.com/ | grep og:image` and
-`curl -sI https://fyrhaven.com/banner.png` (`200 image/png`).
-
-## The repository moved — done (2026-11-06)
-
-It now lives at <https://github.com/Fyrhaven/Fyrhaven-CRM>. The move was
-GitHub's own **transfer**, not a copy, and that is checkable rather than
-assumed: the new home answers with the same 28 open issues, every pull request,
-all the 1.60.x releases *and* their ZIPs, the tags, the labels and the
-milestones. The repository was also renamed from `bulwark-plugins` in the same
-move, so the old `zyntrax/bulwark-plugins` URLs redirect here.
-
-What was run, from a clean tree:
-
-```bash
-git remote set-url origin https://github.com/Fyrhaven/Fyrhaven-CRM.git
-node scripts/migrate-to-org.mjs --links     # 23 references in 7 files
-```
-
-Two things about that sweep are deliberate, so do not "tidy" them away:
-`scripts/migrate-to-org.mjs` keeps the old slug in `OLD_SLUG` and **skips
-itself**, which is what stops the record of where the repository came from
-being erased by the rewrite that removes every other mention of it. And
-`--links` must never run before the move, because the old slug is the one that
-works until then.
-
-`npm run release` needed no change: it calls `gh release create` with no
-`--repo`, so it resolves from the clone's `origin`.
-
-**Still the owner's, not code:** the GitHub App must stay installed on
-`Fyrhaven` with **Contents: write** (and **Administration: write** if another
-repository is ever transferred in), or the automated contributor's pushes and
-releases stop. <https://github.com/organizations/Fyrhaven/settings/installations>
-
 ## On the owner's side (not code)
 
-- The **organisation page** is **live** at `github.com/Fyrhaven`: the description is
-  the 131-character company line, and the README renders with both lockups served
-  from `Fyrhaven/.github` — checked as an anonymous visitor, not from a logged-in
-  session. It was built by hand because the API cannot: creating a repository in
-  the org, and writing to one, both need *Administration: write*, and the app's
-  installation covers `Fyrhaven-CRM` only. `node
-  scripts/publish-org-profile.mjs --apply` is the maintained path once that is
-  granted; until then, edit `brand/org-profile.md` and the file in `.github`
-  together. That file is `profile/readme.md` — GitHub renders it today, but
-  `README.md` is the documented name, which is why the script writes that one and
-  removes the other rather than leaving two.
-- The repository page's **description, topics and social preview** are the one
-  part of the branding the API refuses — the app holds *Contents: write*, not
-  *Administration: write*, so the write answers 403. `node
-  scripts/brand-github-page.mjs` prints the exact strings and the one settings
-  click that unblocks it; the social preview and the org avatar are clicks in any
-  case. See `brand/README.md` → *The repository page on GitHub*.
-- F-skatt + moms registration is **in progress** (2–6 weeks). Do not flip Stripe to
-  **live** until it is granted: `sk_live_`, re-create the three prices in live
-  mode, add a live webhook with its own `whsec_`.
+- **Add `Fyrhaven-CRM-Cloud` to the GitHub App installation** — the one thing
+  blocking the cloud repository. Or push `fyrhaven-cloud.bundle` by hand.
+- **The organisation page** is live; its source copy is `brand/org-profile.md`.
+  GitHub renders it only from a **public** repository named `.github`, and it is
+  there now.
+- **The repository page's description, topics and social preview** need
+  *Administration: write*: `node scripts/brand-github-page.mjs` prints the values
+  and the one settings click.
+- **npm**: add a second owner to the `fyrhaven` org and require 2FA.
+- **Social**: the Gravatar colours are background `#0E2233`, surface `#1B3346`,
+  accent `#F2B441`; upload `brand/fyrhaven-header.png` (2048×460) as the cover and
+  `brand/fyrhaven-mark.png` as the avatar. The YouTube banner is
+  `brand/fyrhaven-youtube.png` (2560×1440).
+- F-skatt + moms registration is **in progress**. Do not flip Stripe to **live**
+  until it is granted: `sk_live_`, re-create the three prices in live mode, add a
+  live webhook with its own `whsec_`.
 - Demo video (scan → review → merge → undo), then claim the handles
   (`brand/social.md`), then one proper Show HN / r/selfhosted post.
-- `BIZ.md` has the business checklist; the firma registration and trademark are
-  **after** the first invoices, not before.
-- Rotate the Cloudflare token — an old one is in the chat log.
+- Rotate the Cloudflare token — an old one sits in the chat log.
+
