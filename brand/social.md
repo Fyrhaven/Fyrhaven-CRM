@@ -104,7 +104,7 @@ product page rather than a company.
 | Avatar everywhere | 400×400 px | `fyrhaven-mark.svg` → PNG (the mark reads at 16 px, so 400 is generous) |
 | Gravatar / profile header | 2048×460 (40:9) | `fyrhaven-header.png` — the ratio Gravatar renders, no mark in it: the avatar *is* the mark and the beam leaves it |
 | X header | 1500×500 (3:1) | not drawn yet: the 40:9 cover is cropped by X and would cut the wordmark, so it needs its own layout |
-| YouTube banner | 2560×1440 (safe area 1546×423) | banner, mark inside the safe area |
+| YouTube banner | 2560×1440 (safe 1546×423) | `fyrhaven-youtube.png` — lockup inside the safe box, beam outside it |
 | Instagram / TikTok | 1080×1920 story | mark on ink, headline in the lower third |
 | OG card | 1200×630 | `fyrhaven-banner.svg` (already served at `/banner.svg`) |
 

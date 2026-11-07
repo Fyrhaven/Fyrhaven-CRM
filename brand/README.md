@@ -11,6 +11,7 @@ The mark is a lighthouse on its rock, with the beam that makes it readable at
 | `fyrhaven-lockup-dark.svg` | the same lockup with the wordmark in Paper, for a dark page (GitHub's dark theme, the store's footer) |
 | `fyrhaven-banner.svg` | 1200×630 Open Graph / social card |
 | `fyrhaven-header.svg` | profile header, drawn at **2048×460 (40:9)** — the ratio Gravatar displays. **No mark in it**: the profile picture is the mark, and the beam leaves the avatar |
+| `fyrhaven-youtube.svg` | YouTube channel banner, **2560×1440**, with the lockup inside the 1546×423 safe area |
 | `*.png` | rendered copies of the SVGs above, because some places take no SVG: GitHub's social preview, Gravatars, avatars, slide decks |
 
 Live copies sit in `fyrhaven-server/site/` (`favicon.svg`, `banner.svg`) and
@@ -43,6 +44,17 @@ are served by the store itself.
   Colour note: yellow blended onto ink at equal luminance goes green, so the beam
   uses a pale yellow (`#FFF8D6` → `#FFE94A`) and a fade that ends around 80% of the
   width. A slower fade leaves an olive smear that reads as paint, not light.
+* **YouTube banner** — `fyrhaven-youtube.png`, 2560×1440. YouTube keeps three
+  areas: the whole canvas on a TV, a **2560×423 strip** on desktop, and only the
+  middle **1546×423** on a phone. Everything that must be read — mark, wordmark,
+  slogan, capability line — lives inside 1546×423 at x 507..2053, y 508..931. The
+  beam is the only thing allowed outside it, because it is texture: any crop of it
+  still looks like light.
+
+  Check it without uploading: crop the PNG to 1546×423 at (507,508) and to
+  2560×423 at (0,508). If a mark or a word moves out of frame in either, the
+  banner is wrong however good the full canvas looks.
+
 * **Printing one ink** — `fyrhaven-mark-mono.svg`, never a file with a field.
 
 ## Palette
