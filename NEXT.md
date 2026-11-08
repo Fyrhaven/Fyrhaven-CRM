@@ -20,38 +20,26 @@ re-learn the hard way".
 
 ## The one job: land the cloud repository
 
-`Fyrhaven/Fyrhaven-CRM-Cloud` is created but empty. Its content is ready and
-verified on branch **`cloud-only`**: 29 commits of server history, files at the
-root, **86 tests** passing, and the server booting to serve `/health`, the shop and
-`/v1/products`.
+`Fyrhaven/Fyrhaven-CRM-Cloud` exists and is empty. Its content is staged in this
+repository on branch **`cloud-only`** — 29 commits of server history, files at the
+root, 86 tests — because a session without access to that repository cannot push
+to it.
 
-It is the cloud **only** — `scripts/dist.mjs`, `packaging/`, the stub modules and
-`distribution.js` are gone. That is deliberate: with one tree producing both
-builds, the code that honoured `FYRHAVEN_MODE=cloud` travelled in the self-hosted
-copy, one compose line from being the operator's service. Two repositories, no
-flag.
-
-It is blocked on **one permission**, not on code: the GitHub App this workspace
-runs as is installed on *selected repositories* — `Fyrhaven-CRM` and `.github` —
-so the new private repository answers `404` to everything, reads included.
-
-**Either** an org owner adds the repository to the installation
-(<https://github.com/organizations/Fyrhaven/settings/installations> → *Cline* →
-*Configure* → Repository access → add `Fyrhaven-CRM-Cloud`, Contents: read & write),
-
-**or** land it from a machine that can push, using the bundle in the previous
-workspace's artifacts (`fyrhaven-cloud.bundle`, 207 kB — note: that bundle holds
-`cloud-split`, the *pre-split* tree with the self-host machinery, so prefer the
-branch):
+**One command, in a session that has access:**
 
 ```bash
-git clone fyrhaven-cloud.bundle fyrhaven-cloud
-cd fyrhaven-cloud
-git remote set-url origin https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git
-git push -u origin main
+node scripts/land-cloud-repo.mjs            # the plan: reachable? empty? which commit?
+node scripts/land-cloud-repo.mjs --apply    # push, clone it back, run its 86 tests
 ```
 
-Then, from a fresh clone of *this* repository — which already holds the branch:
+It refuses rather than overwrites if the target already has commits, prints the
+one settings click when the app cannot see the repository, and verifies what
+landed by cloning it and running the tests — not by trusting the push's exit code.
+Exercised end to end against a local bare repository: push, file assertions
+(`cloud.js` present; no `packaging/`, no `distribution.js`), 86 tests, and a
+refusal with exit 1 when the target was not empty.
+
+**If a human has to do it instead:**
 
 ```bash
 git fetch origin cloud-only
@@ -59,16 +47,14 @@ git push https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git \
   origin/cloud-only:refs/heads/main
 ```
 
-Verify it landed as its own project, not as a folder:
+Then confirm the branch is the cloud only — `node --test` gives 86, `ls` shows
+`cloud.js` and no `packaging/` — and **delete the staging branch**
+(`git push origin --delete cloud-only`); it exists only to carry the content.
 
-```bash
-git clone https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git /tmp/cloud && cd /tmp/cloud
-node --test          # 86 tests
-ls                   # cloud.js and the operator modules — and no packaging/ or scripts/
-```
-
-**Then delete the staging branches here** (`cloud-only` and `cloud-split`, which
-is the superseded pre-split tree) — they exist only to carry the content across.
+Why the cloud repository holds no self-host machinery: `FYRHAVEN_MODE=cloud` was
+once a variable any self-hoster could set, and while one tree produced both
+builds, the code honouring it travelled in the copy they held. Two repositories,
+no flag — the code that would honour it is not in their possession.
 
 ### Then: this repository's server becomes the self-hosted one
 
