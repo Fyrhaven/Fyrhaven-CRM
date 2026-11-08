@@ -10,19 +10,26 @@ re-learn the hard way".
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
 | Record server | `fyrhaven-server` **1.18.0** — 89 tests green; **two builds**, and the self-hosted archive contains no cloud code |
-| Cloud repository | `Fyrhaven/Fyrhaven-CRM-Cloud` exists and is **empty**. The content is staged on branch `cloud-split` — see *the one job* |
+| Cloud repository | `Fyrhaven/Fyrhaven-CRM-Cloud` exists and is **empty**. Cloud-only content is staged on branch `cloud-only` (86 tests) — see *the one job* |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
 | Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
 | Storage | blob seam wired (server 1.16.0): `s3Backend`, the read-back migration, the panel control. Not deployed, not yet run against R2 |
 | Brand | profile header, YouTube banner, org page, repository page — all shipped (see `brand/`) |
-| Git | `main` and `fyrhaven-crm` in step, clean tree; `cloud-split` pushed but not merged |
+| Git | `main` and `fyrhaven-crm` in step, clean tree; `cloud-only` pushed but not merged |
 
 ## The one job: land the cloud repository
 
 `Fyrhaven/Fyrhaven-CRM-Cloud` is created but empty. Its content is ready and
-verified — 29 commits of server history, files at the root, 89 tests passing and
-`npm run dist` still emitting the self-hosted archive when run from it.
+verified on branch **`cloud-only`**: 29 commits of server history, files at the
+root, **86 tests** passing, and the server booting to serve `/health`, the shop and
+`/v1/products`.
+
+It is the cloud **only** — `scripts/dist.mjs`, `packaging/`, the stub modules and
+`distribution.js` are gone. That is deliberate: with one tree producing both
+builds, the code that honoured `FYRHAVEN_MODE=cloud` travelled in the self-hosted
+copy, one compose line from being the operator's service. Two repositories, no
+flag.
 
 It is blocked on **one permission**, not on code: the GitHub App this workspace
 runs as is installed on *selected repositories* — `Fyrhaven-CRM` and `.github` —
@@ -32,8 +39,10 @@ so the new private repository answers `404` to everything, reads included.
 (<https://github.com/organizations/Fyrhaven/settings/installations> → *Cline* →
 *Configure* → Repository access → add `Fyrhaven-CRM-Cloud`, Contents: read & write),
 
-**or** land it from a machine that can push, using the bundle in this workspace's
-artifacts (`fyrhaven-cloud.bundle`, 207 kB, complete history):
+**or** land it from a machine that can push, using the bundle in the previous
+workspace's artifacts (`fyrhaven-cloud.bundle`, 207 kB — note: that bundle holds
+`cloud-split`, the *pre-split* tree with the self-host machinery, so prefer the
+branch):
 
 ```bash
 git clone fyrhaven-cloud.bundle fyrhaven-cloud
@@ -45,36 +54,45 @@ git push -u origin main
 Then, from a fresh clone of *this* repository — which already holds the branch:
 
 ```bash
-git fetch origin cloud-split
+git fetch origin cloud-only
 git push https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git \
-  origin/cloud-split:refs/heads/main
+  origin/cloud-only:refs/heads/main
 ```
 
 Verify it landed as its own project, not as a folder:
 
 ```bash
 git clone https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git /tmp/cloud && cd /tmp/cloud
-node --test          # 89 tests
-npm run dist         # dist/fyrhaven-selfhost-<version>.tar.gz
+node --test          # 86 tests
+ls                   # cloud.js and the operator modules — and no packaging/ or scripts/
 ```
 
-**Then delete `cloud-split` here** — it exists only to carry the content across.
+**Then delete the staging branches here** (`cloud-only` and `cloud-split`, which
+is the superseded pre-split tree) — they exist only to carry the content across.
 
-### The decision that follows
+### Then: this repository's server becomes the self-hosted one
 
-Right now the server would live in **both** repositories, and that is the drift
-trap: two copies of `server.js`, `cloud.js`, `storage.js` and `licence.js`, fixed
-in one place and not the other.
+The cloud left with `cloud.js`, `accounts.js`, `catalog.js`, `payments.js` and
+`site/`. What is still in `fyrhaven-server/` here is the **old full tree**, which
+now belongs in neither place — the cloud copy is cloud-only, so this one has to
+become the mirror image:
 
-* **Recommended:** remove `fyrhaven-server/` from this repository once the cloud
-  copy is live. This repo becomes plugin + docs. The self-hosted archive keeps
-  being built by `npm run dist` *in the cloud repository*, so customers still get
-  it; the self-host **source** then lives only in the private repository, while
-  the archive itself ships readable JS anyway.
-* **The alternative:** keep `fyrhaven-server/` here as the canonical record API
-  and have the cloud repository consume it (submodule or vendored copy). Choose
-  this only if the self-host server should be developed in public.
+* **remove** `cloud.js`, `accounts.js`, `catalog.js`, `payments.js`, `site/`, and
+the `cloudRoute` calls in `server.js` (two calls and the `cloudContext` object —
+the handler keeps the record API, the auth and the licence gate);
+* **remove** `scripts/dist.mjs` and `packaging/`, and replace them with plain
+packaging: the folder *is* the self-hosted server now, so there is nothing to
+stub out;
+* **drop** the cloud test suites and keep the record-API ones;
+* the licence gate becomes the only condition: `FYRHAVEN_LICENCE`, verified
+  offline, no `FYRHAVEN_MODE` at all.
 
+That is the price of two repositories: `server.js`, `storage.js`, `s3.js` and
+`licence.js` exist twice and must be kept in step by hand. The rule to write down
+when it happens: **a change to the record API is two commits**, one in each
+repository, and the shared files should differ only in the cloud plugin points.
+
+## Still open from before
 ## Still open from before
 
 Deploy blob storage and move one test workspace. The code is done and its safety
