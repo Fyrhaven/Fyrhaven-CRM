@@ -141,7 +141,6 @@ describe('a migration that cannot be trusted changes nothing (#158)', () => {
   });
 });
 
-
 describe('a moved workspace is served from the bucket (#158)', () => {
   it('reads, writes and deletes through the bucket once the provider has moved', async () => {
     const bucket = fakeBucket();
@@ -172,8 +171,6 @@ describe('a moved workspace is served from the bucket (#158)', () => {
       const fresh = await getJson(own.base, '/v1/admin/workspaces/acme/storage?fresh=1', admin);
       assert.equal(fresh.objects, 1);
       assert.equal(fresh.bytes, state.bytes);
-      const usage = await getJson(own.base, '/v1/admin/usage', admin);
-      assert.equal(usage.customers.find((entry) => entry.workspace === 'acme').provider, 's3');
     } finally {
       await own.close();
     }
@@ -206,84 +203,6 @@ describe('a moved workspace is served from the bucket (#158)', () => {
     }
   });
 
-  it('erases a moved workspace from the bucket as well as the database', async () => {
-    // "The key is gone, so the bytes are unreadable" is true, and it is not the
-    // same thing as having deleted them. An erasure has to remove the objects.
-    const bucket = fakeBucket();
-    const own = await listen({ s3: s3For(bucket) });
-    try {
-      const signup = await (await fetch(`${own.base}/v1/accounts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'owner@example.com', password: 'a-long-password' }),
-      })).json();
-      assert.ok(signup.token, JSON.stringify(signup));
-      const workspace = `acct:${signup.account.id}`;
-      await put(own.base, 'projects', [{ id: 'p1' }], { token: signup.token });
-
-      const moved = await fetch(`${own.base}/v1/admin/workspaces/${encodeURIComponent(workspace)}/migrate`, {
-        method: 'POST', headers: admin, body: JSON.stringify({ provider: 's3' }),
-      });
-      assert.equal(moved.status, 200, await moved.text());
-      assert.equal(bucket.objects.size, 1);
-
-      const erased = await (await fetch(`${own.base}/v1/account`, {
-        method: 'DELETE', headers: store(signup.token),
-      })).json();
-      assert.equal(erased.deleted, true);
-      assert.equal(erased.objectsRemoved, 1);
-      assert.equal(bucket.objects.size, 0, [...bucket.objects.keys()].join(', '));
-      assert.equal(own.db.prepare('SELECT COUNT(*) AS n FROM workspace_storage WHERE workspace = ?').get(workspace).n, 0);
-    } finally {
-      await own.close();
-    }
-  });
-
-  it('finishes deleting an account when the bucket refuses, and says what to clean up', async () => {
-    // An erasure that stops halfway because a bucket said 500 would leave the
-    // account gone but the workspace row and the objects behind.
-    const bucket = fakeBucket({ failDelete: true });
-    const own = await listen({ s3: s3For(bucket) });
-    try {
-      const signup = await (await fetch(`${own.base}/v1/accounts`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: 'stuck@example.com', password: 'a-long-password' }),
-      })).json();
-      const workspace = `acct:${signup.account.id}`;
-      await put(own.base, 'projects', [{ id: 'p1' }], { token: signup.token });
-      await fetch(`${own.base}/v1/admin/workspaces/${encodeURIComponent(workspace)}/migrate`, {
-        method: 'POST', headers: admin, body: JSON.stringify({ provider: 's3' }),
-      });
-      assert.equal(bucket.objects.size, 1);
-
-      const answer = await fetch(`${own.base}/v1/account`, { method: 'DELETE', headers: store(signup.token) });
-      assert.equal(answer.status, 200, await answer.clone().text());
-      const erased = await answer.json();
-      assert.equal(erased.deleted, true);
-      assert.equal(erased.storageUnreachable, true);
-      // The account is gone even though the bucket still holds the object.
-      assert.equal(own.db.prepare('SELECT COUNT(*) AS n FROM accounts WHERE id = ?').get(signup.account.id).n, 0);
-      assert.equal(own.db.prepare('SELECT COUNT(*) AS n FROM workspace_storage WHERE workspace = ?').get(workspace).n, 0);
-      assert.equal(bucket.objects.size, 1, 'the residue is reported, not hidden');
-    } finally {
-      await own.close();
-    }
-  });
-
-  it('counts the projects a workspace holds in the panel, which the sealed column could not', async () => {
-    const own = await listen();
-    try {
-      await put(own.base, 'projects', [{ id: 'p1' }, { id: 'p2' }]);
-      const usage = await getJson(own.base, '/v1/admin/usage', admin);
-      const row = usage.customers.find((entry) => entry.workspace === 'acme');
-      assert.equal(row.projects, 2);
-      assert.equal(row.provider, 'sqlite');
-      assert.deepEqual(usage.providers, ['sqlite']);
-    } finally {
-      await own.close();
-    }
-  });
 });
 
 describe('a deployed store gains the new columns in place (#158)', () => {
@@ -317,7 +236,6 @@ describe('a deployed store gains the new columns in place (#158)', () => {
     }
   });
 });
-
 
 describe('the bucket backend (#158)', () => {
   it('reads every object under a scope, across list pages and in batches', async () => {

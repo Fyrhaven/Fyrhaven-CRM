@@ -9,8 +9,12 @@ FYRHAVEN_LICENCE=FH1.eyJ2IjoxLCJzdWIiOiJ5b3VAZXhhbXBsZS5jb20i...   # from your o
 FYRHAVEN_LICENCE_PUBLIC=<base64 DER public key>                    # already the default
 ```
 
-`FYRHAVEN_MODE=cloud` is **the operator's own service** (the paid tier): it needs
-no key, because it is the product.
+`FYRHAVEN_LICENCE_PUBLIC` is the public key a key is checked against; it already
+defaults to the one Fyrhaven signs with.
+
+There is **no cloud mode to switch on.** The operator's own service (the paid
+tier) is a separate repository, `Fyrhaven/Fyrhaven-CRM-Cloud`, and the code that
+would honour a `FYRHAVEN_MODE` flag is not in this one.
 
 ## How the key works
 
@@ -40,6 +44,9 @@ or an optional anonymous heartbeat that a customer can turn off.
 
 ## Operating it
 
+This repository is the **customer's** side. Issuing, tracking and revoking keys
+are the seller's, and they live in `Fyrhaven/Fyrhaven-CRM-Cloud`:
+
 - Issue: a paid `selfhosted` order signs a key and returns it with the order
   (also visible to the customer on their account page).
 - Track: `GET /v1/admin/licenses` lists every key with `signed`, `revoked`,
@@ -64,11 +71,12 @@ carries it, so a key issued for one installation does not open another.
 
 ### Offline (default)
 
-1. On the server: `GET /v1/licence` shows `fingerprint` (or read
-   `/data/install.key`).
+1. On the server: `GET /v1/licence` (with the workspace token) shows
+   `fingerprint` — or read `/data/install.key`.
 2. On the site, signed in, paste it under *Self-hosted licence* → the service
    re-signs your licence for **that** installation and shows the key.
-3. Paste the key into the server as `FYRHAVEN_LICENCE` and restart.
+3. Paste the key into the server as `FYRHAVEN_LICENCE` and restart — or send it
+   to `POST /v1/licence`, which checks it and writes it to `/data/licence.key`.
 
 Nothing but the pasted key crosses the wire, and it works on a machine that has
 never been online.
@@ -103,9 +111,12 @@ round trip:
 
 ```
 POST /v1/licence/challenge        (on YOUR server)  -> { challenge, fingerprint }
-POST /v1/licence/deactivate       (on crm.mailz.se) <- { challenge } -> { code }
+POST /v1/licence/deactivate       (on crm.fyrhaven.com) <- { challenge } -> { code }
 POST /v1/licence/deactivate       (on YOUR server)  <- { code }     -> { deactivated: true }
 ```
+
+The middle step is the cloud's: the seller's service is the only place that can
+sign a release. Both ends are implemented, one in each repository.
 
 The challenge names the installation and a one-time nonce. The service releases
 that installation and returns a code **signed by the seller**; your server checks

@@ -4,81 +4,47 @@ One page for a fresh session. The long history is in `fyrhaven-crm/HANDOFF.md`;
 the rules are in `.clinerules`; this file is only "what to do next and what not to
 re-learn the hard way".
 
-## State (verified 2026-11-07)
+## State (verified 2026-11-16)
 
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.18.0** — 89 tests green; **two builds**, and the self-hosted archive contains no cloud code |
-| Cloud repository | `Fyrhaven/Fyrhaven-CRM-Cloud` exists and is **empty**. Cloud-only content is staged on branch `cloud-only` (86 tests) — see *the one job* |
-| Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) |
-| Panel | `fyrhaven.com/admin` — Orders · Accounts · Catalog · Licences · Usage |
+| Record server | `fyrhaven-server` **1.19.0**, self-hosted — 50 tests green; no cloud code, no build switch |
+| Cloud repository | `Fyrhaven/Fyrhaven-CRM-Cloud` — the cloud server (shop, accounts, catalogue, billing, panel), copied out of this repository and never distributed |
+| Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) — the cloud, from its own repository |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
-| Storage | blob seam wired (server 1.16.0): `s3Backend`, the read-back migration, the panel control. Not deployed, not yet run against R2 |
+| Storage | blob seam wired (server 1.16.0): `s3Backend`, the read-back migration, the `/v1/admin` control. Not deployed, not yet run against R2 |
 | Brand | profile header, YouTube banner, org page, repository page — all shipped (see `brand/`) |
-| Git | `main` and `fyrhaven-crm` in step, clean tree; `cloud-only` pushed but not merged |
+| Git | `main` and `fyrhaven-crm` in step, clean tree; every merged branch deleted, including the `cloud-only` staging branch |
 
-## The one job: land the cloud repository
+## What just happened: two repositories, one tree split
 
-`Fyrhaven/Fyrhaven-CRM-Cloud` exists and is empty. Its content is staged in this
-repository on branch **`cloud-only`** — 29 commits of server history, files at the
-root, 86 tests — because a session without access to that repository cannot push
-to it.
+The cloud left this repository. `cloud.js`, `accounts.js`, `catalog.js`,
+`payments.js` and `site/` are in `Fyrhaven/Fyrhaven-CRM-Cloud` now, and what is
+left in `fyrhaven-server/` is the **self-hosted** server:
 
-**One command, in a session that has access:**
+* the record API, the auth and the licence gate — nothing that sells anything;
+* no `distribution.js`, no `scripts/dist.mjs`, no `packaging/`: the folder **is**
+  the self-hosted server, so there is nothing to stub out;
+* `licence.js` has no `FYRHAVEN_MODE` at all — a key is required, and that is the
+  only condition;
+* the cloud's test suites went with the cloud; the record-API, licence and
+  storage-seam ones stayed;
+* `/v1/licence` (status, paste a key, challenge, release) moved here, because it
+  is the customer's own server that answers it. `/v1/licence/activate` stayed
+  with the seller.
 
-```bash
-node scripts/land-cloud-repo.mjs            # the plan: reachable? empty? which commit?
-node scripts/land-cloud-repo.mjs --apply    # push, clone it back, run its 86 tests
-```
+**A change to the record API is two commits**, one in each repository.
+`server.js`, `storage.js`, `s3.js` and `licence.js` exist twice and are kept in
+step by hand; they should differ only in the cloud's plugin points.
 
-It refuses rather than overwrites if the target already has commits, prints the
-one settings click when the app cannot see the repository, and verifies what
-landed by cloning it and running the tests — not by trusting the push's exit code.
-Exercised end to end against a local bare repository: push, file assertions
-(`cloud.js` present; no `packaging/`, no `distribution.js`), 86 tests, and a
-refusal with exit 1 when the target was not empty.
+One thing still to check by hand: the cloud repository is invisible to the GitHub
+App this session uses (it answers `404`, even to `gh repo view`). If a later
+session needs to touch it, an organisation owner adds it once at
+<https://github.com/organizations/Fyrhaven/settings/installations> — the Cline
+app → *Configure* → *Repository access* → add `Fyrhaven-CRM-Cloud`
+(Contents: read and write).
 
-**If a human has to do it instead:**
-
-```bash
-git fetch origin cloud-only
-git push https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud.git \
-  origin/cloud-only:refs/heads/main
-```
-
-Then confirm the branch is the cloud only — `node --test` gives 86, `ls` shows
-`cloud.js` and no `packaging/` — and **delete the staging branch**
-(`git push origin --delete cloud-only`); it exists only to carry the content.
-
-Why the cloud repository holds no self-host machinery: `FYRHAVEN_MODE=cloud` was
-once a variable any self-hoster could set, and while one tree produced both
-builds, the code honouring it travelled in the copy they held. Two repositories,
-no flag — the code that would honour it is not in their possession.
-
-### Then: this repository's server becomes the self-hosted one
-
-The cloud left with `cloud.js`, `accounts.js`, `catalog.js`, `payments.js` and
-`site/`. What is still in `fyrhaven-server/` here is the **old full tree**, which
-now belongs in neither place — the cloud copy is cloud-only, so this one has to
-become the mirror image:
-
-* **remove** `cloud.js`, `accounts.js`, `catalog.js`, `payments.js`, `site/`, and
-the `cloudRoute` calls in `server.js` (two calls and the `cloudContext` object —
-the handler keeps the record API, the auth and the licence gate);
-* **remove** `scripts/dist.mjs` and `packaging/`, and replace them with plain
-packaging: the folder *is* the self-hosted server now, so there is nothing to
-stub out;
-* **drop** the cloud test suites and keep the record-API ones;
-* the licence gate becomes the only condition: `FYRHAVEN_LICENCE`, verified
-  offline, no `FYRHAVEN_MODE` at all.
-
-That is the price of two repositories: `server.js`, `storage.js`, `s3.js` and
-`licence.js` exist twice and must be kept in step by hand. The rule to write down
-when it happens: **a change to the record API is two commits**, one in each
-repository, and the shared files should differ only in the cloud plugin points.
-
-## Still open from before
 ## Still open from before
 
 Deploy blob storage and move one test workspace. The code is done and its safety
@@ -87,23 +53,25 @@ the move, leave the provider as `sqlite` and leave every original record intact.
 
 1. Put `R2_S3_API`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` in
    the store's `.env` **and** in the compose `environment:` block.
-2. Rebuild only that container, then check
+2. `STORE_ADMIN_TOKEN` must be set too — the storage routes answer `503`
+   without it, and that is the only way in now that the panel went with the cloud.
+3. Rebuild only that container, then check
    `curl -s -H "Authorization: Bearer $STORE_ADMIN_TOKEN" https://crm.mailz.se/v1/admin/workspaces/<id>/storage`
    → `available` must be `["sqlite","s3"]` and `reachable` true.
-3. `POST …/migrate?dry=1` first, then move a **test** workspace, then read it back.
-4. Only then a customer's workspace, and only from the panel's Usage tab.
+4. `POST …/migrate?dry=1` first, then move a **test** workspace, then read it back.
+5. Only then a customer's workspace.
 
 After that: **#156** languages — the site has **no i18n layer**, and the plugin
 carries ~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.
 
 ## Decided — do not re-litigate
 
-* **Two builds from one tree.** `cloud.js` (shop, accounts, catalogue, billing,
-  panel, licence issuing) is the cloud's; `npm run dist` replaces it and the three
-  operator modules with stubs and rewrites `DISTRIBUTION` to `selfhosted`, so the
-  archive cannot enter cloud mode. Demonstrated, not asserted: the built archive
-  answers `404` to `/`, `/v1/products`, `/admin`, `/v1/account`, `/v1/licence` and
-  still serves `/v1/store`.
+* **Two repositories, not two builds.** The cloud (shop, accounts, catalogue,
+  billing, panel, licence issuing) has its own repository and is never
+  distributed. This one holds the self-hosted server, which has no switch that
+  could become the cloud — `FYRHAVEN_MODE` is gone, and the code that would honour
+  it is not in a customer's possession. There is no `npm run dist` and no
+  `packaging/`: the folder is what ships.
 * **Licences are offline Ed25519 and are a contract, not DRM** — said in
   `LICENSING.md`. Making them impossible is not achievable for distributed code;
   making it take a patch rather than a flag is, and that is done.
@@ -121,7 +89,8 @@ carries ~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.
 
 - **`send()` returns nothing.** A route ending `return send(...)` reported "not
   mine" to its caller, which then answered a second time on the same socket — 114
-  `ERR_HTTP_HEADERS_SENT`. `cloud.js` answers through a `send` that returns `true`.
+  `ERR_HTTP_HEADERS_SENT`. (That was `cloud.js`, in the cloud repository now; the
+  handler here answers through `send` and returns the route's own value.)
 - **A private repository the app is not installed on is invisible, not just
   read-only.** That is why `Fyrhaven-CRM-Cloud` 404s; a *public* one it is not
   installed on is readable but still not writable.
@@ -153,11 +122,13 @@ carries ~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.
 ```bash
 cd fyrhaven-crm && npm test          # builds, then 1 215 tests
 cd fyrhaven-crm && npm run release   # tag + GitHub release + ZIP (needs clean main)
-cd fyrhaven-server && node --test    # 89 tests
-cd fyrhaven-server && npm run dist   # dist/fyrhaven-selfhost-<version>.tar.gz
+cd fyrhaven-server && node --test    # 50 tests, no dependencies
 ```
 
-Deploy the store (only that container — never touch the others):
+Deploy the store (only that container — never touch the others). The stack this
+command targets is the **cloud**, and its compose file and README now live in
+`Fyrhaven/Fyrhaven-CRM-Cloud`; a self-hosted install uses
+`fyrhaven-server/docker-compose.yml` instead:
 
 ```bash
 ssh -i .ssh/id_ed25519 -p 37281 zyntrax@mailz.se \
@@ -169,8 +140,9 @@ Then **verify the live endpoint**, not the file: `curl https://fyrhaven.com/vers
 
 ## On the owner's side (not code)
 
-- **Add `Fyrhaven-CRM-Cloud` to the GitHub App installation** — the one thing
-  blocking the cloud repository. Or push `fyrhaven-cloud.bundle` by hand.
+- **Add `Fyrhaven-CRM-Cloud` to the GitHub App installation** — until then the
+  cloud repository is invisible to an automated session (`gh` answers `404`), even
+  though it exists and has the code.
 - **The organisation page** is live; its source copy is `brand/org-profile.md`.
   GitHub renders it only from a **public** repository named `.github`, and it is
   there now.

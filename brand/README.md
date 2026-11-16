@@ -14,8 +14,10 @@ The mark is a lighthouse on its rock, with the beam that makes it readable at
 | `fyrhaven-youtube.svg` | YouTube channel banner, **2560×1440**, with the lockup inside the 1546×423 safe area |
 | `*.png` | rendered copies of the SVGs above, because some places take no SVG: GitHub's social preview, Gravatars, avatars, slide decks |
 
-Live copies sit in `fyrhaven-server/site/` (`favicon.svg`, `banner.svg`) and
-are served by the store itself.
+Live copies sit in the **cloud repository**
+(`Fyrhaven/Fyrhaven-CRM-Cloud`, `site/` — `favicon.svg`, `banner.svg`) and are
+served by the shop itself. The self-hosted record server serves no pages, so
+nothing from `brand/` is copied into `fyrhaven-server/`.
 
 ## Where each one goes
 
@@ -163,10 +165,10 @@ Two things no API can set, so they stay clicks:
 | The organisation page, `github.com/Fyrhaven` | avatar `brand/fyrhaven-mark.png`; the bio in [`social.md`](social.md) |
 
 The card that works while the repository is private is the shop's, not GitHub's:
-`fyrhaven-server/site/index.html` declares an absolute PNG (`/banner.png`, served
-from `site/banner.png`) for Open Graph and Twitter, and a test pins that it stays
-absolute and stays raster — a crawler resolves no relative path and renders no
-SVG, so either mistake is a card that silently never appears.
+`site/index.html` in the cloud repository declares an absolute PNG (`/banner.png`,
+served from `site/banner.png`) for Open Graph and Twitter, and a test there pins
+that it stays absolute and stays raster — a crawler resolves no relative path and
+renders no SVG, so either mistake is a card that silently never appears.
 
 The README header needs no clicks at all: it is a `<picture>` with a
 `prefers-color-scheme` source, and GitHub renders it as `<themed-picture>`, so

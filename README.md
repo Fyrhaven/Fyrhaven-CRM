@@ -48,10 +48,13 @@ Two rules hold everywhere, and they are what the test suite is really about:
 | | What it is | Where records live |
 |---|---|---|
 | **[Fyrhaven CRM](fyrhaven-crm/)**<br>`fyrhaven-crm` 1.60.0 | The plugin: duplicate detection and merge, a contact and company 360°, projects, time and expenses, health and retention, a GDPR toolkit, import and export, smart search | The webmail's own address books, plus — when configured — the record server |
-| **[fyrhaven-server](fyrhaven-server/)**<br>`fyrhaven-server` 1.18.0 | The record server: a small key/value service, no runtime dependencies, encrypted at rest, SQLite or an S3-compatible bucket. Ships as **two builds** — the cloud service, which is never distributed, and a self-hosted archive that contains no cloud code at all | On the server — self-hosted, or the hosted tier |
+| **[fyrhaven-server](fyrhaven-server/)**<br>`fyrhaven-server` 1.19.0 | The record server, **self-hosted**: a small key/value service, no runtime dependencies, encrypted at rest, SQLite or an S3-compatible bucket, licensed offline | On the server — yours |
+| **[Fyrhaven-CRM-Cloud](https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud)** | The cloud service — shop, accounts, catalogue, billing, operator panel — which is also the hosted tier. Never distributed | On the hosted service |
 
 The plugin needs nothing but the webmail. The server is what turns it from a
-clean-up tool into a CRM that outlives one browser profile.
+clean-up tool into a CRM that outlives one browser profile. The cloud service is
+its own repository, so the self-hosted server a customer runs contains none of
+the code that sells it.
 
 ## What the plugin does
 
@@ -102,14 +105,11 @@ Fyrhaven-CRM/
 │   ├── test/                 # the suite — the expected behaviour, in executable form
 │   ├── scripts/              # packaging, release and ship
 │   └── CHANGELOG.md · README.md · HANDOFF.md
-└── fyrhaven-server/          # the record server — two builds from one tree
+└── fyrhaven-server/          # the record server, self-hosted
     ├── server.js             # the record API: auth, the store, the licence gate
-    ├── cloud.js              # the cloud only: shop, accounts, catalogue, billing, panel
-    ├── licence.js            # Ed25519 licences, verified offline
+    ├── licence.js            # Ed25519 licences, verified offline, and the installation key
     ├── storage.js · s3.js    # SQLite, and the S3-compatible bucket backend
-    ├── scripts/dist.mjs      # builds the self-hosted archive, which has no cloud code
-    ├── packaging/            # the self-hosted Dockerfile, compose file and README
-    └── site/ · Dockerfile · docker-compose.yml · Caddyfile
+    └── Dockerfile · docker-compose.yml · Caddyfile · env.example
 ```
 
 ## Documentation

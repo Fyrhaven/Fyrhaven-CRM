@@ -1,4 +1,4 @@
-# Contact Manager cloud store
+# Fyrhaven record server — self-hosted
 
 The service the Contact Manager plugin's **record** stores live on (#68).
 
@@ -9,24 +9,27 @@ to put it. So it lives here.
 
 One small service in front of a SQLite file, speaking the four calls the plugin
 already makes. **No dependencies**: `node:http` and `node:sqlite` are in the
-runtime, so the image is the runtime plus one file, and there is no lockfile to
+runtime, so the image is the runtime plus four files, and there is no lockfile to
 audit.
+
+**This is not the cloud service.** The shop, the customer accounts, the
+catalogue, billing and the operator panel are not in this folder and not in this
+repository: they live in
+[`Fyrhaven/Fyrhaven-CRM-Cloud`](https://github.com/Fyrhaven/Fyrhaven-CRM-Cloud)
+and are never distributed. There is no mode flag here either — the customer's
+copy cannot be turned into the operator's service by editing a compose file.
 
 ---
 
 ## Run it
 
 ```bash
-cat > .env <<EOF
-CRM_DOMAIN=crm.example.com
-STORE_TOKENS=$(openssl rand -hex 32)=acme
-STORE_MASTER_KEY=$(openssl rand -base64 32)
-EOF
+cp env.example .env       # then fill in the four values
 docker compose up -d
 curl -s https://crm.example.com/version
 ```
 
-Caddy gets a certificate for `CRM_DOMAIN` automatically. The store is **not
+Caddy gets a certificate for `CRM_DOMAIN` automatically. The server is **not
 published** — only Caddy can reach it — so TLS is not something you can forget.
 
 **If you already run a reverse proxy** (nginx-proxy-manager, Traefik, a Caddy
@@ -37,69 +40,50 @@ service without its own edge:
 docker compose -f docker-compose.host.yml up -d    # add PROXY_NETWORK=… if the proxy lives on another network
 ```
 
-Nothing is published then; the store joins the proxy's network as
-`contact-manager-store` and answers on port `8080`, so the proxy host you add for
-it is the only way in and TLS stays where it already is.
+Nothing is published then; the server joins the proxy's network as
+`fyrhaven-server` and answers on port `8080`, so the proxy host you add for it is
+the only way in and TLS stays where it already is.
 
-It **refuses to start** without `STORE_TOKENS` or `STORE_MASTER_KEY`: an open
-store, or one whose data cannot be encrypted, is worse than a container that will
-not come up.
+It **refuses to start** without `STORE_TOKENS`, `STORE_MASTER_KEY` or a valid
+`FYRHAVEN_LICENCE`: an open store, one whose data cannot be encrypted, or an
+unlicensed install is worse than a container that will not come up.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `STORE_TOKENS` | *(required)* | `token=workspace,token=workspace`. A token written alone is its own workspace. |
+| `STORE_TOKENS` | *(required)* | `token=workspace,token=workspace`. A token written alone is its own workspace. This is the "workspace token" the plugin stores. |
 | `STORE_MASTER_KEY` | *(required)* | 32 bytes, base64. Wraps every workspace's data key. **Lose it and the data is unreadable.** |
-| `CRM_DOMAIN` | *(required)* | The public hostname Caddy gets a certificate for. |
-| `PORT` | `8080` | What the store listens on, inside the network. |
+| `FYRHAVEN_LICENCE` | *(required)* | The key Fyrhaven signed for this installation. Verified **offline**. |
+| `CRM_DOMAIN` | *(required with the bundled Caddy)* | The public hostname Caddy gets a certificate for. |
+| `PORT` | `8080` | What the server listens on, inside the network. |
 | `STORE_DB` | `/data/store.sqlite` | The SQLite file. Put it on a volume. |
-| `STORE_TRIAL_DAYS` | `14` | Days a new account may write before a plan is paid for. `0` turns the trial off. |
+| `STORE_ADMIN_TOKEN` | *(unset)* | Enables `/v1/admin` — the storage controls below. Off when empty: those routes answer `503`. |
 | `ALLOW_QUERY_TOKEN` | *(unset)* | `1` accepts `?token=` as well as the header. Off because a token in a URL leaks into logs. |
+| `STORE_AUTH_USER` / `STORE_AUTH_PASSWORD` | *(unset)* | Protect the whole server with HTTP Basic, checked only when both are set. |
+| `FYRHAVEN_LICENCE_PUBLIC` | the built-in key | Override the public key a licence is checked against (a test or a private deployment). |
+| `FYRHAVEN_ACTIVATION` | *(unset)* | `online` fetches a licence for this installation instead of pasting one; `FYRHAVEN_ACTIVATION_URL` and `FYRHAVEN_ACTIVATION_TOKEN` say where. |
+| `FYRHAVEN_INSTALL_KEY_FILE` | `/data/install.key` | The installation key this licence is bound to. Kept on the volume — a recreated container must keep it. |
+| `R2_S3_API` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | *(unset)* | An S3-compatible bucket for a workspace's bytes. All three, or blob storage stays off. |
 
 ```bash
-npm test     # node --test, 81 tests, no dependencies
+npm test     # node --test, 50 tests, no dependencies
 npm start    # node server.js
 ```
 
-## Two builds, one tree
+## The licence
 
-The service in this folder is the **cloud** build: the shop, the customer
-accounts, the catalogue, the Stripe webhook and the operator panel. It runs on
-fyrhaven.com and is never distributed.
+A self-hosted install refuses to start without a key Fyrhaven signed **for this
+installation**, and the check is offline — the server never calls home. The
+installation key is printed at startup (`FHI-…`), and it is what the licence is
+bound to, so a key issued for one machine does not open another.
 
-`npm run dist` emits the **self-hosted** build:
-
-| | Cloud (this folder) | Self-hosted (`npm run dist`) |
-|---|---|---|
-| Shop, accounts, catalogue, panel | mounted | not mounted — those routes answer 404 |
-| `FYRHAVEN_MODE=cloud` | is the mode | refuses to start, whatever the env says |
-| `accounts.js`, `catalog.js`, `payments.js` | the real modules | stubs; the code is not in the archive |
-| Licence | none needed (it *is* the product) | required, verified offline |
-
-The archive is `dist/fyrhaven-selfhost-<version>.tar.gz`: the record API, the
-licence check, a compose file, an `.env.example` and a README written for a
-customer rather than for us.
-
-`FYRHAVEN_MODE=cloud` used to be a switch any self-hoster could set — one line in
-a compose file, and the paid product ran without a licence. It is now a build
-constant, so the distributed copy cannot enter cloud mode at all. That matches
-what [`LICENSING.md`](LICENSING.md) claims: the licence is a contract with honest
-customers, and removing it takes patching the source, not a setting.
-
-**The cloud is not in that archive.** `cloud.js` — the shop pages, the customer
-accounts, the catalogue, the Stripe webhook, the operator panel and licence
-issuing — is replaced by a stub that answers "not mine" to every request.
-`accounts.js`, `catalog.js` and `payments.js` are stubs as well, and `server.js`
-carries none of their code: the routes it used to hold moved out with them, and
-the imports went too. What is left is the record API, the licence check, and
-whatever it takes to run.
-
-That is the difference between "unreachable" and "not there", and the archive's
-own `BUILD` file states which one applies.
+Why a licence at all, and what it does *not* enforce: [`LICENSING.md`](LICENSING.md).
+The short version is that it is a contract with honest customers, not DRM —
+removing it takes patching the source, not a setting.
 
 ## Security: what this protects, and what it does not
 
 **In transit.** TLS at the edge with an automatic certificate, HSTS,
-`nosniff`, `no-referrer` and `no-store` — and the store itself is never
+`nosniff`, `no-referrer` and `no-store` — and the server itself is never
 published, so there is no plaintext hop to reach it by.
 
 **At rest.** Every value is sealed with its **workspace's own 256-bit key**
@@ -121,10 +105,10 @@ unwrap a workspace's key in order to serve it, so the operator — and anyone wh
 has both the database and the master key — can read every record. That is the
 price of a server-held key, and it is stated here rather than implied away.
 
-If a customer's data must be unreadable by the operator, the key has to be held
-**by the customer** instead — a passphrase only they have, or a key kept on their
-own server. Issue [#68](https://github.com/Fyrhaven/Fyrhaven-CRM/issues/68)
-carries that design and the host change it needs.
+If the data must be unreadable by the operator, the key has to be held by the
+user instead — a passphrase only they have. Issue
+[#68](https://github.com/Fyrhaven/Fyrhaven-CRM/issues/68) carries that design and
+the host change it needs.
 
 **What is visible even so:** the *shape* of the data — which workspace, which
 store keys exist (`projects`, `contactNotes`, …), how many records, their sizes
@@ -134,88 +118,6 @@ and timestamps. Not their contents.
 malicious plugin update. Encryption protects data at rest and in transit; it does
 not protect a machine that is already owned.
 
-## Accounts, subscriptions and the site (#148)
-
-A token in `STORE_TOKENS` is an **installer token**: it is a workspace, it never
-expires, and it is how the owner's own install talks to its own store. Everything
-below is the other kind of caller — a customer.
-
-**Accounts.** `POST /v1/accounts { email, password }` creates one and returns a
-**session token**. Passwords are hashed with scrypt (never stored in the clear),
-sessions are random 256-bit tokens stored **hashed**, and a wrong password and an
-unknown email answer identically and take the same time.
-
-**Plans.** A new account starts a `trial` (14 days by default, `STORE_TRIAL_DAYS`).
-An account whose plan has expired may still **read** — so it can export what is
-its — but every write is refused with `402`. `GET /v1/account` is what the plugin
-asks before it claims a subscription:
-
-```json
-{ "ok": true, "workspace": "acct:…", "plan": "trial", "expiresAt": "…",
-  "entitled": true, "account": { "email": "…" },
-  "usage": { "records": 1, "bytes": 12, "maxRecords": 5000, "maxBytes": 67108864 } }
-```
-
-**Orders.** `POST /v1/account/order { plan: "cloud" }` records a request and
-answers `202` as *pending*. Payment is deliberately not wired: an invoice (or a
-provider webhook calling `setPlan`) is what turns a pending order into a plan.
-
-**Leaving.** `DELETE /v1/account` removes the account, its sessions, its orders,
-its records **and** its wrapped workspace key — without the key the rows are
-unreadable, which is what makes it an erasure and not a flag.
-
-**The site** is served by this same container: `GET /` returns a small sign-up,
-sign-in and account page (`site/`), so there is no second service and no build
-step. It sits behind the same TLS proxy as the API.
-
-**Limits.** 240 requests a minute per token (in memory), 5 000 records and
-64 MiB per workspace (`409` when a write would cross them).
-
-**Not wired yet:** email verification — the flag is recorded and stays `0`,
-because there is no SMTP here. Nothing else depends on it.
-
-## Paying for it, and the operator panel (#148)
-
-**Payment is a provider seam, not an SDK.** `payments.js` asks Stripe's REST API
-for a Checkout Session with `fetch` and verifies the webhook with `node:crypto` —
-no dependency, no lockfile, and the card never touches this service.
-
-| Variable | Meaning |
-|---|---|
-| `STRIPE_SECRET_KEY` | `sk_live_…`. With no key the store **takes no money**: an order stays `pending`. |
-| `STRIPE_PRICE_CLOUD` | The price a cloud order buys. Half a configuration counts as none. |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_…`; the signature is `t=<unix>,v1=HMAC-SHA256("<t>.<body>")`. |
-| `STRIPE_PLAN_DAYS` | Days a paid order buys (default `365`). |
-| `STRIPE_MODE` | `payment` (default, one-off) or `subscription`. |
-| `PUBLIC_URL` | `https://crm.mailz.se` — where the provider sends the customer back. |
-
-`POST /v1/account/order` answers `202` with
-`payment: { status: "redirect", url }` when a provider is configured, and
-`payment: { status: "unavailable" }` when it is not — the site then says an
-invoice follows.
-
-**The webhook is the only thing that switches a plan on**, and it reads the
-account and the order from **metadata this service put there**, never from a body
-a customer could edit. A signature outside a five-minute window is refused, so a
-captured request cannot be replayed later.
-
-**The operator panel** lives at `/admin` and is guarded by `STORE_ADMIN_TOKEN`
-(`Authorization: Bearer …`, compared in constant time). With no token set every
-`/v1/admin` route answers **503** — an admin surface that comes up open on a fresh
-install is worse than one that has to be enabled.
-
-```
-GET    /v1/admin/orders              -> orders, with the account email
-GET    /v1/admin/accounts            -> accounts, plans and expiry
-POST   /v1/admin/orders/{id}/paid    <- { days } -> order paid + plan switched on
-POST   /v1/admin/accounts/{id}/plan  <- { plan, days }
-DELETE /v1/admin/accounts/{id}       -> account, records and wrapped key removed
-```
-
-It is the collection point when no provider is configured: money arrives by
-invoice, the operator clicks *Mark paid*, and the customer's plugin sees the plan
-on its next `GET /v1/account`.
-
 ## The protocol
 
 `/health` and `/version` are **open** — the plugin's *Check the server* has to
@@ -224,20 +126,23 @@ string. Everything under `/v1/store` needs a token, as
 `Authorization: Bearer <token>` or `?token=<token>` (for a host that cannot set a
 header).
 
-    POST   /v1/accounts     <- { email, password } -> { token, account } | 400 | 409
-    POST   /v1/sessions     <- { email, password } -> { token, account } | 401
-    DELETE /v1/sessions     -> { ok: true }
-    GET    /v1/account      -> { plan, expiresAt, entitled, account, usage }
-    POST   /v1/account/order<- { plan } -> 202 { order } (pending)
-    DELETE /v1/account      -> { ok: true } (account, records and key removed)
+```
+GET    /health          -> { ok: true, version }
+GET    /version         -> { ok: true, version }
 
-    GET    /health          -> { ok: true, version }
-    GET    /version         -> { ok: true, version }
+GET    /v1/store        -> { records: { key: value, … }, revision }
+GET    /v1/store/{key}  -> { key, value, revision } | 404
+PUT    /v1/store/{key}  <- { value } -> { revision }
+DELETE /v1/store/{key}  -> { ok: true }
 
-    GET    /v1/store        -> { records: { key: value, … }, revision }
-    GET    /v1/store/{key}  -> { key, value, revision } | 404
-    PUT    /v1/store/{key}  <- { value } -> { revision }
-    DELETE /v1/store/{key}  -> { ok: true }
+GET    /v1/licence              -> { ok, mode, fingerprint, licensed, summary }
+POST   /v1/licence              <- { licence } -> checks it, writes /data/licence.key
+POST   /v1/licence/challenge    -> { challenge, fingerprint }
+POST   /v1/licence/deactivate   <- { code }    -> { deactivated: true }
+```
+
+The licence routes are the server's own state — one key per installation, so they
+are not scoped to a workspace, but they do need a token like everything else.
 
 `?scope=` narrows within a workspace (default `default`). It is the seam the team
 features (#23/#24) will widen — **it is not a security boundary**: the token is.
@@ -257,13 +162,16 @@ bucket (`s3`: Cloudflare R2, B2, Wasabi, MinIO — anything that speaks Signatur
 V4). The **value is sealed before it reaches either**, so a leaked bucket is
 opaque without `STORE_MASTER_KEY`: the envelope moves, the encryption does not.
 
+These two routes are the one operator surface left in this build. They need
+`STORE_ADMIN_TOKEN` — `503` while it is unset, `401` without it:
+
 ```
 GET  /v1/admin/workspaces/{id}/storage  -> { provider, available, reachable, objects, bytes }
 POST /v1/admin/workspaces/{id}/migrate  <- { provider }   (+ ?dry=1 to only report)
 ```
 
-The migration is the only operation here that can lose a customer's data, so its
-order is fixed and enforced in `storage.js`, not in a route:
+The migration is the only operation here that can lose data, so its order is
+fixed and enforced in `storage.js`, not in a route:
 
 1. read every record of **every scope** from the source backend
 2. write each to the target, then **read it back and compare the sha256** of the
@@ -272,31 +180,22 @@ order is fixed and enforced in `storage.js`, not in a route:
 4. only then: remove the source copies
 
 A failure at step 2 or 3 leaves the workspace **exactly as it was** — the
-provider stays `sqlite` and every original record is still there. That is the
-point of doing the read-back before the flip. `?dry=1` reports what would move.
+provider stays `sqlite` and every original record is still there. `?dry=1`
+reports what would move.
 
 A workspace recorded on a provider this process cannot reach answers **503**
 (`this workspace lives on s3, which is not configured on this server`) rather
 than an empty record list: an empty answer would look like an empty address book
 and invite the user to "restore" over their own data.
 
-The panel's **Usage** tab shows the provider per workspace and moves one with a
-single deliberate click. The provider list it offers is the list this process can
-actually reach, so `s3` appears only when the bucket is configured:
-
-| Variable | Meaning |
-|---|---|
-| `R2_S3_API` | The bucket-scoped endpoint, e.g. `https://<account>.r2.cloudflarestorage.com/<bucket>`. Ends in the bucket path — it is used exactly as given. |
-| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | The bucket credential. All three are needed; set only some and blob storage stays off. |
-| `R2_BUCKET` | The bucket name, for the operator's own reference and the compose file. |
-
-These must be in the compose **`environment:` block**, not only in `.env` — a
-variable that is in `.env` but not in the block never reaches the container.
-
 Object layout is `<workspace>/<scope>/<key>.json`. Moving a workspace back to
 `sqlite` is the same call with `{"provider":"sqlite"}`, and it is the same code
 path, so the disaster-recovery case (point a workspace at a fresh bucket) is
 exercised by the same tests.
+
+The variables must be in the compose **`environment:` block**, not only in
+`.env` — a variable that is in `.env` but not in the block never reaches the
+container.
 
 ## Pointing the plugin at it
 
@@ -305,29 +204,49 @@ ships in the plugin ZIP**: the host holds the credential and injects it.
 
 1. In Bulwark, grant the plugin `http:proxy` and create a credential whose value
    is the workspace token.
-2. In the plugin, *Check the server* → set the URL (e.g. `https://crm.example`).
-3. The store answers `/version`; the record stores then read and write here.
+2. In the plugin, *Dedicated server → my own server* → set the URL
+   (e.g. `https://crm.example`).
+3. The server answers `/version`; the record stores then read and write here.
 
 Put it behind TLS. The plugin will only talk HTTPS in practice, and a token over
 plain HTTP is a token given away.
 
 ## Backup
 
-It is one SQLite file. `docker compose exec contact-manager-store node -e "…"`
-is not needed — copy the file, or use `sqlite3 store.sqlite ".backup out.sqlite"`
-from the host. WAL mode is on, so include the `-wal` and `-shm` files in a plain
-copy.
+It is one SQLite file. Copy the file, or use `sqlite3 store.sqlite ".backup
+out.sqlite"` from the host. WAL mode is on, so include the `-wal` and `-shm`
+files in a plain copy. Keep `/data/install.key` too: it is what a licence is
+bound to, and losing it means asking for a new licence.
 
-## What is deliberately not here yet
+## What is deliberately not here
 
-- **Accounts, login, billing, entitlement.** A token is a workspace; who is
-  allowed to have one is a decision the maintainer makes by hand today. #68 open
-  questions 3 and 4.
-- **Self-hosting.** Hosted-only for now; nothing in the protocol assumes one
-  deployment shape.
+- **Accounts, login, billing, entitlement, the shop, the panel.** Those are the
+  cloud service, in `Fyrhaven/Fyrhaven-CRM-Cloud`. A token is a workspace; who
+  is allowed to have one is decided by whoever runs this server.
+- **A route that deletes a whole workspace.** Records are deleted one key at a
+  time through the protocol; erasing a workspace is dropping its rows (or the
+  database).
 - **Team features.** `scope` is in the schema, but roles, sharing and a review
   queue (#23/#24) are not built.
 - **A scheduler.** #5's scans still run only while the webmail is open.
+
+## Working on it
+
+The repository used to build two artifacts from one tree, one of them with the
+cloud replaced by stubs. It does not any more: the cloud has its own repository,
+so what is here **is** the self-hosted server and there is nothing to stub out.
+
+`server.js`, `storage.js`, `s3.js` and `licence.js` exist in both repositories and
+are kept in step by hand. **A change to the record API is two commits**, one in
+each repository; the shared files should differ only in the cloud's plugin
+points.
+
+```bash
+node --test      # the suite: routing, auth, encryption, the licence, the seam
+```
+
+The version the server reports is `package.json`'s, and `server.test.js` pins it
+to `GET /version` so it cannot drift.
 
 ## Licence
 
