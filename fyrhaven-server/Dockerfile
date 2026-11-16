@@ -1,16 +1,17 @@
-# The Contact Manager cloud store (#68).
+# The Fyrhaven record server, self-hosted (#68).
 #
 # There is no build step and no dependency to install: `node:http` and
-# `node:sqlite` ship with the runtime, so the image is the runtime plus one file.
-# Pinned to a major so a rebuild cannot silently change the SQLite behaviour
-# underneath a database that is already on a volume.
+# `node:sqlite` ship with the runtime, so the image is the runtime plus these
+# four files. Pinned to a major so a rebuild cannot silently change the SQLite
+# behaviour underneath a database that is already on a volume.
+#
+# The cloud service is **not** in this image or this repository: the shop, the
+# customer accounts, the catalogue, billing and the operator panel live in
+# Fyrhaven/Fyrhaven-CRM-Cloud and are never distributed.
 FROM node:24-alpine
 
 WORKDIR /app
-COPY package.json server.js accounts.js payments.js catalog.js licence.js ./
-
-# The signup/ordering site (#148) is static files, served by the store itself.
-COPY site ./site
+COPY package.json server.js storage.js s3.js licence.js ./
 
 # The database lives on a volume, never in an image layer.
 ENV PORT=8080 \
@@ -18,7 +19,7 @@ ENV PORT=8080 \
 VOLUME /data
 EXPOSE 8080
 
-# The `node` user ships with the image; the store never needs to be root.
+# The `node` user ships with the image; the server never needs to be root.
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
 
