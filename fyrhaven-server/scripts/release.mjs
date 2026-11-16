@@ -88,6 +88,9 @@ try {
     'release', 'create', TAG, archive,
     '--title', `Fyrhaven record server ${VERSION}`,
     '--notes-file', notesFile,
+    // The plugin is what most people download from this repository's releases,
+    // so a server release must not take the "Latest" badge with it.
+    '--latest=false',
   ], { stdio: 'inherit' });
 } finally {
   rmSync(dirname(notesFile), { recursive: true, force: true });
