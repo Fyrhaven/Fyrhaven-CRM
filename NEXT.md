@@ -70,17 +70,34 @@ exists. On 2026-11-16 the history was rewritten to remove it:
 
 **What the rewrite does not reach,** and one of these needs a human:
 
-1. **GitHub keeps the pull-request refs.** `refs/pull/N/head` still points at the
-   old commits — GitHub does not let anyone delete them — so a known SHA is still
-   fetchable and readable (`git fetch origin refs/pull/174/head` shows
-   `fyrhaven-server/cloud.js`). **Only GitHub Support can purge those refs and
-   the unreachable objects**: one ticket naming the repository and asking for the
-   pull-request refs and unreachable objects to be removed. Until that lands,
-   treat the cloud source as still retrievable by someone who knows where to look.
-2. **Forks and existing clones** keep their own copy; a rewrite cannot reach them.
+1. **GitHub keeps the pull-request refs, and they are public.** `refs/pull/N/head`
+   points at the pre-rewrite commits — **21 of the 120 PR refs** (#150–154,
+   #159–174) still hold the cloud tree. Nobody needs a SHA or an account to find
+   them: the refs are listed anonymously by git and the files render on the web
+   and on `raw.githubusercontent.com` by commit (both checked, `200`). A push that
+   tries to delete such a ref is refused (`deny updating a hidden ref`), so
+   **only GitHub Support can purge them** — and the unreachable objects with them.
+   (This page deliberately does not spell out the commands.)
+2. **Forks and clones.** Right now: **0 forks** (`network_count` 0), 0 watchers,
+   0 stars. Clones cannot be listed by anyone — a clone leaves no trace, and the
+   traffic API is 14 days and owner-only. The repository has been public since
+   2026-10-19, so assume a clone may exist; that is unknowable, not zero.
 3. The pre-rewrite history is saved as a bundle at
    `.git/fyrhaven-pre-scrub.bundle` **on the machine that ran the rewrite** — not
-   in the repository, never pushed. Delete it once the residue above is settled.
+   in the repository, never pushed. Delete it once the above is settled.
+
+**Levers that would actually remove it** (all need an owner with admin; the app
+this session uses has none):
+
+* **A GitHub Support ticket** — the right first move: name the repository, say the
+  history was rewritten to remove proprietary code, and ask for the pull-request
+  refs and unreachable objects to be purged.
+* **Make the repository private in the meantime** — a private repository's pull
+  request refs and commit pages are not readable by anonymous users, which closes
+  the hole immediately while support works. It also hides the plugin's source,
+  which is why it is a business call and not a tidy-up.
+* **Delete and re-create the repository** from a fresh clone — the only
+  self-service way to be certain; it loses every issue, PR and release.
 
 ## Still open from before
 
@@ -178,9 +195,11 @@ Then **verify the live endpoint**, not the file: `curl https://fyrhaven.com/vers
 
 ## On the owner's side (not code)
 
-- **Ask GitHub Support to purge the pull-request refs** for this repository
-  (`refs/pull/*` still holds the pre-rewrite commits, which include the cloud
-  source). Only they can; the rewrite cannot reach them.
+- **Ask GitHub Support to purge the pull-request refs** for this repository. 21 of
+  the 120 PR refs still hold the pre-rewrite commits, which include the cloud
+  source, and they are readable without credentials. Only they can purge them; if
+  that is not fast enough, the repository can be made **private** in the meantime
+  (a business call — it hides the plugin's source too).
 - **Add `Fyrhaven-CRM-Cloud` to the GitHub App installation** — until then the
   cloud repository is invisible to an automated session (`gh` answers `404`), even
   though it exists and has the code.
