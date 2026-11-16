@@ -15,7 +15,7 @@ re-learn the hard way".
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
 | Storage | blob seam wired (server 1.16.0): `s3Backend`, the read-back migration, the `/v1/admin` control. Not deployed, not yet run against R2 |
 | Brand | profile header, YouTube banner, org page, repository page — all shipped (see `brand/`) |
-| Git | `main` and `fyrhaven-crm` in step, clean tree; every merged branch deleted, including the `cloud-only` staging branch |
+| Git | `main` and `fyrhaven-crm` in step, clean tree; every other branch deleted, including the `cloud-only` staging branch; **history rewritten** so the cloud source is in no commit |
 
 ## What just happened: two repositories, one tree split
 
@@ -44,6 +44,43 @@ session needs to touch it, an organisation owner adds it once at
 <https://github.com/organizations/Fyrhaven/settings/installations> — the Cline
 app → *Configure* → *Repository access* → add `Fyrhaven-CRM-Cloud`
 (Contents: read and write).
+
+**What the cloud repository has to mirror is in
+[`CLOUD-HANDOVER.md`](CLOUD-HANDOVER.md)** — the two shared files that now differ
+on purpose, the `/v1/licence` routes that must not be implemented twice, the two
+deployments, and what never to copy back.
+
+## The cloud is out of this repository's history too
+
+The working tree was not enough: `git log` still held the cloud source in every
+commit that predated the split, so an old commit was a working copy of the paid
+service — and one without the licence gate, which is the whole reason the split
+exists. On 2026-11-16 the history was rewritten to remove it:
+
+* stripped from **every** commit: `cloud.js`, `accounts.js`, `catalog.js`,
+  `payments.js`, `distribution.js` and `site/`, at both paths they ever lived at
+  (`fyrhaven-server/…` and, before the rename, `contact-manager-server/…`);
+* `main` and `fyrhaven-crm` force-pushed, all 71 tags re-pointed
+  (`--tag-name-filter cat`), including `fyrhaven-server-v1.19.0`;
+* every other branch deleted, so the `cloud-only` staging branch is gone;
+* verified from a **fresh clone**: `git rev-list --all --objects` finds no
+  `cloud.js`, `accounts.js`, `catalog.js`, `payments.js` or `site/`, the trees at
+  `main` and `fyrhaven-crm` are unchanged, and the tag trees differ from before
+  only by those files.
+
+**What the rewrite does not reach,** and one of these needs a human:
+
+1. **GitHub keeps the pull-request refs.** `refs/pull/N/head` still points at the
+   old commits — GitHub does not let anyone delete them — so a known SHA is still
+   fetchable and readable (`git fetch origin refs/pull/174/head` shows
+   `fyrhaven-server/cloud.js`). **Only GitHub Support can purge those refs and
+   the unreachable objects**: one ticket naming the repository and asking for the
+   pull-request refs and unreachable objects to be removed. Until that lands,
+   treat the cloud source as still retrievable by someone who knows where to look.
+2. **Forks and existing clones** keep their own copy; a rewrite cannot reach them.
+3. The pre-rewrite history is saved as a bundle at
+   `.git/fyrhaven-pre-scrub.bundle` **on the machine that ran the rewrite** — not
+   in the repository, never pushed. Delete it once the residue above is settled.
 
 ## Still open from before
 
@@ -141,6 +178,9 @@ Then **verify the live endpoint**, not the file: `curl https://fyrhaven.com/vers
 
 ## On the owner's side (not code)
 
+- **Ask GitHub Support to purge the pull-request refs** for this repository
+  (`refs/pull/*` still holds the pre-rewrite commits, which include the cloud
+  source). Only they can; the rewrite cannot reach them.
 - **Add `Fyrhaven-CRM-Cloud` to the GitHub App installation** — until then the
   cloud repository is invisible to an automated session (`gh` answers `404`), even
   though it exists and has the code.

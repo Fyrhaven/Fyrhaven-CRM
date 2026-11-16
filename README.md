@@ -120,6 +120,7 @@ Fyrhaven-CRM/
 | [`fyrhaven-crm/HANDOFF.md`](fyrhaven-crm/HANDOFF.md) | Where the project stands, what is blocked, and why past decisions were made |
 | [`fyrhaven-crm/CHANGELOG.md`](fyrhaven-crm/CHANGELOG.md) | What shipped, release by release, newest first |
 | [`fyrhaven-server/README.md`](fyrhaven-server/README.md) | Running the record server, the API, and what it does and does not protect |
+| [`CLOUD-HANDOVER.md`](CLOUD-HANDOVER.md) | What the cloud repository has to mirror after the split, and what never to copy back |
 | [`.clinerules`](.clinerules) | The rules for changing the code, and the contract the suite enforces |
 | [`brand/README.md`](brand/README.md) | The palette, the mark, and which file goes where |
 
