@@ -13,7 +13,7 @@
 // version that already has a tag, and a CHANGELOG that does not start with this
 // version are all hard stops.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,8 +63,8 @@ say('\n== tests');
 run('node', ['--test'], { stdio: 'inherit' });
 
 say('\n== archive');
-const built = run('node', ['scripts/package.mjs'], { stdio: 'inherit' });
-if (!DRY && !built.includes('fyrhaven-server-')) fail('the packaging script did not report an archive.');
+run('node', ['scripts/package.mjs'], { stdio: 'inherit' });
+if (!existsSync(archive)) fail(`packaging did not write ${archive}.`);
 
 if (DRY) {
   say('\nwould:');
