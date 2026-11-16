@@ -1,46 +1,39 @@
-# The store, with TLS in front of it. `docker compose up -d`.
+# The Fyrhaven record server, self-hosted, with TLS in front of it.
+# `docker compose up -d`.
 #
 # **TLS is not optional and not a note in a README.** A workspace token and the
 # records it unlocks both travel between the webmail and this service, so the
 # service is never published directly: it sits on the compose network and only
 # Caddy can reach it, and Caddy gets a real certificate automatically.
 #
-# The store itself speaks HTTP on the private network. That is deliberate — one
+# The server itself speaks HTTP on the private network. That is deliberate — one
 # place terminates TLS, and it is the place that has the certificate.
-name: contact-manager-store
+name: fyrhaven-server
 
 services:
   store:
     build: .
-    image: contact-manager-store:1.0.0
+    image: fyrhaven-server:1.0.0
     restart: unless-stopped
     environment:
-      # A token IS a workspace: `token=workspace,token=workspace`.
-      # One customer, one token. Generate with: openssl rand -hex 32
+      # A token IS a workspace: `token=workspace,token=workspace`, one per
+      # workspace. Generate with: openssl rand -hex 32
       STORE_TOKENS: ${STORE_TOKENS:?set STORE_TOKENS in .env — one token per workspace}
       # Wraps every workspace's data key. Values are encrypted at rest with it;
       # lose it and the database is unreadable. Generate with: openssl rand -base64 32
       STORE_MASTER_KEY: ${STORE_MASTER_KEY:?set STORE_MASTER_KEY in .env — 32 bytes, base64}
+      # The licence Fyrhaven signed for this installation. Without it the server
+      # refuses to start — that is the whole lock, and it is checked offline, so
+      # this server never calls home.
+      FYRHAVEN_LICENCE: ${FYRHAVEN_LICENCE:?set FYRHAVEN_LICENCE in .env — from your Fyrhaven order}
+      FYRHAVEN_LICENCE_PUBLIC: ${FYRHAVEN_LICENCE_PUBLIC:-}
       PORT: "8080"
       STORE_DB: /data/store.sqlite
-      # The operator panel (#148). Empty means the panel answers 503 — it is off
-      # until someone sets it.
+      # Where a workspace's bytes live (#158). Empty means /v1/admin answers
+      # 503 and every workspace stays on SQLite — the storage routes are off
+      # until an operator enables them.
       STORE_ADMIN_TOKEN: ${STORE_ADMIN_TOKEN:-}
-      STORE_TRIAL_DAYS: ${STORE_TRIAL_DAYS:-14}
-      # Card payments. With no key the store takes no money and orders stay
-      # pending, to be settled from the panel.
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_PRICE_CLOUD: ${STRIPE_PRICE_CLOUD:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PLAN_DAYS: ${STRIPE_PLAN_DAYS:-365}
-      STRIPE_MODE: ${STRIPE_MODE:-payment}
-      PUBLIC_URL: ${PUBLIC_URL:-}
-      # The lock (#148): FYRHAVEN_MODE=cloud is the operator's own service; any
-      # other install must present a signed licence key it can verify offline.
-      FYRHAVEN_MODE: ${FYRHAVEN_MODE:-}
-      FYRHAVEN_LICENCE: ${FYRHAVEN_LICENCE:-}
-      FYRHAVEN_LICENCE_PUBLIC: ${FYRHAVEN_LICENCE_PUBLIC:-}
-      FYRHAVEN_LICENCE_PRIVATE_B64: ${FYRHAVEN_LICENCE_PRIVATE_B64:-}
+      ALLOW_QUERY_TOKEN: ${ALLOW_QUERY_TOKEN:-}
       # Blob storage (#158). All three of R2_S3_API / R2_ACCESS_KEY_ID /
       # R2_SECRET_ACCESS_KEY must be set or the bucket is off and every workspace
       # stays on SQLite. They belong here, not only in `.env`: a variable that is

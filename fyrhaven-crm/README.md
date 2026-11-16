@@ -1432,7 +1432,7 @@ is: the migration is the default, not a rewrite.
 ## 7. Build, test and package
 
 ```bash
-cd contact-manager
+cd fyrhaven-crm
 npm install        # once — dev dependencies only, no runtime dependencies
 npm test           # builds first (pretest), then runs the vitest suite
 npm run build      # esbuild -> dist/index.js
@@ -1578,7 +1578,7 @@ build artifacts are committed.
 ### 9.2 Release checklist
 
 1. Merge the feature branch into `main` through a pull request — this also
-   closes the shipped roadmap issues — and keep the `contact-manager` mirror
+   closes the shipped roadmap issues — and keep the `fyrhaven-crm` mirror
    branch in step with `main`.
 2. Bump `version` in `manifest.json` (semver) and `package.json` on `main`.
 3. Add a `CHANGELOG.md` entry for that version — newest on top, under a
@@ -1592,7 +1592,7 @@ build artifacts are committed.
    and the top `CHANGELOG.md` entry disagree.
 
 `npm run ship` runs steps 1–6 in one command: it merges the open release PRs
-into `main` (retargeting stacked ones), keeps the `contact-manager` mirror in
+into `main` (retargeting stacked ones), keeps the `fyrhaven-crm` mirror in
 step, then runs `npm run release`. `npm run ship -- --dry-run` previews the
 plan without changing anything; `--no-release` stops after the merge.
 

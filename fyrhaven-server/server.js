@@ -1,4 +1,4 @@
-// The Contact Manager cloud store (#68).
+// The Contact Manager record server, self-hosted (#68).
 //
 // A record this plugin invents — a project, a private note, a consent record,
 // the change history, a saved search — cannot live in a browser, and the
@@ -13,34 +13,36 @@
 // Plus `GET /version` (what the plugin's *Check the server* asks for) and
 // `GET /health` (the container's healthcheck).
 //
+// **This is the self-hosted server, not the cloud service.** The shop, the
+// customer accounts, the catalogue, billing and the operator panel are not in
+// this repository at all — they live in `Fyrhaven/Fyrhaven-CRM-Cloud`, which is
+// never distributed. Nothing here can be switched into that service: there is
+// no mode flag, only the licence gate below.
+//
 // **No dependencies on purpose.** `node:http` and `node:sqlite` are enough, so
-// the image is `node:24-alpine` plus this file — there is no lockfile to audit
+// the image is `node:24-alpine` plus these files — there is no lockfile to audit
 // and nothing to install at build time.
 //
 // Tenancy: a **token is a workspace**. A token can only ever reach its own
 // records, so a leaked token is one tenant's problem and never a cross-tenant
 // read. The optional `scope` narrows within a workspace, which is the seam the
 // team features (#23/#24) will widen; it is not a security boundary.
+//
+// The licence is checked **offline** at startup (`FYRHAVEN_LICENCE`), and the
+// one operator surface that survives — where a workspace's bytes live (#158) —
+// sits behind `STORE_ADMIN_TOKEN`.
 
 import { createServer as createHttpServer } from 'node:http';
 import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { readFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
-import { accountOps, accountWorkspace, DEFAULT_TRIAL_DAYS, openAccountTables } from './accounts.js';
-import { paymentConfig } from './payments.js';
-import { catalogOps, defaultCatalogue, openCatalogTables } from './catalog.js';
-import { DISTRIBUTION, surfaceFor } from './distribution.js';
-import { cloudRoute } from './cloud.js';
 import { client as s3Client } from './s3.js';
 import { backendFor, backendsFor, bumpWorkspaceRevision, migrateWorkspace, noteUsage, openStorageTable, providerOf, PROVIDERS, setProvider, storageRow } from './storage.js';
 
-import { activateOnline, describeLicence, ensureInstallKey, licencePayload, loadPrivateKey, publicKeyOf, signLicence, startupLicence, verifyLicence } from './licence.js';
+import { activateOnline, deactivationChallenge, describeLicence, ensureInstallKey, publicKeyOf, readChallenge, startupLicence, verifyDeactivation, verifyLicence } from './licence.js';
 
 const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -169,7 +171,7 @@ function tokenOf(req, url, { allowQueryToken = false } = {}) {
 }
 
 /** Opens (and migrates) the SQLite file. `:memory:` is for the tests. */
-export function openStore(path = ':memory:', { operator = true } = {}) {
+export function openStore(path = ':memory:') {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   if (path !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
@@ -196,21 +198,6 @@ export function openStore(path = ':memory:', { operator = true } = {}) {
   // Where a workspace's bytes live (#158). The columns are added to an existing
   // table when they are missing, so a deployed store upgrades in place.
   openStorageTable(db);
-  // Accounts, the shop and what is for sale are the **cloud's** tables. A
-  // self-hosted build never creates them, so its database has no customer
-  // accounts and no price list in it at all.
-  if (operator) {
-    // Safe on an existing database: every statement is IF NOT EXISTS, so a store
-    // that predates accounts opens unchanged.
-    openAccountTables(db);
-    // Seeded once, then owned by the operator's panel.
-    openCatalogTables(db);
-    const seeded = db.prepare('SELECT COUNT(*) AS n FROM products').get().n;
-    if (!seeded) {
-      const catalogue = catalogOps(db);
-      for (const product of defaultCatalogue()) catalogue.save(product);
-    }
-  }
   return db;
 }
 
@@ -420,45 +407,6 @@ export function storeOps(db, keys, { s3 = null, now = () => Date.now() } = {}) {
 
 // ── HTTP ────────────────────────────────────────────────────────
 
-/** The pages the service itself serves (#148). No build step, no bundler. */
-const SITE_FILES = {
-  '/': 'index.html', '/index.html': 'index.html', '/site.js': 'site.js', '/site.css': 'site.css',
-  '/admin': 'admin.html', '/admin.js': 'admin.js',
-  '/favicon.svg': 'favicon.svg', '/banner.svg': 'banner.svg', '/banner.png': 'banner.png',
-  '/terms': 'terms.html', '/privacy': 'privacy.html', '/imprint': 'imprint.html',
-  '/changelog': 'changelog.html',
-  '/robots.txt': 'robots.txt', '/sitemap.xml': 'sitemap.xml',
-};
-const SITE_TYPES = {
-  'index.html': 'text/html; charset=utf-8',
-  'site.js': 'text/javascript; charset=utf-8',
-  'site.css': 'text/css; charset=utf-8',
-  'admin.html': 'text/html; charset=utf-8',
-  'admin.js': 'text/javascript; charset=utf-8',
-  'favicon.svg': 'image/svg+xml',
-  'banner.svg': 'image/svg+xml',
-  'banner.png': 'image/png',
-  'terms.html': 'text/html; charset=utf-8',
-  'changelog.html': 'text/html; charset=utf-8',
-  'privacy.html': 'text/html; charset=utf-8',
-  'imprint.html': 'text/html; charset=utf-8',
-  'robots.txt': 'text/plain; charset=utf-8',
-  'sitemap.xml': 'application/xml; charset=utf-8',
-};
-const SITE_DIR = fileURLToPath(new URL('./site/', import.meta.url));
-
-/** One file from `site/`, or null. Names come from SITE_FILES, never the URL. */
-async function siteFile(name) {
-  try {
-    // Read with NO encoding. The social card is a PNG, and decoding it as utf8
-    // replaces every byte that is not valid text — the response is a 200 with a
-    // broken image in it, which is the worst kind of wrong: nothing logs.
-    return await readFile(new URL(name, `file://${SITE_DIR}`));
-  } catch {
-    return null;
-  }
-}
-
 const send = (res, status, body) => {
   const text = JSON.stringify(body);
   res.writeHead(status, {
@@ -500,107 +448,40 @@ function readBody(req, limit = MAX_VALUE_BYTES + 4096) {
  * server* has to answer before a credential is configured, and neither reveals
  * anything but a version string. Everything under `/v1/store` needs a token.
  */
-/**
- * Which operator-only surface a path belongs to, or `''` for the record API
- * itself. One table, so a route cannot be added to the cloud and forgotten here
- * without a test noticing.
- */
-export function closedSurface(path, surface = surfaceFor()) {
-  const off = (name) => (surface[name] ? '' : name);
-  if (path === '/admin' || path === '/admin.js') return off('admin');
-  if (SITE_FILES[path]) return off('shop');
-  if (path === '/v1/products' || path === '/v1/accounts') return off('shop');
-  if (path === '/v1/sessions') return off('accounts');
-  if (path === '/v1/account' || path.startsWith('/v1/account/')) return off('accounts');
-  if (path === '/v1/payments/webhook') return off('billing');
-  if (path === '/v1/admin' || path.startsWith('/v1/admin/')) return off('admin');
-  if (path === '/v1/licence' || path.startsWith('/v1/licence/')) return off('issuing');
-  return '';
-}
-
 export function createRequestHandler(db, {
-  tokens = new Map(), keys, allowQueryToken = false, accounts = null, trialDays = DEFAULT_TRIAL_DAYS,
+  tokens = new Map(), keys, allowQueryToken = false,
   requestsPerMinute = 240, maxRecords = 5000, maxBytes = 64 * 1024 * 1024, now = () => Date.now(),
-  adminToken = '', payments = paymentConfig(), fetchJson = globalThis.fetch, basicUser = '', basicPassword = '',
-  licencePublic = '',
-  licence = { ok: true, mode: 'cloud' }, licencePrivate = null, installKey = '', s3 = null,
-  surface = surfaceFor(),
+  adminToken = '', basicUser = '', basicPassword = '', s3 = null,
+  licence = { ok: false }, licencePublic = publicKeyOf(),
+  installKey = process.env.FYRHAVEN_INSTALL_KEY ?? '',
+  licenceFile = process.env.FYRHAVEN_LICENCE_FILE ?? '/data/licence.key',
 } = {}) {
   const ops = storeOps(db, keys, { s3, now });
-  // Built only when this build serves them: the self-hosted build has no
-  // accounts and no catalogue, so nothing is opened and no route can reach one.
-  const people = surface.accounts ? (accounts ?? accountOps(db, { trialDays })) : null;
-  const catalogue = surface.shop ? catalogOps(db, { now }) : null;
-  // The one challenge this installation has minted and not yet spent.
+  // The licence this process is running under, and the one challenge it has
+  // minted and not yet spent. Both change at runtime: a key can be pasted in,
+  // and a released installation forgets its own.
+  let current = licence;
   let pendingChallenge = '';
-  // Traffic per workspace, since this process started. Approximate by design:
-  // it counts the bytes of the records that pass through the API, not headers or
-  // TLS overhead — enough to answer "who is using the service and how much".
-  const traffic = new Map();
-  const bump = (workspace, direction, bytes) => {
-    const entry = traffic.get(workspace) ?? { inBytes: 0, outBytes: 0, requests: 0 };
-    entry.requests += 1;
-    if (direction === 'in') entry.inBytes += Math.max(0, Number(bytes) || 0);
-    else entry.outBytes += Math.max(0, Number(bytes) || 0);
-    traffic.set(workspace, entry);
-  };
-  // When a webhook last arrived, and what it did — the panel's health line.
-  let lastWebhook = { at: '', type: '', result: '' };
 
   /**
-   * A licence key for an account. Signed when the operator holds the signing key
-   * (so a self-hosted server can verify it offline), and a plain random key when
-   * not (so the cloud keeps working without one).
-   */
-  const issueLicence = (accountId, product, days) => {
-    const account = people.byId(accountId);
-    const expiresAt = new Date(now() + days * 86_400_000).toISOString();
-    const key = licencePrivate
-      ? signLicence(licencePayload({
-        subject: account?.email ?? accountId,
-        plan: product.kind === 'license' ? 'selfhosted' : 'selfhosted-renewal',
-        issuedAt: new Date(now()).toISOString(),
-        expiresAt,
-      }), licencePrivate)
-      : '';
-    return catalogue.issueLicence(accountId, product.id, days, { key, signed: Boolean(key) });
-  };
-
-  /**
-   * Who is asking, and what they may do (#148).
-   *
-   * Two kinds of caller live side by side: an **installer's token** from
-   * `STORE_TOKENS`, which is a workspace and always entitled, and an **account
-   * session**, whose workspace is derived from the account and whose entitlement
-   * is its plan. Legacy tokens keep working exactly as before — an existing
-   * install notices nothing.
+   * Who is asking. A **workspace token** from `STORE_TOKENS` is a workspace; a
+   * server with a password set also accepts that password, because it is what
+   * the plugin can hold through the host's credential store.
    */
   const authenticate = (req, url) => {
     // A server with a password set answers to that password; the plugin holds
     // it like any other credential, so a stranger without it gets 401.
     if (basicUser && basicPassword && basicOf(req, { user: basicUser, password: basicPassword })) {
-      return { workspace: 'basic', account: null, token: 'basic', plan: 'installer', expiresAt: '', entitled: true };
+      return { workspace: 'basic', token: 'basic' };
     }
     const presented = tokenOf(req, url, { allowQueryToken });
     if (!presented) return null;
     for (const [token, workspace] of tokens) {
       if (sameToken(token, presented)) {
-        return { workspace, account: null, token: presented, plan: 'installer', expiresAt: '', entitled: true };
+        return { workspace, token: presented };
       }
     }
-    const account = people ? people.sessionAccount(presented, now()) : null;
-    if (!account) return null;
-    const view = people.view(account, now());
-    return {
-      workspace: accountWorkspace(account.id),
-      account: view,
-      token: presented,
-      plan: view.plan,
-      expiresAt: view.expiresAt,
-      // A trial or a subscription that has run out may still READ — so the user
-      // can export what is theirs — but cannot write.
-      entitled: !view.overdue,
-    };
+    return null;
   };
 
   /** Records and bytes a workspace holds — the usage line and the quota. */
@@ -624,18 +505,186 @@ export function createRequestHandler(db, {
     return entry.count > requestsPerMinute;
   };
 
-  // Everything the cloud routes are allowed to touch, in one object: the module
-  // cannot reach past it into the record API's own state.
-  const cloudContext = {
-    // What the cloud module may read. The licence helpers it needs, it imports
-    // itself: `cloud.js` is replaced by a stub in the self-hosted build, so its
-    // imports are dropped with it.
-    send, readBody, now, people, catalogue, payments, fetchJson, authenticate, tooMany, bump,
-    siteFile, SITE_FILES, SITE_TYPES, adminToken, licence, licencePublic, licencePrivate, installKey, VERSION,
-    ops, issueLicence, usageOf, tokenOf, sameToken, db, keys, s3, allowQueryToken, traffic,
-    DEFAULT_SCOPE,
-    webhookState: () => lastWebhook, noteWebhook: (info) => { lastWebhook = info; },
-    pendingChallenge: () => pendingChallenge, setChallenge: (value) => { pendingChallenge = value; },
+  /**
+   * The operator's storage control (#158) — the one surface that is neither the
+   * record API nor part of a customer's use of it.
+   *
+   * It is guarded by `STORE_ADMIN_TOKEN`: answers **503** until one is set (an
+   * admin surface that comes up open on a fresh install is worse than one that
+   * has to be enabled), **401** to a request that does not present it.
+   */
+  const adminRoute = async ({ req, res, url, path, method }) => {
+    if (!adminToken) return send(res, 503, { error: 'no admin token configured' });
+    const presented = tokenOf(req, url, { allowQueryToken });
+    if (!presented || !sameToken(adminToken, presented)) return send(res, 401, { error: 'unauthorized' });
+    if (tooMany('admin')) return send(res, 429, { error: 'too many requests' });
+
+    const body = async () => {
+      try {
+        return JSON.parse(await readBody(req));
+      } catch {
+        return null;
+      }
+    };
+
+    // Where a workspace's bytes live (#158). `sqlite` is always available and
+    // `s3` appears once a bucket is configured, so a caller is offered only what
+    // this process can actually reach.
+    const storageRoute = /^\/v1\/admin\/workspaces\/([^/]+)\/storage$/.exec(path);
+    if (storageRoute && method === 'GET') {
+      const workspace = decodeURIComponent(storageRoute[1]);
+      const provider = ops.provider(workspace);
+      let used = { records: 0, bytes: 0 };
+      let reachable = true;
+      try {
+        // `?fresh=1` recounts from the bucket; the default reads the counters
+        // every write maintains, so an operator can check them without paying
+        // for a listing on every page view.
+        used = url.searchParams.get('fresh') === '1'
+          ? await ops.recount(workspace)
+          : await ops.usage(workspace);
+      } catch (err) {
+        // A workspace on a bucket this process cannot reach has no count, and
+        // saying "0 objects" would read as "empty" rather than "unreachable".
+        if (!err?.unavailable) throw err;
+        reachable = false;
+      }
+      return send(res, 200, {
+        ok: true,
+        workspace,
+        provider,
+        available: ops.available,
+        reachable,
+        objects: used.records,
+        bytes: used.bytes,
+      });
+    }
+
+    const migrateRoute = /^\/v1\/admin\/workspaces\/([^/]+)\/migrate$/.exec(path);
+    if (migrateRoute && method === 'POST') {
+      const workspace = decodeURIComponent(migrateRoute[1]);
+      const payload = (await body()) ?? {};
+      const target = String(payload.provider ?? '').trim();
+      const dry = url.searchParams.get('dry') === '1';
+
+      if (dry) {
+        const used = await usageOf(workspace);
+        return send(res, 200, {
+          ok: true, dry: true, workspace, target,
+          provider: ops.provider(workspace), available: ops.available,
+          objects: used.records, bytes: used.bytes,
+        });
+      }
+
+      // Copy, READ BACK AND COMPARE, flip the provider row, and only then delete
+      // the old copies. Deleting first is how a migration loses a customer's
+      // data when the copy was silently truncated — the order lives in
+      // `storage.js`, where no route can skip it.
+      const moved = await ops.migrate(workspace, target);
+      if (!moved.ok) {
+        return send(res, moved.status, {
+          ok: false,
+          workspace,
+          provider: ops.provider(workspace),
+          available: ops.available,
+          objects: moved.objects,
+          bytes: moved.bytes,
+          error: moved.reason,
+        });
+      }
+      return send(res, 200, {
+        ok: true,
+        workspace,
+        provider: moved.provider,
+        moved: moved.moved,
+        objects: moved.objects,
+        bytes: moved.bytes,
+        leftBehind: moved.leftBehind ?? [],
+      });
+    }
+
+    return send(res, 404, { error: 'not found' });
+  };
+
+  /**
+   * The licence this server runs under (#148) — its own state, not a
+   * workspace's: one server, one key, one installation.
+   *
+   * A plugin that only holds a workspace token can still read the fingerprint
+   * to take to the website, paste a key in, and spend a release code. Whether a
+   * key is acceptable is decided here; the plugin only carries the text.
+   */
+  const licenceRoute = async ({ req, res, path, method }) => {
+    const readJson = async () => {
+      try {
+        return JSON.parse(await readBody(req));
+      } catch {
+        return null;
+      }
+    };
+
+    if (path === '/v1/licence' && method === 'GET') {
+      return send(res, 200, {
+        ok: true,
+        mode: 'selfhosted',
+        fingerprint: installKey,
+        licensed: Boolean(current.licence),
+        licence: current.licence ?? null,
+        summary: describeLicence(current.licence ?? null),
+      });
+    }
+
+    if (path === '/v1/licence' && method === 'POST') {
+      const payload = (await readJson()) ?? {};
+      const key = String(payload.licence ?? '').trim();
+      const check = verifyLicence(key, { publicKey: licencePublic, fingerprint: installKey, now: now() });
+      if (!check.ok) return send(res, 400, { error: `that licence was not accepted (${check.reason})` });
+      process.env.FYRHAVEN_LICENCE = key;
+      let stored = false;
+      try {
+        const { writeFileSync } = await import('node:fs');
+        writeFileSync(licenceFile, `${key}\n`, { mode: 0o600 });
+        stored = true;
+      } catch {
+        // an unwritable volume still runs with the key in memory
+      }
+      current = { ok: true, licence: { ...check.payload, daysLeft: check.daysLeft } };
+      return send(res, 200, {
+        ok: true, stored, fingerprint: installKey,
+        licence: check.payload, summary: describeLicence(check.payload), daysLeft: check.daysLeft,
+      });
+    }
+
+    if (path === '/v1/licence/challenge' && method === 'POST') {
+      // A challenge names this installation and a one-time nonce, and only the
+      // seller can sign the release that spends it — so a copied key cannot walk
+      // away from its server.
+      const challenge = deactivationChallenge(installKey, { now: now() });
+      pendingChallenge = readChallenge(challenge)?.nonce ?? '';
+      return send(res, 200, { ok: true, fingerprint: installKey, challenge });
+    }
+
+    if (path === '/v1/licence/deactivate' && method === 'POST') {
+      if (!pendingChallenge) return send(res, 409, { error: 'ask for a challenge first' });
+      const payload = (await readJson()) ?? {};
+      const checked = verifyDeactivation(String(payload.code ?? ''), {
+        publicKey: licencePublic, fingerprint: installKey, nonce: pendingChallenge, now: now(),
+      });
+      if (!checked.ok) return send(res, 400, { error: `the deactivation code was not accepted (${checked.reason})` });
+      pendingChallenge = '';
+      process.env.FYRHAVEN_LICENCE = '';
+      current = { ok: false };
+      try {
+        const { rmSync } = await import('node:fs');
+        rmSync(licenceFile, { force: true });
+      } catch {
+        // nothing cached
+      }
+      return send(res, 200, { ok: true, deactivated: true, note: 'restart to run unlicensed, or paste a new key' });
+    }
+
+    if (path.startsWith('/v1/licence/')) return send(res, 404, { error: 'not found' });
+    return send(res, 405, { error: 'method not allowed' });
   };
 
   return async function handle(req, res) {
@@ -652,51 +701,33 @@ export function createRequestHandler(db, {
       return send(res, 200, { ok: true, version: VERSION });
     }
 
-    // What this build serves. The cloud build mounts the shop, the accounts, the
-    // catalogue, the panel and licence issuing; the self-hosted build mounts none
-    // of them. A closed surface answers **404**, not 403: a 403 would confirm that
-    // the surface exists on this server.
-    if (closedSurface(path, surface)) return send(res, 404, { error: 'not found' });
-
-    // The cloud's own routes — shop, catalogue, signup, the Stripe webhook and the
-    // panel — live in `cloud.js`, which is **not** in the self-hosted archive.
-    // `dist` puts a stub there, so a customer's copy contains none of this code,
-    // and the surface gate above means it is never reached on such a server.
-    //
-    // A throw inside it must not leave the request hanging: logged, and answered.
-    const runCloud = async (request) => {
-      try {
-        return await cloudRoute(cloudContext, request);
-      } catch (error) {
-        console.error('cloud route failed:', error);
-        send(res, 500, { error: 'internal error' });
-        return true;
-      }
-    };
-
-    if (await runCloud({ req, res, url, path, method, authed: false })) return;
-
-    // ── Everything below needs a token ─────────────────────────────────
-    const who = authenticate(req, url);
-    if (!who) return send(res, 401, { error: 'unauthorized' });
-    if (tooMany(who.token)) return send(res, 429, { error: 'too many requests' });
-
-    // Phase two of the cloud: sessions, the account's own data, orders and
-    // licence issuing — every one of which has to know who is asking.
-    if (await runCloud({ req, res, url, path, method, who, authed: true })) return;
-
-    // A trial or subscription that has run out may read (so the user can export
-    // what is theirs) but not write. 402 says "not paid", not "not allowed".
-    const mayWrite = who.entitled;
-
-    const workspace = who.workspace;
-    const scope = String(url.searchParams.get('scope') ?? '').trim() || DEFAULT_SCOPE;
-
     try {
+      // The operator's own storage control, before a workspace token: it takes
+      // the admin token, not a customer's.
+      if (path === '/v1/admin' || path.startsWith('/v1/admin/')) {
+        await adminRoute({ req, res, url, path, method });
+        return;
+      }
+
+      // ── Everything below needs a token ─────────────────────────────────
+      const who = authenticate(req, url);
+      if (!who) return send(res, 401, { error: 'unauthorized' });
+      if (tooMany(who.token)) return send(res, 429, { error: 'too many requests' });
+
+      // The server's own licence — one per installation, so it is not scoped to
+      // a workspace. It needs a token like everything else, so a stranger
+      // cannot mint challenges against this installation.
+      if (path === '/v1/licence' || path.startsWith('/v1/licence/')) {
+        await licenceRoute({ req, res, path, method });
+        return;
+      }
+
+      const workspace = who.workspace;
+      const scope = String(url.searchParams.get('scope') ?? '').trim() || DEFAULT_SCOPE;
+
       if (path === '/v1/store') {
         if (method !== 'GET') return send(res, 405, { error: 'method not allowed' });
         const records = await ops.list(workspace, scope);
-        bump(workspace, 'out', Buffer.byteLength(JSON.stringify(records)));
         return send(res, 200, { records, revision: ops.revision(workspace) });
       }
 
@@ -714,12 +745,7 @@ export function createRequestHandler(db, {
       if (method === 'GET') {
         const value = await ops.get(workspace, scope, key);
         if (value === null) return send(res, 404, { error: 'no such record' });
-        bump(workspace, 'out', Buffer.byteLength(JSON.stringify(value)));
         return send(res, 200, { key, value, revision: ops.revision(workspace) });
-      }
-
-      if (!mayWrite) {
-        return send(res, 402, { error: 'no active subscription', plan: who.plan, expiresAt: who.expiresAt });
       }
 
       if (method === 'PUT') {
@@ -748,7 +774,6 @@ export function createRequestHandler(db, {
         if (usage.bytes - previousBytes + size > maxBytes) {
           return send(res, 409, { error: 'storage limit reached', usage });
         }
-        bump(workspace, 'in', size);
         return send(res, 200, { revision: await ops.put(workspace, scope, key, parsed.value) });
       }
 
@@ -776,19 +801,18 @@ export function createRequestHandler(db, {
 /** A listening server over its own database, for `main` and for the tests. */
 export function createStoreServer({
   dbPath = ':memory:', tokenList = '', masterKey, allowQueryToken = false,
-  trialDays = DEFAULT_TRIAL_DAYS, now, adminToken = '', payments = paymentConfig(), fetchJson,
-  basicUser = '', basicPassword = '', licencePublic = '',
-  licence = startupLicence(), licencePrivate = loadPrivateKey(),
-  installKey = process.env.FYRHAVEN_INSTALL_KEY ?? '', s3 = null,
-  surface = surfaceFor(),
+  now, adminToken = '', basicUser = '', basicPassword = '', s3 = null,
+  licence, licencePublic, installKey, licenceFile,
 } = {}) {
-  const operator = Object.values(surface).some(Boolean);
-  const db = openStore(dbPath, { operator });
+  const db = openStore(dbPath);
   const tokens = parseTokens(tokenList);
   const keys = workspaceKeys(db, masterKey);
   const server = createHttpServer(createRequestHandler(db, {
-    tokens, keys, allowQueryToken, trialDays, now, adminToken, payments, fetchJson,
-    basicUser, basicPassword, licencePublic, licence, licencePrivate, installKey, s3, surface,
+    tokens, keys, allowQueryToken, now, adminToken, basicUser, basicPassword, s3,
+    ...(licence === undefined ? {} : { licence }),
+    ...(licencePublic === undefined ? {} : { licencePublic }),
+    ...(installKey === undefined ? {} : { installKey }),
+    ...(licenceFile === undefined ? {} : { licenceFile }),
   }));
   server.on('close', () => {
     try {
@@ -822,14 +846,10 @@ if (isMain) {
   if (allowQueryToken) {
     console.warn('ALLOW_QUERY_TOKEN=1 — tokens may appear in URLs and therefore in logs. Prefer a header.');
   }
-  // A trial length of 0 turns the trial off: a new account then has to be put
-  // on a plan before it can write anything.
-  const trialDays = Number(process.env.STORE_TRIAL_DAYS ?? DEFAULT_TRIAL_DAYS);
-  // The operator's panel is off until a token is set: an admin surface that
-  // comes up open on a fresh install is worse than one that has to be enabled.
-  // The lock (#148): a self-hosted install must present a licence key it can
-  // verify offline. `FYRHAVEN_MODE=cloud` is the operator's own service, which
-  // needs none — it *is* the product.
+  // The licence (#148): a self-hosted install must present a key it can verify
+  // offline. There is no other mode — the cloud service is a different
+  // repository, and this build has no switch that could become it.
+  //
   // The installation's own key (#148). It is what a licence binds to, so it is
   // created once and kept on the volume — a recreated container must keep it or
   // every restart would invalidate the licence.
@@ -854,8 +874,7 @@ if (isMain) {
         process.env.FYRHAVEN_LICENCE = activated.licence;
         try {
           const { writeFileSync } = await import('node:fs');
-          writeFileSync(process.env.FYRHAVEN_LICENCE_FILE ?? '/data/licence.key', `${activated.licence}
-`, { mode: 0o600 });
+          writeFileSync(process.env.FYRHAVEN_LICENCE_FILE ?? '/data/licence.key', `${activated.licence}\n`, { mode: 0o600 });
         } catch {
           // a read-only volume still runs with the key in memory
         }
@@ -873,18 +892,16 @@ if (isMain) {
     console.error(`Fyrhaven: ${licence.error}`);
     console.error('This server needs FYRHAVEN_LICENCE — the key Fyrhaven signed for this installation,');
     console.error('bound to the installation key printed above. It is verified offline; see LICENSING.md.');
-    if (DISTRIBUTION === 'cloud') {
-      console.error("The operator's own service may run with FYRHAVEN_MODE=cloud instead.");
-    }
     process.exit(1);
   }
-  console.log(`Fyrhaven: ${licence.mode} mode` + (licence.licence ? ` — ${describeLicence(licence.licence)}` : ''));
+  console.log(`Fyrhaven: licensed${licence.licence ? ` — ${describeLicence(licence.licence)}` : ''}`);
 
   const adminToken = String(process.env.STORE_ADMIN_TOKEN ?? '').trim();
-  // Only the cloud has a panel to be closed; saying this in a self-hosted build
-  // would advertise a surface that is not in the build at all.
-  if (!adminToken && DISTRIBUTION === 'cloud') {
-    console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin and /admin answer 503.');
+  // The storage routes are the only operator surface here, and they are off
+  // until a token is set — an admin surface that comes up open on a fresh
+  // install is worse than one that has to be enabled.
+  if (!adminToken) {
+    console.warn('STORE_ADMIN_TOKEN is not set — /v1/admin answers 503, so a workspace cannot be moved to blob storage.');
   }
   // The bucket, when one is configured (#158). `R2_S3_API` already ends in the
   // bucket path, so it is used exactly as given. Without all three parts the
@@ -902,17 +919,13 @@ if (isMain) {
   }
 
   const { server, tokens } = createStoreServer({
-    dbPath, tokenList, masterKey, allowQueryToken, adminToken, payments: paymentConfig(process.env),
-    installKey, s3: bucketClient,
-    surface: surfaceFor(DISTRIBUTION),
-    trialDays: Number.isFinite(trialDays) && trialDays >= 0 ? trialDays : DEFAULT_TRIAL_DAYS,
+    dbPath, tokenList, masterKey, allowQueryToken, adminToken,
+    s3: bucketClient, licence, installKey,
     basicUser: String(process.env.STORE_AUTH_USER ?? '').trim(),
     basicPassword: String(process.env.STORE_AUTH_PASSWORD ?? ''),
   });
   server.listen(port, () => {
-    console.log(`contact-manager-store v${VERSION} listening on :${port} — ${tokens.size} token(s), db ${dbPath}, values encrypted at rest`);
-    console.log(`Fyrhaven: ${DISTRIBUTION} build — ` + (DISTRIBUTION === 'cloud'
-      ? 'shop, accounts, billing and panel are mounted'
-      : 'record API only: no shop, no accounts, no billing, no panel'));
+    console.log(`fyrhaven-server v${VERSION} listening on :${port} — ${tokens.size} token(s), db ${dbPath}, values encrypted at rest`);
+    console.log('Fyrhaven: record API only — no shop, no accounts, no billing, no panel');
   });
 }

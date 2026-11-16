@@ -23,7 +23,6 @@
 import {
   createPrivateKey, createPublicKey, generateKeyPairSync, sign as signRaw, verify as verifyRaw,
 } from 'node:crypto';
-import { DISTRIBUTION } from './distribution.js';
 
 export const LICENCE_PREFIX = 'FH1';
 export const LICENCE_PLANS = ['selfhosted', 'selfhosted-renewal'];
@@ -138,34 +137,19 @@ export function verifyLicence(key, { publicKey = DEFAULT_PUBLIC_KEY, now = Date.
 /**
  * What the process must do before it may serve anything.
  *
- * `cloud` is the operator's own instance (the paid tier): it needs no licence,
- * because it *is* the service. Everything else is a self-hosted install, and it
- * must present a valid key or refuse to start — a lock that only warns is a lock
- * nobody buys.
+ * Every install is self-hosted and must present a valid key or refuse to start —
+ * a lock that only warns is a lock nobody buys. There is no cloud mode to ask
+ * for: the cloud service is a separate repository and this build has no switch
+ * that could become it.
  *
- * @returns {{ok: boolean, mode: 'cloud'|'selfhosted', licence?: object, error?: string}}
+ * @returns {{ok: boolean, licence?: object, error?: string}}
  */
-export function startupLicence(env = process.env, { now = Date.now(), distribution = DISTRIBUTION } = {}) {
-  const mode = text(env.FYRHAVEN_MODE) === 'cloud' ? 'cloud' : 'selfhosted';
-  if (mode === 'cloud') {
-    // The cloud is a build, not a switch. In the self-hosted artifact this
-    // constant is compiled to 'selfhosted', so the customer's copy cannot be
-    // turned into the operator's service by editing a compose file — which is
-    // what `FYRHAVEN_MODE=cloud` used to do for anyone who set it.
-    if (distribution !== 'cloud') {
-      return {
-        ok: false,
-        mode,
-        error: 'This is the self-hosted build, which has no cloud mode.',
-      };
-    }
-    return { ok: true, mode };
-  }
+export function startupLicence(env = process.env, { now = Date.now() } = {}) {
   const key = text(env.FYRHAVEN_LICENCE);
-  if (!key) return { ok: false, mode, error: 'FYRHAVEN_LICENCE is not set — a self-hosted install needs a licence key.' };
+  if (!key) return { ok: false, error: 'FYRHAVEN_LICENCE is not set — a self-hosted install needs a licence key.' };
   const answer = verifyLicence(key, { publicKey: publicKeyOf(env), now, fingerprint: text(env.FYRHAVEN_INSTALL_KEY) });
-  if (!answer.ok) return { ok: false, mode, error: `The licence key is not valid (${answer.reason}).` };
-  return { ok: true, mode, licence: { ...answer.payload, daysLeft: answer.daysLeft } };
+  if (!answer.ok) return { ok: false, error: `The licence key is not valid (${answer.reason}).` };
+  return { ok: true, licence: { ...answer.payload, daysLeft: answer.daysLeft } };
 }
 
 /** A keypair for the operator to generate once, offline. */

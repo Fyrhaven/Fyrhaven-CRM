@@ -8,7 +8,7 @@ Kept here rather than in a chat, because it has dates and money in it.
 - [ ] **VAT (moms)** — same flow. Required for selling digital services.
 - [ ] **Register the business name** (`firma`) with Bolagsverket so "Fyrhaven" is yours — ~1 000 SEK, optional, worth it.
 - [ ] **Business insurance** (`ansvarsförsäkring`, home-business cover) — ~1 500–3 000 SEK/year. This is the mitigation that lets a sole trader hold other people's data.
-- [ ] **Fill the four brackets** in `fyrhaven-server/site/imprint.html`: name, address, organisation number (if registered), VAT number.
+- [ ] **Fill the four brackets** in `site/imprint.html` (the shop's site, in `Fyrhaven/Fyrhaven-CRM-Cloud`): name, address, organisation number (if registered), VAT number.
 - [ ] **Keep a simple ledger** from the first invoice: receipts in a folder, a spreadsheet with date / what / amount / VAT.
 
 ## Before taking real money
