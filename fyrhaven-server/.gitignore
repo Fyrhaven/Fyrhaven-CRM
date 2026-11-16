@@ -8,3 +8,6 @@
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# The installable archive is a release asset, not a committed file.
+dist/

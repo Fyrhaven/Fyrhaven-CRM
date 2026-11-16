@@ -9,7 +9,7 @@ re-learn the hard way".
 | | |
 |---|---|
 | Plugin | `fyrhaven-crm` **1.60.0** — 1 215 tests green |
-| Record server | `fyrhaven-server` **1.19.0**, self-hosted — 50 tests green; no cloud code, no build switch |
+| Record server | `fyrhaven-server` **1.19.0**, self-hosted — 50 tests green; no cloud code, no build switch; released as `fyrhaven-server-v1.19.0` with a `.tar.gz` asset |
 | Cloud repository | `Fyrhaven/Fyrhaven-CRM-Cloud` — the cloud server (shop, accounts, catalogue, billing, panel), copied out of this repository and never distributed |
 | Live | `fyrhaven.com` (shop + legal), `crm.fyrhaven.com` (API + shop), `crm.mailz.se` (alias) — the cloud, from its own repository |
 | Money | Stripe **sandbox** end to end verified: order → checkout → signed webhook → plan on |
@@ -123,6 +123,7 @@ carries ~980 keys in `manifest.json` (`en`/`de`); `sv` needs a native reader.
 cd fyrhaven-crm && npm test          # builds, then 1 215 tests
 cd fyrhaven-crm && npm run release   # tag + GitHub release + ZIP (needs clean main)
 cd fyrhaven-server && node --test    # 50 tests, no dependencies
+cd fyrhaven-server && npm run release # tag fyrhaven-server-vX.Y.Z + .tar.gz asset
 ```
 
 Deploy the store (only that container — never touch the others). The stack this

@@ -242,11 +242,25 @@ each repository; the shared files should differ only in the cloud's plugin
 points.
 
 ```bash
-node --test      # the suite: routing, auth, encryption, the licence, the seam
+node --test          # the suite: routing, auth, encryption, the licence, the seam
+npm run package      # dist/fyrhaven-server-<version>.tar.gz — what a customer unpacks
+npm run release      # test, package, tag fyrhaven-server-vX.Y.Z, attach the archive
 ```
 
 The version the server reports is `package.json`'s, and `server.test.js` pins it
 to `GET /version` so it cannot drift.
+
+**The archive is the deliverable.** `scripts/package.mjs` copies the twelve files
+a customer needs — the four modules, `package.json`, the changelog, the two
+docs, the Dockerfile, both compose files, the Caddyfile and `env.example` — and
+refuses to build if a cloud module is in the tree. A `BUILD` file travels inside
+it with the version, the commit and which build it is, so "what did I download?"
+is answerable without the file name. `npm run release` attaches that archive to
+the GitHub release, so the download is the code in the repository.
+
+A release is cut from `main` with a clean tree, and the first `## [x.y.z]`
+section of `CHANGELOG.md` is its release note; the script refuses if the tag or
+the section is missing.
 
 ## Licence
 

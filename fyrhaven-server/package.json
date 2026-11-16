@@ -9,6 +9,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "package": "node scripts/package.mjs",
+    "release": "node scripts/release.mjs"
   }
 }

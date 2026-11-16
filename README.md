@@ -136,8 +136,13 @@ npm run package    # builds and writes fyrhaven-crm.zip
 ```
 
 ```bash
-cd fyrhaven-server && node --test
+cd fyrhaven-server && node --test && npm run package
 ```
+
+The plugin ships as a ZIP attached to a `fyrhaven-crm-vX.Y.Z` release; the
+server ships as `fyrhaven-server-<version>.tar.gz` attached to a
+`fyrhaven-server-vX.Y.Z` release, built by the script from the tagged source —
+neither archive is committed.
 
 A change is done when the suite passes, new behaviour has a test that says what
 the behaviour *is*, new strings exist in `en` **and** `de`, the version is
